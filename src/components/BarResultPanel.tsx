@@ -1,4 +1,5 @@
 import Feather from '@expo/vector-icons/Feather';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { WasteStripes } from '@/components/WasteStripes';
@@ -59,17 +60,18 @@ export function BarResultPanel({ plan, onShare, onExport }: Props) {
             </View>
             <View style={styles.track}>
               {bar.pieces.map((piece, pieceIndex) => (
-                <View
+                <LinearGradient
                   key={pieceIndex}
-                  style={[
-                    styles.piece,
-                    { width: `${(piece / bar.length) * 100}%`, backgroundColor: pieceIndex % 2 ? '#7c9dff' : '#4e7af2' },
-                  ]}
+                  colors={pieceIndex % 2 ? ['#a9c1ff', '#5c85f5'] : ['#8caeff', '#3a63e0']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={[styles.piece, { width: `${(piece / bar.length) * 100}%` }]}
                 >
+                  <View style={styles.pieceHighlight} />
                   <Text style={styles.pieceText} numberOfLines={1}>
                     {piece}
                   </Text>
-                </View>
+                </LinearGradient>
               ))}
               <View style={styles.waste}>
                 <WasteStripes />
@@ -111,9 +113,24 @@ const styles = StyleSheet.create({
   bars: { gap: 12 },
   barLabel: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   barLabelText: { color: colors.white, fontFamily: fonts.medium, fontSize: 11 },
-  track: { flexDirection: 'row', height: 30, overflow: 'hidden', backgroundColor: colors.navyRaised, borderRadius: 7 },
+  track: {
+    flexDirection: 'row',
+    height: 32,
+    overflow: 'hidden',
+    backgroundColor: colors.navyRaised,
+    borderRadius: 7,
+    boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.35)',
+  },
   piece: { minWidth: 2, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRightWidth: 2, borderRightColor: colors.navy },
-  pieceText: { color: colors.white, fontFamily: fonts.semibold, fontSize: 10 },
+  pieceHighlight: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: 'rgba(255,255,255,0.4)' },
+  pieceText: {
+    color: colors.white,
+    fontFamily: fonts.semibold,
+    fontSize: 10,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
+  },
   waste: { flex: 1, overflow: 'hidden' },
   actions: { flexDirection: 'row', gap: 8, marginTop: 18 },
   action: {

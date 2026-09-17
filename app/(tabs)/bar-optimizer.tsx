@@ -1,23 +1,34 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from '@expo/vector-icons/Feather';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import { Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
 
 import { BarResultPanel } from '@/components/BarResultPanel';
+import { ExportSiteNameSheet } from '@/components/ExportSiteNameSheet';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { Pill, ScreenTitle } from '@/components/ScreenTitle';
 import { SectionPickerSheet } from '@/components/SectionPickerSheet';
 import { sections, type Section } from '@/data/sections';
 import { planBars, type BarPlan } from '@/lib/bar-optimizer';
+import { buildBarPlanHtml } from '@/lib/bar-plan-pdf';
 import { formatMm, pad2 } from '@/lib/format';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, fonts, type } from '@/theme';
 
-type PieceRow = { id: number; value: string };
+type PieceRow = { id: number; value: string; qty: string };
+type StoredRow = { value: string; qty: string };
+type StoredResult = { sectionCode: string; barLengths: StoredRow[]; kerf: string; pieces: StoredRow[]; plan: BarPlan };
 
-const DEFAULT_PIECES = [2450, 2450, 1800, 1800];
+const DEFAULT_PIECES = [
+  { length: 2450, qty: 2 },
+  { length: 1800, qty: 2 },
+];
+const LAST_RESULT_KEY = 'vimalnath:bar-optimizer:last-result';
 const digitsOnly = (text: string) => text.replace(/[^0-9]/g, '');
 const decimalOnly = (text: string) => text.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
 
@@ -25,16 +36,18 @@ export default function BarOptimizerScreen() {
   const { showToast } = useAppUI();
   const scrollRef = useRef<ScrollView>(null);
   const nextId = useRef(0);
-  const makeRow = (value = ''): PieceRow => ({ id: nextId.current++, value });
+  const makeRow = (value = '', qty = ''): PieceRow => ({ id: nextId.current++, value, qty });
 
   const [section, setSection] = useState<Section>(sections[0]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [barLengths, setBarLengths] = useState<PieceRow[]>(() => [makeRow(String(sections[0].bar))]);
   const [barFocusRowId, setBarFocusRowId] = useState<number | null>(null);
-  const [kerf, setKerf] = useState('3');
-  const [pieces, setPieces] = useState<PieceRow[]>(() => DEFAULT_PIECES.map((length) => makeRow(String(length))));
+  const [kerf, setKerf] = useState('0');
+  const [pieces, setPieces] = useState<PieceRow[]>(() => DEFAULT_PIECES.map((piece) => makeRow(String(piece.length), String(piece.qty))));
   const [focusRowId, setFocusRowId] = useState<number | null>(null);
   const [plan, setPlan] = useState<BarPlan | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // The result's position is only known after it lays out, so a scroll request may have to wait for onLayout.
   const resultY = useRef<number | null>(null);
@@ -48,8 +61,28 @@ export default function BarOptimizerScreen() {
     if (plan && pendingScroll.current) scrollToResult();
   }, [plan]);
 
+  // Restore the last calculated result (and the inputs that produced it) so it stays on screen
+  // until the next "Calculate bars" tap, even after the app is closed and reopened.
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(LAST_RESULT_KEY);
+        if (!raw) return;
+        const saved: StoredResult = JSON.parse(raw);
+        const savedSection = sections.find((item) => item.code === saved.sectionCode);
+        if (savedSection) setSection(savedSection);
+        if (saved.barLengths?.length) setBarLengths(saved.barLengths.map((row) => makeRow(row.value, row.qty)));
+        if (saved.kerf !== undefined) setKerf(saved.kerf);
+        if (saved.pieces?.length) setPieces(saved.pieces.map((row) => makeRow(row.value, row.qty)));
+        if (saved.plan) setPlan(saved.plan);
+      } catch {
+        // Corrupt or missing cache — keep the defaults.
+      }
+    })();
+  }, []);
+
   const addPiece = () => {
-    const row = makeRow();
+    const row = makeRow('', '5');
     setPieces((rows) => [...rows, row]);
     setFocusRowId(row.id);
   };
@@ -63,8 +96,8 @@ export default function BarOptimizerScreen() {
   const calculate = () => {
     Keyboard.dismiss();
     const result = planBars({
-      lengths: pieces.map((row) => Number(row.value)),
-      barLengths: barLengths.map((row) => Number(row.value)),
+      pieces: pieces.map((row) => ({ length: Number(row.value), qty: row.qty ? Number(row.qty) : 5 })),
+      stock: barLengths.map((row) => ({ length: Number(row.value), qty: row.qty ? Number(row.qty) : undefined })),
       kerf: Number(kerf) || 0,
     });
     if ('error' in result) {
@@ -73,6 +106,15 @@ export default function BarOptimizerScreen() {
     }
     pendingScroll.current = true;
     setPlan(result.plan);
+
+    const snapshot: StoredResult = {
+      sectionCode: section.code,
+      barLengths: barLengths.map((row) => ({ value: row.value, qty: row.qty })),
+      kerf,
+      pieces: pieces.map((row) => ({ value: row.value, qty: row.qty })),
+      plan: result.plan,
+    };
+    AsyncStorage.setItem(LAST_RESULT_KEY, JSON.stringify(snapshot)).catch(() => {});
   };
 
   const sharePlan = async () => {
@@ -89,6 +131,23 @@ export default function BarOptimizerScreen() {
       await Share.share({ title: 'Bar plan', message });
     } catch {
       showToast('Sharing isn’t available on this device.');
+    }
+  };
+
+  const exportPdf = async (siteName: string) => {
+    if (!plan) return;
+    setExporting(true);
+    try {
+      const html = buildBarPlanHtml({ siteName, section, plan });
+      const { uri } = await Print.printToFileAsync({ html });
+      if (Platform.OS !== 'web' && (await Sharing.isAvailableAsync())) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Save or share bar plan', UTI: 'com.adobe.pdf' });
+      }
+      setExportOpen(false);
+    } catch {
+      showToast('Could not create the PDF on this device.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -143,18 +202,32 @@ export default function BarOptimizerScreen() {
             <Text style={styles.addButtonText}>Add bar</Text>
           </Pressable>
         </View>
+        <Text style={styles.hint}>Leave quantity blank for unlimited stock.</Text>
 
+        {barLengths.length > 0 && (
+          <View style={styles.columnHeader}>
+            <View style={styles.columnHeaderIndexSpacer} />
+            <Text style={styles.columnHeaderLength}>LENGTH</Text>
+            <View style={styles.columnHeaderUnitSpacer} />
+            <Text style={styles.columnHeaderQty}>QTY</Text>
+            <View style={styles.columnHeaderRemoveSpacer} />
+          </View>
+        )}
         <View style={styles.pieces}>
           {barLengths.map((row, index) => (
             <RowInput
               key={row.id}
               index={index}
               value={row.value}
+              qty={row.qty}
               autoFocus={row.id === barFocusRowId}
               placeholder="Bar length"
+              qtyPlaceholder="Any"
               accessibilityLabel={`Standard bar ${index + 1} length in millimetres`}
+              qtyAccessibilityLabel={`Standard bar ${index + 1} quantity in stock, blank for unlimited`}
               removeAccessibilityLabel={`Remove standard bar ${index + 1}`}
               onChangeText={(text) => setBarLengths((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
+              onChangeQty={(text) => setBarLengths((rows) => rows.map((item) => (item.id === row.id ? { ...item, qty: digitsOnly(text) } : item)))}
               onRemove={() => setBarLengths((rows) => rows.filter((item) => item.id !== row.id))}
             />
           ))}
@@ -176,17 +249,31 @@ export default function BarOptimizerScreen() {
           </Pressable>
         </View>
 
+        {pieces.length > 0 && (
+          <View style={styles.columnHeader}>
+            <View style={styles.columnHeaderIndexSpacer} />
+            <Text style={styles.columnHeaderLength}>LENGTH</Text>
+            <View style={styles.columnHeaderUnitSpacer} />
+            <Text style={styles.columnHeaderQty}>QTY</Text>
+            <View style={styles.columnHeaderRemoveSpacer} />
+          </View>
+        )}
         <View style={styles.pieces}>
           {pieces.map((row, index) => (
             <RowInput
               key={row.id}
               index={index}
               value={row.value}
+              qty={row.qty}
               autoFocus={row.id === focusRowId}
               placeholder="Piece length"
+              qtyPlaceholder="5"
               accessibilityLabel={`Piece ${index + 1} length in millimetres`}
+              qtyAccessibilityLabel={`Piece ${index + 1} quantity needed`}
               removeAccessibilityLabel={`Remove piece ${index + 1}`}
               onChangeText={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
+              onChangeQty={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, qty: digitsOnly(text) } : item)))}
+              onQtySubmit={index === pieces.length - 1 ? addPiece : undefined}
               onRemove={() => setPieces((rows) => rows.filter((item) => item.id !== row.id))}
             />
           ))}
@@ -203,7 +290,7 @@ export default function BarOptimizerScreen() {
             if (pendingScroll.current) scrollToResult();
           }}
         >
-          <BarResultPanel plan={plan} onShare={sharePlan} onExport={() => showToast('Report export is ready to connect.')} />
+          <BarResultPanel plan={plan} onShare={sharePlan} onExport={() => setExportOpen(true)} />
         </View>
       )}
 
@@ -217,6 +304,8 @@ export default function BarOptimizerScreen() {
           setPickerOpen(false);
         }}
       />
+
+      <ExportSiteNameSheet visible={exportOpen} busy={exporting} onClose={() => setExportOpen(false)} onSubmit={exportPdf} />
     </Screen>
   );
 }
@@ -244,16 +333,37 @@ function UnitInput({ value, onChangeText, keyboardType, label }: { value: string
 type RowInputProps = {
   index: number;
   value: string;
+  qty: string;
   autoFocus: boolean;
   placeholder: string;
+  qtyPlaceholder: string;
   accessibilityLabel: string;
+  qtyAccessibilityLabel: string;
   removeAccessibilityLabel: string;
   onChangeText: (text: string) => void;
+  onChangeQty: (text: string) => void;
+  /** When set, submitting the quantity field (e.g. the last row) adds another row. */
+  onQtySubmit?: () => void;
   onRemove: () => void;
 };
 
-function RowInput({ index, value, autoFocus, placeholder, accessibilityLabel, removeAccessibilityLabel, onChangeText, onRemove }: RowInputProps) {
+function RowInput({
+  index,
+  value,
+  qty,
+  autoFocus,
+  placeholder,
+  qtyPlaceholder,
+  accessibilityLabel,
+  qtyAccessibilityLabel,
+  removeAccessibilityLabel,
+  onChangeText,
+  onChangeQty,
+  onQtySubmit,
+  onRemove,
+}: RowInputProps) {
   const [focused, setFocused] = useState(false);
+  const [qtyFocused, setQtyFocused] = useState(false);
   return (
     <View style={styles.pieceRow}>
       <Text style={styles.pieceIndex}>{pad2(index + 1)}</Text>
@@ -271,6 +381,20 @@ function RowInput({ index, value, autoFocus, placeholder, accessibilityLabel, re
         style={[styles.pieceInput, focused && styles.inputFocused]}
       />
       <Text style={styles.unit}>mm</Text>
+      <TextInput
+        value={qty}
+        onChangeText={onChangeQty}
+        placeholder={qtyPlaceholder}
+        placeholderTextColor={colors.subtle}
+        keyboardType="number-pad"
+        returnKeyType={onQtySubmit ? 'next' : 'done'}
+        selectTextOnFocus
+        onFocus={() => setQtyFocused(true)}
+        onBlur={() => setQtyFocused(false)}
+        onSubmitEditing={onQtySubmit}
+        accessibilityLabel={qtyAccessibilityLabel}
+        style={[styles.qtyInput, qtyFocused && styles.inputFocused]}
+      />
       <Pressable onPress={onRemove} accessibilityRole="button" accessibilityLabel={removeAccessibilityLabel} style={styles.removeButton}>
         <Feather name="x" size={19} color="#a9b1bd" />
       </Pressable>
@@ -326,6 +450,13 @@ const styles = StyleSheet.create({
   piecesHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   addButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
   addButtonText: { color: colors.blue, fontFamily: fonts.bold, fontSize: 13 },
+  hint: { marginTop: -4, marginBottom: 10, color: colors.muted, fontFamily: fonts.regular, fontSize: 12 },
+  columnHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 4, marginBottom: 6 },
+  columnHeaderIndexSpacer: { width: 22 },
+  columnHeaderLength: { flex: 1, color: colors.muted, fontFamily: fonts.bold, fontSize: 10, letterSpacing: 0.8 },
+  columnHeaderUnitSpacer: { width: 24 },
+  columnHeaderQty: { width: 56, color: colors.muted, fontFamily: fonts.bold, fontSize: 10, letterSpacing: 0.8, textAlign: 'center' },
+  columnHeaderRemoveSpacer: { width: 40 },
   pieces: { gap: 8 },
   pieceRow: {
     flexDirection: 'row',
@@ -353,6 +484,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     fontFamily: fonts.semibold,
     fontSize: 15,
+  },
+  qtyInput: {
+    width: 56,
+    height: 44,
+    paddingHorizontal: 6,
+    color: colors.ink,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 10,
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    textAlign: 'center',
   },
   removeButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20 },
   emptyPieces: { paddingVertical: 14, color: colors.muted, fontFamily: fonts.regular, fontSize: 13, textAlign: 'center' },
