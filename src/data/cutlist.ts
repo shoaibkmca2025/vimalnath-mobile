@@ -35,7 +35,5 @@ export const telescopicConfigurations: TelescopicConfiguration[] = [
   { name: '3+0 Sliding System', image: require('../../assets/images/telescopic/tile-05.jpg') },
   { name: '3+1 Sliding System', image: require('../../assets/images/telescopic/tile-06.jpg') },
   { name: '4+0 Sliding System', image: require('../../assets/images/telescopic/tile-07.jpg') },
-  { name: '2+0 Sliding System', image: require('../../assets/images/telescopic/tile-08.jpg') },
-  { name: '2+1 Sliding System', image: require('../../assets/images/telescopic/tile-09.jpg') },
-  { name: '3+0 Sliding System', image: require('../../assets/images/telescopic/tile-10.jpg') },
+  { name: '4+1 Sliding System', image: require('../../assets/images/telescopic/tile-08.jpg') },
 ];

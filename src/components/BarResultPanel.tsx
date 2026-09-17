@@ -54,7 +54,7 @@ export function BarResultPanel({ plan, onShare, onExport }: Props) {
             <View style={styles.barLabel}>
               <Text style={styles.barLabelText}>BAR {pad2(barIndex + 1)}</Text>
               <Text style={styles.barLabelText}>
-                {formatNumber(bar.used)} / {formatMm(plan.barLength)}
+                {formatNumber(bar.used)} / {formatMm(bar.length)}
               </Text>
             </View>
             <View style={styles.track}>
@@ -63,7 +63,7 @@ export function BarResultPanel({ plan, onShare, onExport }: Props) {
                   key={pieceIndex}
                   style={[
                     styles.piece,
-                    { width: `${(piece / plan.barLength) * 100}%`, backgroundColor: pieceIndex % 2 ? '#7c9dff' : '#4e7af2' },
+                    { width: `${(piece / bar.length) * 100}%`, backgroundColor: pieceIndex % 2 ? '#7c9dff' : '#4e7af2' },
                   ]}
                 >
                   <Text style={styles.pieceText} numberOfLines={1}>

@@ -29,7 +29,8 @@ export default function BarOptimizerScreen() {
 
   const [section, setSection] = useState<Section>(sections[0]);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [barLength, setBarLength] = useState(String(sections[0].bar));
+  const [barLengths, setBarLengths] = useState<PieceRow[]>(() => [makeRow(String(sections[0].bar))]);
+  const [barFocusRowId, setBarFocusRowId] = useState<number | null>(null);
   const [kerf, setKerf] = useState('3');
   const [pieces, setPieces] = useState<PieceRow[]>(() => DEFAULT_PIECES.map((length) => makeRow(String(length))));
   const [focusRowId, setFocusRowId] = useState<number | null>(null);
@@ -53,11 +54,17 @@ export default function BarOptimizerScreen() {
     setFocusRowId(row.id);
   };
 
+  const addBarLength = () => {
+    const row = makeRow();
+    setBarLengths((rows) => [...rows, row]);
+    setBarFocusRowId(row.id);
+  };
+
   const calculate = () => {
     Keyboard.dismiss();
     const result = planBars({
       lengths: pieces.map((row) => Number(row.value)),
-      barLength: Number(barLength),
+      barLengths: barLengths.map((row) => Number(row.value)),
       kerf: Number(kerf) || 0,
     });
     if ('error' in result) {
@@ -70,12 +77,13 @@ export default function BarOptimizerScreen() {
 
   const sharePlan = async () => {
     if (!plan) return;
+    const stockLengths = Array.from(new Set(plan.bars.map((bar) => bar.length))).sort((a, b) => b - a);
     const message = [
       `Vimalnath bar plan · ${section.code} ${section.name}`,
-      `Standard bar ${formatMm(plan.barLength)} · ${plan.kerf} mm cutting loss`,
+      `Standard bar${stockLengths.length > 1 ? 's' : ''} ${stockLengths.map(formatMm).join(', ')} · ${plan.kerf} mm cutting loss`,
       `${plan.bars.length} bars required · ${formatMm(plan.waste)} waste · ${plan.utilization.toFixed(1)}% utilization`,
       '',
-      ...plan.bars.map((bar, index) => `Bar ${pad2(index + 1)}: ${bar.pieces.join(' + ')} (${formatMm(bar.used)} used)`),
+      ...plan.bars.map((bar, index) => `Bar ${pad2(index + 1)}: ${bar.pieces.join(' + ')} (${formatMm(bar.used)} used of ${formatMm(bar.length)})`),
     ].join('\n');
     try {
       await Share.share({ title: 'Bar plan', message });
@@ -127,15 +135,36 @@ export default function BarOptimizerScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.fieldRow}>
-        <View style={[styles.field, { flex: 1 }]}>
-          <Text style={[type.label, styles.fieldLabel]}>Standard bar</Text>
-          <UnitInput value={barLength} onChangeText={(text) => setBarLength(digitsOnly(text))} keyboardType="number-pad" label="Standard bar length in millimetres" />
+      <View style={styles.field}>
+        <View style={styles.piecesHeader}>
+          <Text style={type.label}>Standard bar lengths</Text>
+          <Pressable onPress={addBarLength} accessibilityRole="button" hitSlop={10} style={styles.addButton}>
+            <Feather name="plus" size={16} color={colors.blue} />
+            <Text style={styles.addButtonText}>Add bar</Text>
+          </Pressable>
         </View>
-        <View style={[styles.field, { flex: 1 }]}>
-          <Text style={[type.label, styles.fieldLabel]}>Cutting loss</Text>
-          <UnitInput value={kerf} onChangeText={(text) => setKerf(decimalOnly(text))} keyboardType="decimal-pad" label="Cutting loss per cut in millimetres" />
+
+        <View style={styles.pieces}>
+          {barLengths.map((row, index) => (
+            <RowInput
+              key={row.id}
+              index={index}
+              value={row.value}
+              autoFocus={row.id === barFocusRowId}
+              placeholder="Bar length"
+              accessibilityLabel={`Standard bar ${index + 1} length in millimetres`}
+              removeAccessibilityLabel={`Remove standard bar ${index + 1}`}
+              onChangeText={(text) => setBarLengths((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
+              onRemove={() => setBarLengths((rows) => rows.filter((item) => item.id !== row.id))}
+            />
+          ))}
+          {!barLengths.length && <Text style={styles.emptyPieces}>Add at least one standard bar length.</Text>}
         </View>
+      </View>
+
+      <View style={styles.field}>
+        <Text style={[type.label, styles.fieldLabel]}>Cutting loss</Text>
+        <UnitInput value={kerf} onChangeText={(text) => setKerf(decimalOnly(text))} keyboardType="decimal-pad" label="Cutting loss per cut in millimetres" />
       </View>
 
       <View style={styles.field}>
@@ -149,11 +178,14 @@ export default function BarOptimizerScreen() {
 
         <View style={styles.pieces}>
           {pieces.map((row, index) => (
-            <PieceInput
+            <RowInput
               key={row.id}
               index={index}
               value={row.value}
               autoFocus={row.id === focusRowId}
+              placeholder="Piece length"
+              accessibilityLabel={`Piece ${index + 1} length in millimetres`}
+              removeAccessibilityLabel={`Remove piece ${index + 1}`}
               onChangeText={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
               onRemove={() => setPieces((rows) => rows.filter((item) => item.id !== row.id))}
             />
@@ -181,7 +213,7 @@ export default function BarOptimizerScreen() {
         onClose={() => setPickerOpen(false)}
         onSelect={(next) => {
           setSection(next);
-          setBarLength(String(next.bar));
+          setBarLengths([makeRow(String(next.bar))]);
           setPickerOpen(false);
         }}
       />
@@ -209,9 +241,18 @@ function UnitInput({ value, onChangeText, keyboardType, label }: { value: string
   );
 }
 
-type PieceInputProps = { index: number; value: string; autoFocus: boolean; onChangeText: (text: string) => void; onRemove: () => void };
+type RowInputProps = {
+  index: number;
+  value: string;
+  autoFocus: boolean;
+  placeholder: string;
+  accessibilityLabel: string;
+  removeAccessibilityLabel: string;
+  onChangeText: (text: string) => void;
+  onRemove: () => void;
+};
 
-function PieceInput({ index, value, autoFocus, onChangeText, onRemove }: PieceInputProps) {
+function RowInput({ index, value, autoFocus, placeholder, accessibilityLabel, removeAccessibilityLabel, onChangeText, onRemove }: RowInputProps) {
   const [focused, setFocused] = useState(false);
   return (
     <View style={styles.pieceRow}>
@@ -219,18 +260,18 @@ function PieceInput({ index, value, autoFocus, onChangeText, onRemove }: PieceIn
       <TextInput
         value={value}
         onChangeText={onChangeText}
-        placeholder="Piece length"
+        placeholder={placeholder}
         placeholderTextColor={colors.subtle}
         keyboardType="number-pad"
         returnKeyType="done"
         autoFocus={autoFocus}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        accessibilityLabel={`Piece ${index + 1} length in millimetres`}
+        accessibilityLabel={accessibilityLabel}
         style={[styles.pieceInput, focused && styles.inputFocused]}
       />
       <Text style={styles.unit}>mm</Text>
-      <Pressable onPress={onRemove} accessibilityRole="button" accessibilityLabel={`Remove piece ${index + 1}`} style={styles.removeButton}>
+      <Pressable onPress={onRemove} accessibilityRole="button" accessibilityLabel={removeAccessibilityLabel} style={styles.removeButton}>
         <Feather name="x" size={19} color="#a9b1bd" />
       </Pressable>
     </View>
@@ -254,7 +295,6 @@ const styles = StyleSheet.create({
   introBody: { color: colors.muted, fontFamily: fonts.regular, fontSize: 13, lineHeight: 19 },
   field: { marginBottom: 18 },
   fieldLabel: { marginBottom: 8 },
-  fieldRow: { flexDirection: 'row', gap: 12 },
   select: {
     minHeight: 64,
     flexDirection: 'row',
