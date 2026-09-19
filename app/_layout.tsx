@@ -5,6 +5,7 @@ import { DMSans_700Bold } from '@expo-google-fonts/dm-sans/700Bold';
 import { SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk/700Bold';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -14,6 +15,8 @@ import { AppUIProvider } from '@/providers/AppUIProvider';
 import { colors } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
+// Let the device rotate freely instead of the app forcing portrait.
+ScreenOrientation.unlockAsync().catch(() => {});
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -38,6 +41,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.white } }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="telescopic" />
+          <Stack.Screen name="glass-calculator" />
         </Stack>
       </AppUIProvider>
     </SafeAreaProvider>

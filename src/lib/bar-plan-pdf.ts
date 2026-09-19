@@ -1,10 +1,8 @@
 import type { Section } from '@/data/sections';
 import { formatMm, formatNumber, pad2 } from '@/lib/format';
+import { escapeHtml } from '@/lib/pdf-html';
 
 import type { BarPlan } from './bar-optimizer';
-
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 
 export type BarPlanPdfInput = {
   siteName: string;

@@ -21,7 +21,12 @@ export const cutlistSystems: CutlistSystem[] = [
     subtitle: 'Balanced panel movement',
     photo: require('../../assets/images/synchronized-system-photo.webp'),
   },
-  { id: 'folding', name: 'Sliding Folding System', subtitle: 'Compact folding panels' },
+  {
+    id: 'folding',
+    name: 'Sliding Folding System',
+    subtitle: 'Compact folding panels',
+    photo: require('../../assets/images/sliding-folding-photo.webp'),
+  },
 ];
 
 export type TelescopicConfiguration = { name: string; image: ImageSourcePropType };

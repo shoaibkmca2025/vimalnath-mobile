@@ -6,12 +6,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Screen } from '@/components/Screen';
 import { telescopicConfigurations } from '@/data/cutlist';
 import { pad2 } from '@/lib/format';
-import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, fonts, type } from '@/theme';
 
 export default function TelescopicScreen() {
-  const { showToast } = useAppUI();
-
   const goBack = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/cutlist');
@@ -41,7 +38,7 @@ export default function TelescopicScreen() {
         {telescopicConfigurations.map((configuration, index) => (
           <Pressable
             key={index}
-            onPress={() => showToast(`${configuration.name} selected.`)}
+            onPress={() => router.push({ pathname: '/glass-calculator', params: { name: configuration.name } })}
             accessibilityRole="button"
             accessibilityLabel={`${configuration.name}, configuration ${index + 1}`}
             style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}

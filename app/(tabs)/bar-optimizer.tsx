@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from '@expo/vector-icons/Feather';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -24,9 +23,17 @@ type PieceRow = { id: number; value: string; qty: string };
 type StoredRow = { value: string; qty: string };
 type StoredResult = { sectionCode: string; barLengths: StoredRow[]; kerf: string; pieces: StoredRow[]; plan: BarPlan };
 
-const DEFAULT_PIECES = [
+const DEFAULT_PIECES: { length: number | ''; qty: number }[] = [
   { length: 2450, qty: 2 },
   { length: 1800, qty: 2 },
+  { length: '', qty: 2 },
+  { length: '', qty: 2 },
+  { length: '', qty: 2 },
+  { length: '', qty: 2 },
+  { length: '', qty: 2 },
+  { length: '', qty: 2 },
+  { length: '', qty: 2 },
+  { length: '', qty: 2 },
 ];
 const LAST_RESULT_KEY = 'vimalnath:bar-optimizer:last-result';
 const digitsOnly = (text: string) => text.replace(/[^0-9]/g, '');
@@ -43,7 +50,7 @@ export default function BarOptimizerScreen() {
   const [barLengths, setBarLengths] = useState<PieceRow[]>(() => [makeRow(String(sections[0].bar))]);
   const [barFocusRowId, setBarFocusRowId] = useState<number | null>(null);
   const [kerf, setKerf] = useState('0');
-  const [pieces, setPieces] = useState<PieceRow[]>(() => DEFAULT_PIECES.map((piece) => makeRow(String(piece.length), String(piece.qty))));
+  const [pieces, setPieces] = useState<PieceRow[]>(() => DEFAULT_PIECES.map((piece) => makeRow(piece.length === '' ? '' : String(piece.length), String(piece.qty))));
   const [focusRowId, setFocusRowId] = useState<number | null>(null);
   const [plan, setPlan] = useState<BarPlan | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -82,7 +89,7 @@ export default function BarOptimizerScreen() {
   }, []);
 
   const addPiece = () => {
-    const row = makeRow('', '5');
+    const row = makeRow('', '2');
     setPieces((rows) => [...rows, row]);
     setFocusRowId(row.id);
   };
@@ -96,7 +103,7 @@ export default function BarOptimizerScreen() {
   const calculate = () => {
     Keyboard.dismiss();
     const result = planBars({
-      pieces: pieces.map((row) => ({ length: Number(row.value), qty: row.qty ? Number(row.qty) : 5 })),
+      pieces: pieces.map((row) => ({ length: Number(row.value), qty: row.qty ? Number(row.qty) : 2 })),
       stock: barLengths.map((row) => ({ length: Number(row.value), qty: row.qty ? Number(row.qty) : undefined })),
       kerf: Number(kerf) || 0,
     });
@@ -162,16 +169,6 @@ export default function BarOptimizerScreen() {
           </Pill>
         }
       />
-
-      <View style={styles.intro}>
-        <View style={styles.introIcon}>
-          <MaterialCommunityIcons name="ruler" size={21} color={colors.blue} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.introTitle}>Find the right number of bars</Text>
-          <Text style={styles.introBody}>Enter the pieces you need and we’ll arrange them against a standard bar.</Text>
-        </View>
-      </View>
 
       <View style={styles.field}>
         <Text style={[type.label, styles.fieldLabel]}>Section / profile</Text>
@@ -267,12 +264,13 @@ export default function BarOptimizerScreen() {
               qty={row.qty}
               autoFocus={row.id === focusRowId}
               placeholder="Piece length"
-              qtyPlaceholder="5"
+              qtyPlaceholder="2"
               accessibilityLabel={`Piece ${index + 1} length in millimetres`}
               qtyAccessibilityLabel={`Piece ${index + 1} quantity needed`}
               removeAccessibilityLabel={`Remove piece ${index + 1}`}
               onChangeText={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
               onChangeQty={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, qty: digitsOnly(text) } : item)))}
+              onValueSubmit={index === pieces.length - 1 ? addPiece : undefined}
               onQtySubmit={index === pieces.length - 1 ? addPiece : undefined}
               onRemove={() => setPieces((rows) => rows.filter((item) => item.id !== row.id))}
             />
@@ -342,6 +340,8 @@ type RowInputProps = {
   removeAccessibilityLabel: string;
   onChangeText: (text: string) => void;
   onChangeQty: (text: string) => void;
+  /** When set, submitting the length field (e.g. the last row) adds another row. */
+  onValueSubmit?: () => void;
   /** When set, submitting the quantity field (e.g. the last row) adds another row. */
   onQtySubmit?: () => void;
   onRemove: () => void;
@@ -359,6 +359,7 @@ function RowInput({
   removeAccessibilityLabel,
   onChangeText,
   onChangeQty,
+  onValueSubmit,
   onQtySubmit,
   onRemove,
 }: RowInputProps) {
@@ -373,10 +374,11 @@ function RowInput({
         placeholder={placeholder}
         placeholderTextColor={colors.subtle}
         keyboardType="number-pad"
-        returnKeyType="done"
+        returnKeyType={onValueSubmit ? 'next' : 'done'}
         autoFocus={autoFocus}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
+        onSubmitEditing={onValueSubmit}
         accessibilityLabel={accessibilityLabel}
         style={[styles.pieceInput, focused && styles.inputFocused]}
       />
@@ -403,20 +405,6 @@ function RowInput({
 }
 
 const styles = StyleSheet.create({
-  intro: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 24,
-    padding: 16,
-    backgroundColor: colors.blueWash,
-    borderWidth: 1,
-    borderColor: '#e0e8ff',
-    borderRadius: 16,
-  },
-  introIcon: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', backgroundColor: '#dfe8ff', borderRadius: 12 },
-  introTitle: { marginTop: 1, marginBottom: 3, color: colors.ink, fontFamily: fonts.bold, fontSize: 14 },
-  introBody: { color: colors.muted, fontFamily: fonts.regular, fontSize: 13, lineHeight: 19 },
   field: { marginBottom: 18 },
   fieldLabel: { marginBottom: 8 },
   select: {
