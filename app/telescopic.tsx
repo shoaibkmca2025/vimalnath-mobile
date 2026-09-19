@@ -21,9 +21,9 @@ export default function TelescopicScreen() {
           onPress={goBack}
           accessibilityRole="button"
           accessibilityLabel="Back to cutlist"
-          style={({ pressed }) => [styles.back, pressed && { backgroundColor: colors.blueTint }]}
+          style={({ pressed }) => [styles.back, pressed && { backgroundColor: colors.blueDark }]}
         >
-          <Feather name="arrow-left" size={21} color={colors.ink} />
+          <Feather name="arrow-left" size={21} color={colors.white} />
         </Pressable>
         <View style={{ flexShrink: 1 }}>
           <Text style={type.eyebrow}>CUTLIST SYSTEM</Text>
@@ -64,17 +64,15 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.soft,
-    borderWidth: 1,
-    borderColor: colors.line,
+    backgroundColor: colors.blue,
     borderRadius: 13,
   },
   intro: { ...type.body, marginLeft: 56, marginBottom: 20 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 14 },
-  tile: { width: '48%', overflow: 'hidden', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 16 },
-  tilePressed: { borderColor: '#bdcaf0', transform: [{ scale: 0.98 }] },
+  tile: { width: '48%', overflow: 'hidden', backgroundColor: colors.blue, borderWidth: 1, borderColor: colors.line, borderRadius: 16 },
+  tilePressed: { borderColor: colors.blueDark, transform: [{ scale: 0.98 }] },
   tileImage: { width: '100%', aspectRatio: 261 / 321, backgroundColor: '#dbe8ed' },
-  tileCopy: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12, gap: 2 },
-  tileName: { color: colors.ink, fontFamily: fonts.display, fontSize: 14 },
-  tileMeta: { color: colors.muted, fontFamily: fonts.regular, fontSize: 12 },
+  tileCopy: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12, gap: 2, backgroundColor: colors.blue },
+  tileName: { color: colors.white, fontFamily: fonts.display, fontSize: 14 },
+  tileMeta: { color: '#c9d8ff', fontFamily: fonts.regular, fontSize: 12 },
 });
