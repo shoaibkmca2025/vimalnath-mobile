@@ -16,6 +16,7 @@ export default function CutlistScreen() {
 
   const open = (system: CutlistSystem) => {
     if (system.id === 'telescopic') router.push('/telescopic');
+    else if (system.id === 'synchronized') router.push('/synchronized');
     else showToast(`${system.name} selected.`);
   };
 

@@ -11,6 +11,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { computeGlassPlan, parsePanelCount, type GlassPlanResult } from '@/lib/glass-calculator';
 import { buildGlassPlanHtml } from '@/lib/glass-plan-pdf';
+import { withTimeout } from '@/lib/pdf-html';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, fonts, type } from '@/theme';
 
@@ -55,13 +56,21 @@ export default function GlassCalculatorScreen() {
     setSharing(true);
     try {
       const html = buildGlassPlanHtml({ systemName, result });
-      // A4 at 72 PPI.
-      const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
-      if (Platform.OS !== 'web' && (await Sharing.isAvailableAsync())) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share glass cutting plan', UTI: 'com.adobe.pdf' });
+      // A4 at 72 PPI. Guarded with a timeout so a stuck native call can't leave the button spinning forever
+      // (the share sheet itself waits on the user, so it isn't timed).
+      if (Platform.OS === 'web') {
+        // On web this just opens the browser's print dialog — it doesn't return a usable file uri to share.
+        await withTimeout(Print.printToFileAsync({ html, width: 595, height: 842 }), 20000, 'Generating PDF');
+      } else {
+        const { uri } = await withTimeout(Print.printToFileAsync({ html, width: 595, height: 842 }), 20000, 'Generating PDF');
+        if (await withTimeout(Sharing.isAvailableAsync(), 5000, 'Checking sharing availability')) {
+          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share glass cutting plan', UTI: 'com.adobe.pdf' });
+        }
       }
-    } catch {
-      showToast('Could not create the PDF on this device.');
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      const reason = err instanceof Error && err.message ? err.message : 'Unknown error';
+      showToast(`Could not create the PDF: ${reason}`);
     } finally {
       setSharing(false);
     }

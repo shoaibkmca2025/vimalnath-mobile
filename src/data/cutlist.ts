@@ -42,3 +42,15 @@ export const telescopicConfigurations: TelescopicConfiguration[] = [
   { name: '4+0 Sliding System', image: require('../../assets/images/telescopic/tile-07.jpg') },
   { name: '4+1 Sliding System', image: require('../../assets/images/telescopic/tile-08.jpg') },
 ];
+
+export type SynchronizedConfiguration = { name: string; image: ImageSourcePropType };
+
+// Placeholder photos reused from the telescopic tiles until the real synchronized-system photos are provided.
+export const synchronizedConfigurations: SynchronizedConfiguration[] = [
+  { name: '2+0 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-01.jpg') },
+  { name: '2+2 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-02.jpg') },
+  { name: '4+0 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-03.jpg') },
+  { name: '4+2 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-04.jpg') },
+  { name: '6+0 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-05.jpg') },
+  { name: '6+2 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-06.jpg') },
+];

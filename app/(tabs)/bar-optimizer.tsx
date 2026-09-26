@@ -15,6 +15,7 @@ import { SectionPickerSheet } from '@/components/SectionPickerSheet';
 import { sections, type Section } from '@/data/sections';
 import { planBars, type BarPlan } from '@/lib/bar-optimizer';
 import { buildBarPlanHtml } from '@/lib/bar-plan-pdf';
+import { withTimeout } from '@/lib/pdf-html';
 import { formatMm, pad2 } from '@/lib/format';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, fonts, type } from '@/theme';
@@ -146,13 +147,22 @@ export default function BarOptimizerScreen() {
     setExporting(true);
     try {
       const html = buildBarPlanHtml({ siteName, section, plan });
-      const { uri } = await Print.printToFileAsync({ html });
-      if (Platform.OS !== 'web' && (await Sharing.isAvailableAsync())) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Save or share bar plan', UTI: 'com.adobe.pdf' });
+      // Guarded with a timeout so a stuck native call can't leave the button spinning forever
+      // (the share sheet itself waits on the user, so it isn't timed).
+      if (Platform.OS === 'web') {
+        // On web this just opens the browser's print dialog — it doesn't return a usable file uri to share.
+        await withTimeout(Print.printToFileAsync({ html }), 20000, 'Generating PDF');
+      } else {
+        const { uri } = await withTimeout(Print.printToFileAsync({ html }), 20000, 'Generating PDF');
+        if (await withTimeout(Sharing.isAvailableAsync(), 5000, 'Checking sharing availability')) {
+          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Save or share bar plan', UTI: 'com.adobe.pdf' });
+        }
       }
       setExportOpen(false);
-    } catch {
-      showToast('Could not create the PDF on this device.');
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      const reason = err instanceof Error && err.message ? err.message : 'Unknown error';
+      showToast(`Could not create the PDF: ${reason}`);
     } finally {
       setExporting(false);
     }

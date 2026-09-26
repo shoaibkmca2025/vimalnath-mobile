@@ -41,6 +41,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.white } }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="telescopic" />
+          <Stack.Screen name="synchronized" />
           <Stack.Screen name="glass-calculator" />
         </Stack>
       </AppUIProvider>

@@ -101,6 +101,52 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
       },
     ],
   },
+  '1+1': {
+    range: { minWidth: 1200, maxWidth: 2400, minHeight: 1800, maxHeight: 3000 },
+    cuttingSize: {
+      width: (openingWidth) => (openingWidth + 16) / 2,
+      height: (_openingWidth, openingHeight) => openingHeight - 93,
+    },
+    glassQuantity: 2,
+    materialBrackets: [
+      {
+        // Cutting size 600–1200 mm wide, 1800–2400 mm tall
+        minWidth: 600,
+        maxWidth: 1200,
+        minHeight: 1800,
+        maxHeight: 2400,
+        materials: () => [
+          { label: 'Vertical', value: '4 (2.5 m)' },
+          { label: 'Horizontal', value: '2 (2.5 m)' },
+          { label: 'Sliding Track', value: '2 (2.5 m)' },
+          { label: 'Sliding Handle / Latch Handle', value: '1+1' },
+          { label: '1+1 Kit', value: '1' },
+          { label: 'Gasket', value: '6 (8mm)' },
+          { label: 'Connector', value: '8 nos' },
+          { label: 'Middle', value: 'According to design' },
+          { label: 'D. Connector', value: 'According to design' },
+        ],
+      },
+      {
+        // Cutting size 600–1200 mm wide, 2400–3000 mm tall
+        minWidth: 600,
+        maxWidth: 1200,
+        minHeight: 2400,
+        maxHeight: 3000,
+        materials: () => [
+          { label: 'Vertical', value: '4 (3 m)' },
+          { label: 'Horizontal', value: '2 (2.5 m)' },
+          { label: 'Sliding Track', value: '2 (2.5 m)' },
+          { label: 'Sliding Handle / Latch Handle', value: '1+1' },
+          { label: '1+1 Kit', value: '1' },
+          { label: 'Gasket', value: '6 (8mm)' },
+          { label: 'Connector', value: '8 nos' },
+          { label: 'Middle', value: 'According to design' },
+          { label: 'D. Connector', value: 'According to design' },
+        ],
+      },
+    ],
+  },
 };
 
 export function getSystemRange(systemName: string): SizeRange | null {
