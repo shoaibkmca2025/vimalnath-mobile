@@ -1,4 +1,7 @@
-export type MaterialItem = { label: string; value: string };
+import { calculateBars } from '@/lib/bar-optimizer';
+
+/** `note` carries extra detail shown under the label, e.g. the cut pieces behind a bar count. */
+export type MaterialItem = { label: string; value: string; note?: string };
 
 export type GlassPlanResult = {
   openingWidth: number;
@@ -24,10 +27,16 @@ export function parsePanelCount(name: string): number {
   return total > 0 ? total : 1;
 }
 
-/** "1+0 Sliding System" → "1+0". Used to look up the confirmed per-system formulas below. */
+/**
+ * "1+0 Sliding System" → "1+0", "2+0 Synchro Sliding System" → "synchro:2+0". Used to look up the
+ * confirmed per-system formulas below; synchro systems get their own keys so a telescopic formula
+ * never applies to the synchro system with the same panel count.
+ */
 function systemKey(name: string): string {
   const match = name.match(/\d+\s*\+\s*\d+/);
-  return match ? match[0].replace(/\s+/g, '') : '';
+  if (!match) return '';
+  const key = match[0].replace(/\s+/g, '');
+  return /synchro/i.test(name) ? `synchro:${key}` : key;
 }
 
 type CuttingSizeFormula = {
@@ -52,7 +61,28 @@ type SystemFormula = {
   cuttingSize: CuttingSizeFormula;
   glassQuantity: number;
   materialBrackets: MaterialBracket[];
+  /**
+   * Profile pieces to cut: verticals at the cutting height, horizontals at the cutting width. When
+   * set, the Vertical and Horizontal rows are worked out by the bar optimizer from PROFILE_BARS_MM
+   * instead of the bracket's fixed counts.
+   */
+  profilePieces?: { vertical: number; horizontal: number };
 };
+
+// Standard vertical / horizontal profile bar lengths in stock.
+const PROFILE_BARS_MM = [2450, 3000];
+
+/** "1 (2450 mm) + 1 (3000 mm)" — how many bars of each stock length to take for these pieces. */
+function optimizedProfile(label: string, pieceLength: number, pieceCount: number): MaterialItem {
+  const bars = calculateBars([{ length: pieceLength, qty: pieceCount }], PROFILE_BARS_MM.map((length) => ({ length })), 0);
+  const counts = new Map<number, number>();
+  for (const bar of bars) counts.set(bar.length, (counts.get(bar.length) ?? 0) + 1);
+  const value = [...counts.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([length, count]) => `${count} (${length} mm)`)
+    .join(' + ');
+  return { label, value, note: `${pieceCount} pcs × ${pieceLength} mm` };
+}
 
 // Formulas confirmed by Vimalnath, keyed by system ("1+0", "2+0", …). Any system not listed here
 // falls back to the CUTTING_ALLOWANCE_MM placeholder below until its formula is confirmed.
@@ -64,6 +94,7 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
       height: (_openingWidth, openingHeight) => openingHeight - 93,
     },
     glassQuantity: 1,
+    profilePieces: { vertical: 2, horizontal: 2 },
     materialBrackets: [
       {
         // Cutting size 600–1200 mm wide, 1800–2400 mm tall
@@ -108,6 +139,7 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
       height: (_openingWidth, openingHeight) => openingHeight - 93,
     },
     glassQuantity: 2,
+    profilePieces: { vertical: 4, horizontal: 4 },
     materialBrackets: [
       {
         // Cutting size 600–1200 mm wide, 1800–2400 mm tall
@@ -139,6 +171,51 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
           { label: 'Sliding Track', value: '2 (2.5 m)' },
           { label: 'Sliding Handle / Latch Handle', value: '1+1' },
           { label: '1+1 Kit', value: '1' },
+          { label: 'Gasket', value: '6 (8mm)' },
+          { label: 'Connector', value: '8 nos' },
+          { label: 'Middle', value: 'According to design' },
+          { label: 'D. Connector', value: 'According to design' },
+        ],
+      },
+    ],
+  },
+  '2+0': {
+    range: { minWidth: 600, maxWidth: 1200, minHeight: 1800, maxHeight: 3000 },
+    cuttingSize: {
+      width: (openingWidth) => openingWidth + 16 + 16,
+      height: (_openingWidth, openingHeight) => openingHeight - 93,
+    },
+    glassQuantity: 1,
+    profilePieces: { vertical: 4, horizontal: 4 },
+    materialBrackets: [
+      {
+        // Cutting size 600–1200 mm wide, 1800–2400 mm tall
+        minWidth: 600,
+        maxWidth: 1200,
+        minHeight: 1800,
+        maxHeight: 2400,
+        materials: () => [
+          { label: 'Vertical', value: '4 (2.5 m)' },
+          { label: 'Horizontal', value: '2 (2.5 m)' },
+          { label: 'Sliding Handle / Latch Handle', value: '1+1' },
+          { label: '2+0 Kit', value: '1' },
+          { label: 'Gasket', value: '6 (8mm)' },
+          { label: 'Connector', value: '8 nos' },
+          { label: 'Middle', value: 'According to design' },
+          { label: 'D. Connector', value: 'According to design' },
+        ],
+      },
+      {
+        // Cutting size 600–1200 mm wide, 2400–3000 mm tall
+        minWidth: 600,
+        maxWidth: 1200,
+        minHeight: 2400,
+        maxHeight: 3000,
+        materials: () => [
+          { label: 'Vertical', value: '4 (3 m)' },
+          { label: 'Horizontal', value: '2 (2.5 m)' },
+          { label: 'Sliding Handle / Latch Handle', value: '1+1' },
+          { label: '2+0 Kit', value: '1' },
           { label: 'Gasket', value: '6 (8mm)' },
           { label: 'Connector', value: '8 nos' },
           { label: 'Middle', value: 'According to design' },
@@ -215,7 +292,17 @@ export function computeGlassPlan(
       glassWidth,
       glassHeight,
       glassQuantity: formula.glassQuantity,
-      materials: bracket.materials(cuttingWidth, cuttingHeight),
+      materials: withOptimizedProfiles(bracket.materials(cuttingWidth, cuttingHeight), formula, cuttingWidth, cuttingHeight),
     },
   };
+}
+
+function withOptimizedProfiles(materials: MaterialItem[], formula: SystemFormula, cuttingWidth: number, cuttingHeight: number): MaterialItem[] {
+  const pieces = formula.profilePieces;
+  if (!pieces) return materials;
+  return materials.map((item) => {
+    if (item.label === 'Vertical') return optimizedProfile('Vertical', cuttingHeight, pieces.vertical);
+    if (item.label === 'Horizontal') return optimizedProfile('Horizontal', cuttingWidth, pieces.horizontal);
+    return item;
+  });
 }

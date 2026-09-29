@@ -60,7 +60,7 @@ export function ConfigurationGridScreen({ eyebrow, title, intro, backLabel, back
           >
             <Image source={configuration.image} style={styles.tileImage} contentFit="cover" transition={120} />
             <View style={styles.tileCopy}>
-              <Text style={styles.tileName} numberOfLines={1}>
+              <Text style={styles.tileName} numberOfLines={2}>
                 {configuration.name}
               </Text>
               <Text style={styles.tileMeta}>Configuration {pad2(index + 1)}</Text>
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 14 },
   tile: { width: '48%', overflow: 'hidden', backgroundColor: colors.blue, borderWidth: 1, borderColor: colors.line, borderRadius: 16 },
   tilePressed: { borderColor: colors.blueDark, transform: [{ scale: 0.98 }] },
-  tileImage: { width: '100%', aspectRatio: 1, backgroundColor: '#dbe8ed' },
+  tileImage: { width: '100%', aspectRatio: 1, backgroundColor: '#e6eeff' },
   tileCopy: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12, gap: 2, backgroundColor: colors.blue },
   tileName: { color: colors.white, fontFamily: fonts.display, fontSize: 14 },
   tileMeta: { color: '#c9d8ff', fontFamily: fonts.regular, fontSize: 12 },

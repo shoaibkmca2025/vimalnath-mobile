@@ -11,9 +11,23 @@ type Props = {
   busy: boolean;
   onClose: () => void;
   onSubmit: (siteName: string) => void;
+  /** Wording for reuse outside the bar optimizer (defaults are the bar cutting plan's). */
+  eyebrow?: string;
+  body?: string;
+  placeholder?: string;
+  fieldLabel?: string;
 };
 
-export function ExportSiteNameSheet({ visible, busy, onClose, onSubmit }: Props) {
+export function ExportSiteNameSheet({
+  visible,
+  busy,
+  onClose,
+  onSubmit,
+  eyebrow = 'EXPORT REPORT',
+  body = 'Enter the site name to print on the bar cutting plan.',
+  placeholder = 'e.g. Sundaram Residence, Block A',
+  fieldLabel = 'Site name for the PDF report',
+}: Props) {
   const { mounted, progress } = useOverlayTransition(visible);
   const insets = useSafeAreaInsets();
   const [siteName, setSiteName] = useState('');
@@ -41,7 +55,7 @@ export function ExportSiteNameSheet({ visible, busy, onClose, onSubmit }: Props)
         <View style={styles.handle} />
         <View style={styles.header}>
           <View style={{ flexShrink: 1 }}>
-            <Text style={type.eyebrow}>EXPORT REPORT</Text>
+            <Text style={type.eyebrow}>{eyebrow}</Text>
             <Text style={styles.title}>Create PDF</Text>
           </View>
           <Pressable onPress={busy ? undefined : onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.close}>
@@ -49,18 +63,18 @@ export function ExportSiteNameSheet({ visible, busy, onClose, onSubmit }: Props)
           </Pressable>
         </View>
 
-        <Text style={styles.body}>Enter the site name to print on the bar cutting plan.</Text>
+        <Text style={styles.body}>{body}</Text>
 
         <View style={styles.field}>
           <TextInput
             value={siteName}
             onChangeText={setSiteName}
-            placeholder="e.g. Sundaram Residence, Block A"
+            placeholder={placeholder}
             placeholderTextColor={colors.subtle}
             autoFocus
             returnKeyType="done"
             onSubmitEditing={() => !busy && onSubmit(siteName.trim())}
-            accessibilityLabel="Site name for the PDF report"
+            accessibilityLabel={fieldLabel}
             style={styles.input}
           />
         </View>
@@ -97,7 +111,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
   },
-  handle: { alignSelf: 'center', width: 40, height: 5, marginTop: -8, marginBottom: 10, borderRadius: 3, backgroundColor: '#d6dbe2' },
+  handle: { alignSelf: 'center', width: 40, height: 5, marginTop: -8, marginBottom: 10, borderRadius: 3, backgroundColor: '#d3def7' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   title: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, letterSpacing: -0.5 },
   close: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.soft, borderRadius: 19 },

@@ -1,0 +1,791 @@
+# MRP rows typed from the Taiton Feb-2026 price lists, page by page (PDF page numbers).
+# "CODE => option price ; option price". The price is the last number of each option.
+# "+CODE [Name] =>" adds a product the automatic extraction missed.
+
+@master 7
+TPF-1 => SSS 2700 ; BM 2900 ; GP 3200 ; RGP 3500
+TPF-2 => SSS 1600 ; BM 1800 ; GP 2000 ; RGP 2200
+TPF-3 => SSS 1600 ; BM 1800 ; GP 2000 ; RGP 2200
+TPF-4 => SSS 2300 ; BM 2500 ; GP 2700 ; RGP 2900
+TPF-610 => SSS 2100 ; BM 2300 ; GP 2500 ; RGP 2700
++TPF-610 R/L [Triple Glass Connector with Fin (Right/Left)] => SSS 4400 ; BM 4800 ; GP 4900 ; RGP 5100
+TPF-610-ST => SSS 2800 ; BM 3200 ; GP 3300 ; RGP 3400
+TPF-620 => SSS 3500 ; BM 4100 ; GP 4200 ; RGP 4400
+TPF-630 => SSS 4400 ; BM 4800 ; GP 4900 ; RGP 5100
+TPF-640 => SSS 950 ; BM 1050 ; GP 1300 ; RGP 1500
+TPF-650 => SSS 1300 ; BM 1600 ; GP 1700 ; RGP 1800
+TPF-660 => SSS 1400 ; BM 1800 ; GP 2000
+
+@master 8
+TPF-41 => SSS 6100 ; BM 6400 ; GP 6700
+TPF-51 => SSS 9800 ; BM 10200 ; GP 10500
+TFS-ACC-GDP => SSS 320 ; BM 400 ; GP 500 ; RGP 530
+TPL-1 => SSS 2700 ; BM 3000 ; GP 3300 ; RGP 3800
+TPL-2A => SSS 3800 ; BM 4000 ; GP 4200 ; RGP 4700
+TPL-2B => SSS 3800 ; BM 4000 ; GP 4200 ; RGP 4700
+TPL-SDL-3A/3B => SSS 3200 ; BM 3600
+TPL-SDL-3A => SSS 3000 ; BM 3300
+TPL-4A-N-S => SSS 2300 ; BM 2800 ; GP 3200 ; RGP 3700
+TPL-4A/4B-N => SSS 3100 ; BM 3700 ; GP 4400 ; RGP 4800
+TPL-TL => CP 2100 ; BM 2200 ; GP 2400 ; RGP 2700
+TPL-TL-SB => CP 2800 ; BM 3000 ; GP 3200 ; RGP 3400
+TPL-3A => SSS 3000 ; BM 3300
+TPL-3A/3B => SSS 3200 ; BM 3600
+TSSPL-SDL-G => SSS 14500 ; BM 17200
+TSSPL-SDL => SSS 10800 ; BM 12900
+TPF-GC-3 => SSS 1100
+
+@master 9
+TGH-11 => 19×152×171 mm · PSS 1400 ; 19×152×171 mm · BM 1500 ; 19×152×171 mm · GP 1800 ; 19×152×171 mm · RGP 1900 ; 19×250×269 mm · SSS 1600 ; 19×250×269 mm · BM 1900 ; 25×300×325 mm · SSS 1900 ; 25×300×325 mm · P/S 2000 ; 25×300×325 mm · BM 2100 ; 25×300×325 mm · GP 2300 ; 25×300×325 mm · RGP 2400 ; 25×425×450 mm · SSS 2100 ; 25×425×450 mm · P/S 2200 ; 25×425×450 mm · BM 2400 ; 25×425×450 mm · GP 2700 ; 25×425×450 mm · RGP 2800 ; 32×568×600 mm · SSS 3000 ; 32×568×600 mm · P/S 3200
+
+@master 10
+TGH-55 => 25×250×300 mm · SSS 1900 ; 25×250×300 mm · P/S 2000 ; 25×250×300 mm · BM 2400 ; 25×250×300 mm · GP 3000 ; 25×250×300 mm · RGP 3200 ; 25×302×450 mm · SSS 2100 ; 25×302×450 mm · P/S 2300 ; 25×302×450 mm · BM 3000 ; 25×302×450 mm · GP 3800 ; 25×302×450 mm · RGP 4000 ; 25×350×450 mm · SSS 2100 ; 25×350×450 mm · P/S 2200 ; 32×302×450 mm · SSS 2300 ; 32×302×450 mm · P/S 2400 ; 32×302×450 mm · BM 3200 ; 32×302×450 mm · GP 3900 ; 32×302×450 mm · RGP 4200 ; 25×450×600 mm · SSS 2400 ; 25×450×600 mm · BM 2900 ; 32×450×600 mm (A) · SSS 2700 ; 32×450×600 mm (A) · P/S 3000 ; 32×450×600 mm (A) · BM 3500 ; 32×450×600 mm (A) · GP 4300 ; 32×450×600 mm (A) · RGP 4500 ; 32×480×600 mm (B) · SSS 2700 ; 32×600×900 mm (A) · SSS 3700 ; 32×700×900 mm (B) · SSS 3700 ; 32×700×900 mm (B) · BM 4500 ; 32×700×900 mm (B) · GP 5400 ; 32×700×900 mm (B) · RGP 5700 ; 32×1100×1300 mm · SSS 7500 ; 32×1100×1300 mm · BM 7800 ; 32×1100×1300 mm · GP 8200 ; 32×1100×1300 mm · RGP 8600
+
+@master 11
+TGHL-55 => 35×1125×1500 mm · SSS 20000 ; 35×1125×1500 mm · BM 25900 ; 35×1125×1500 mm · GP 29700 ; 35×1125×1500 mm · RGP 32400
+TGH-552-ED => 40×10 · 298×450 mm · SSS 4800 ; 40×10 · 298×450 mm · BM 5100 ; 40×10 · 298×450 mm · GP 5600 ; 40×10 · 298×450 mm · RGP 5800 ; 40×10 · 450×600 mm · SSS 5600 ; 40×10 · 450×600 mm · BM 6000 ; 40×10 · 450×600 mm · GP 6400 ; 40×10 · 450×600 mm · RGP 6700
+TGH-554-ED => 20×40 · 380×400 mm · SSS 3600 ; 20×40 · 380×400 mm · BM 4000 ; 20×40 · 380×400 mm · GP 4800 ; 20×40 · 380×400 mm · RGP 5000 ; 20×40 · 780×800 mm · SSS 5900 ; 20×40 · 780×800 mm · BM 6200 ; 20×40 · 780×800 mm · GP 6800 ; 20×40 · 780×800 mm · RGP 7000
+TGH-664 => 32 mm · 300~800×900 mm · SSS 6400
+TGH-11-D => 25×250×275 mm · SSS 3200 ; 25×300×325 mm · SSS 3500 ; 25×450×475 mm · SSS 3700 ; 25×600×625 mm · SSS 4100
+TGH-11-D-BM => 25×250×275 mm · BM 3700 ; 25×300×325 mm · BM 4000 ; 25×450×475 mm · BM 4300 ; 25×600×625 mm · BM 4600
+
+@master 12
++TGL-WCP-22 [Wall Connecting Profile System] => 3 m · SILVER 4100 ; 3 m · SSS 4400 ; 3 m · BLACK 5000 ; 3 m · GP 6200 ; 3 m · RGP 6600 ; 4 m · SILVER 5500 ; 4 m · BLACK 6700 ; 5 m · SILVER 6900
+TDR-1 => 1 m 6300 ; 1.2 m 7100
+TDR-2 => 1 m 7000 ; 1.2 m 7800
+
+@master 13
+TAGH-1 => SILVER 2700 ; BM 2800
+TAGL-11-SB => SILVER 5000 ; BM 5300
+TAGL-11-SP => SILVER 430 ; BM 540
+TAGHL-11-SET => K2K · SILVER 11700 ; K2K · BM 12300 ; K2N · SILVER 11800 ; K2N · BM 12400
+TAGHL-11-K2K => SILVER 11700 ; BM 12300
+TAGHL-11-K2N => SILVER 11800 ; BM 12400
+TAGHL-33-SET => K2K · SILVER 11700 ; K2K · BM 12300 ; K2N · SILVER 11800 ; K2N · BM 12400
+TAGHL-33-K2K => SILVER 11700 ; BM 12300
+TAGHL-33-K2N => SILVER 11800 ; BM 12400
+
+@master 15
+TSH-1 => SSS 2400 ; PSS 2400 ; BM 2800 ; GP 3700 ; RGP 4000
+TSH-OFS-1 => SSS 2600 ; PSS 2600 ; BM 3100 ; GP 3800 ; RGP 4100
+TSH-2 => SSS 3600 ; PSS 3600 ; BM 4300 ; GP 5900 ; RGP 6100
+TSH-2T => SSS 8400 ; PSS 8400 ; BM 9800 ; GP 10200 ; RGP 10600
+TSH-3 => SSS 3800 ; PSS 3800 ; BM 4500 ; GP 6000 ; RGP 6400
+TSH-4 => SSS 4200 ; PSS 4200 ; BM 4800 ; GP 6400 ; RGP 6700
+TSH-5 => SSS 2200 ; PSS 2200 ; BM 2600 ; GP 3500 ; RGP 3700
+TASH-1 => CP 1400 ; BM 1500 ; GP 1900 ; RGP 1900
+TASH-2 => CP 2100 ; BM 2200 ; GP 2700 ; RGP 2700
+TASH-3 => CP 2200 ; BM 2300 ; GP 2800 ; RGP 2800
+TASH-4 => CP 2400 ; BM 2500 ; GP 3000 ; RGP 3000
+
+@master 16
+TGC-1 => SSS 410 ; PSS 410 ; BM 650 ; GP 700 ; RGP 750
+TGC-2 => SSS 600 ; PSS 600 ; BM 850 ; GP 900 ; RGP 1000
+TGC-3 => SSS 600 ; PSS 600 ; BM 850 ; GP 900 ; RGP 1000
+TGC-4 => SSS 550 ; PSS 550 ; BM 830 ; GP 880 ; RGP 1000
+TGC-5 => SSS 600 ; PSS 600 ; BM 850 ; GP 900 ; RGP 1000
+TGH-TB-1 => SSS 2100 ; PSS 2100 ; BM 2800 ; GP 3600 ; RGP 4100
+TGH-TB-ED => SSS 3200 ; PSS 3200 ; BM 3800 ; GM 4400 ; RG 4400 ; CHM 4400
+TDK-1 => CP 700 ; BM 750 ; GP 800 ; RGP 840
+TDK-2 => CP 710 ; BM 750 ; GP 810 ; RGP 850
+
+@master 17
+TSKH-AL-1 => CP 390 ; BM 390 ; GP 550 ; RGP 600
++TSKH-AL-2 [Reinforcing Rod Support from Glass Through and Through (Aluminium)] => CP 520 ; BM 520 ; GP 650 ; RGP 720
+TSKH-AL-3 => CP 600 ; BM 600 ; GP 750 ; RGP 830
+TSKH-1 => SSS 650 ; PSS 650 ; BM 850 ; GP 1100 ; RGP 1150
+TSKH-2 => SSS 720 ; PSS 720 ; BM 920 ; GP 1200 ; RGP 1250
+TSKH-2A => SSS 730 ; PSS 730 ; BM 970 ; GP 1250 ; RGP 1300
+TSKH-3 => SSS 1100 ; PSS 1100 ; BM 1400 ; GP 1700 ; RGP 1800
+TSKH-4 => SSS 1000 ; PSS 1000 ; BM 1300 ; GP 1600 ; RGP 1700
+TSKH-ACC-19 => 1.6 m · SSS 1500 ; 1.6 m · PSS 1900 ; 1.6 m · BM 3000 ; 1.6 m · GP 3300 ; 1.6 m · RGP 3800 ; 2 m · SSS 1800 ; 2 m · PSS 2150 ; 2 m · BM 3800 ; 2 m · GP 4100 ; 2 m · RGP 4300 ; 3 m · SSS 2700 ; 3 m · PSS 3150 ; 3 m · BM 4300 ; 3 m · GP 5600 ; 3 m · RGP 5900
+TSSKH-1-ED => PSS 650 ; BM 750 ; GP 850 ; RGP 900
+TSSKH-2-ED => PSS 730 ; BM 850 ; GP 950 ; RGP 1000
+TSSKH-3-ED => PSS 1050 ; BM 1300 ; GP 1450 ; RGP 1550
+TSL-11-TRACK => 1.6 m · SSS 2300 ; 1.6 m · PSS 2600 ; 1.6 m · BM 3200 ; 1.6 m · GP 4200 ; 1.6 m · RGP 4400 ; 2 m · SSS 2900 ; 2 m · PSS 3000 ; 2 m · BM 3500 ; 2 m · GP 4300 ; 2 m · RGP 4500 ; 3 m · SSS 4600 ; 3 m · PSS 4600 ; 3 m · BM 5400 ; 3 m · GP 6400 ; 3 m · RGP 7000
+
+@master 18
+TPS-1 => PVC 8/10/12 mm 300 ; BM 8/10 mm 330 ; GP / RGP 10 mm 540 ; 8 ft · PVC 8/10/12 mm 350 ; 8 ft · BM 8/10/12 mm 390
+TPS-2 => PVC 8/10/12 mm 300
+TPS-3 => PVC 8/10/12 mm 300 ; BM 10 mm 330 ; GP 10 mm 540 ; 8 ft · PVC 8/10/12 mm 350
+TPS-4 => PVC 8/10/12 mm 300 ; BM 8/10 mm 330 ; GP 10 mm 540 ; 8 ft · PVC 8/10/12 mm 350
+TPS-7 => PVC 8/10/12 mm 300 ; BM 8/10 mm 330 ; 8 ft · BM 10 mm 390
+TPS-9 => PVC 8/10/12 mm 300 ; BM 8/10 mm 330 ; 8 ft · PVC 8/10/12 mm 350 ; 8 ft · BM 8/10/12 mm 390
+TPS-M1 => PVC 8/10/12 mm 1150 ; BM 8/10 mm 1250 ; GP / RGP 8/10 mm 1600 ; 8 ft · PVC 10 mm 1450 ; 8 ft · BM 10 mm 1550
+TPS-M2 => PVC 8/10/12 mm 1150
+TPS-M3 => PVC 8/10/12 mm 1150
+TPS-SL-BR-11 => PVC 8/10/12 mm 890 ; 8 ft · PVC 10/12 mm 970
+TPS-SL-BR-22 => 9 ft · PVC 12 mm 1100
+TPS-IS => 3 m · 10/12 mm 1150
+TAV-PS-1 => Standard 400
+TAV-PS-2 => Standard 420
+
+@master 19
+TESL-SS-KIT => PSS 4200 ; BM 5200 ; GP 6300 ; RGP 7200
+TESL-SS-90-CNTR => CP 1250 ; BM 1350 ; GP 1450 ; RGP 1550
++TESL-SS-180-TRACK [Economy Sliding Shower Track, Single Door] => 1.6 m · CP 4700 ; 1.6 m · BM 5600 ; 1.6 m · GP 6300 ; 1.6 m · RGP 6900 ; 2 m · CP 5900 ; 2 m · BM 6700 ; 2 m · GP 7400 ; 2 m · RGP 8000 ; 3 m · CP 8900 ; 3 m · BM 9800 ; 3 m · GP 11000 ; 3 m · RGP 11600
+TGL-UPR => CP 3200 ; BM 3800 ; GP 4500 ; RGP 5200
++TSL-WPB [Water Proof Bars 50×60×2000 mm] => 2 m 6000
+
+@master 20
+TSL-11-KIT => PSS 14000 ; BM 18000 ; GP 21500 ; RGP 22500
+TSL-11-A1 => PSS (per set) 5300
+TSL-11-A2 => PSS (per set) 2000 ; BM (per set) 2000 ; GP (per set) 2200 ; RGP (per set) 2200
+TSL-11-A3 => PSS 1300
+TSL-11-A4 => PSS 1900
+TSL-HN-50 => SSS 1650 ; BM 1900 ; GP 2100 ; RGP 2250
+TSL-11-A6 => PSS 1750
+
+@master 21
+TSL-WD-100 => Standard 1950
+TSL-TRACK-E2 => 2 m · SILVER 2300 ; 2 m · BLACK 2750 ; 3 m · SILVER 3400 ; 3 m · BLACK 4100 ; 4 m · SILVER 4600 ; 4 m · BLACK 5500
+TSL-WD-100-SC-KIT => SSS 5100
+TSL-44-B1-SC => 2 m · SILVER 4000 ; 3 m · SILVER 6000 ; 4 m · SILVER 8000 ; 6 m · SILVER 12000 ; 6 m · BM 14300
+TSL-GL-120 => Standard 3200
+TSL-44-A1-SC-KIT-1 => SSS 7700 ; BM 8600
+TSL-44-A1-SC-KIT-2 => SSS 8600 ; BM 9500
+TSL-44-B3-SC => 2 m · SILVER 6000 ; 3 m · SILVER 9000 ; 4 m · SILVER 12000 ; 6 m · SILVER 18000 ; 6 m · BLACK 21200
+
+@master 22
+TSL-44-A1 => SSS 4200 ; BM 4500 ; GP 4800 ; RGP 5100 ; Metal body 5300
+TSL-44-A2 => SSS 6300 ; BM 7000 ; GP 7500 ; RGP 8100
+TSL-44-A5 => SSS 700 ; BM 840 ; GP 1050 ; RGP 1150
+TSL-44-A9 => Standard 310
+TSL-44-A6 => SSS 650
+TSL-HN-10 => SSS 1950 ; BM 2300
+TSL-44-B1 => 2 m · SILVER 4400 ; 2 m · BLACK 5300 ; 2 m · GP 6550 ; 2 m · RGP 7000 ; 3 m · SILVER 6600 ; 3 m · BLACK 7950 ; 3 m · GP 9820 ; 3 m · RGP 10500 ; 4 m · SILVER 8800 ; 4 m · BLACK 10600 ; 4 m · GP 13100 ; 4 m · RGP 14000
+TSL-44-B2 => 2 m · SILVER 5750 ; 2 m · BLACK 6900 ; 2 m · GP 8600 ; 2 m · RGP 9200 ; 3 m · SILVER 8620 ; 3 m · BLACK 10350 ; 3 m · GP 12900 ; 3 m · RGP 13800 ; 4 m · SILVER 11500 ; 4 m · BLACK 13800 ; 4 m · GP 17200 ; 4 m · RGP 18400
+TSL-44-B3 => 2 m · SILVER 4800 ; 2 m · BLACK 5700 ; 2 m · GP 7200 ; 2 m · RGP 7700 ; 3 m · SILVER 7200 ; 3 m · BLACK 8550 ; 3 m · GP 10800 ; 3 m · RGP 11550 ; 4 m · SILVER 9600 ; 4 m · BLACK 11400 ; 4 m · GP 14400 ; 4 m · RGP 15400 ; 5 m · SILVER 12000 ; 5 m · BLACK 14250 ; 5 m · GP 18000 ; 5 m · RGP 19250
+
+@master 24
+TSP-A22 => SSS 2600 ; PSS 2800
+TSP-A44 => SSS 2900 ; PSS 3300
+
+@master 25
+TSP-A2 => SSS 5100 ; PSS 5500
+TSP-A4 => SSS 5900 ; PSS 6000
+TSP-B-201 => SSS 2400
+TSP-B-202 => SSS 3500
+
+@master 26
+TSP-B-202A => SSS 3800
+TSP-B-203 => SSS 4000
+TSP-B-204 => SSS 5400
+TSP-B-221 => SSS 3400
+TSP-B-222 => SSS 4400
+
+@master 27
+TSP-B-222A => SSS 5100
+TSP-B-223 => SSS 6200
+TSP-B-224 => SSS 6700
+TSP-SP-200 => SSS 8100
+TSP-SP-300 => SSS 10200
+TSP-SP-350 => 350 mm 12400 ; 400 mm 14600 ; 450 mm 16700
+TSP-FP-200 => SSS 9700
+TSP-FP-300 => SSS 10800
+TSP-FP-350 => 350 mm 11800 ; 400 mm 14000 ; 450 mm 17200
+
+@master 28
+TSP-FB-FL => SSS 1100 ; PSS 1500
+TSP-AFB-36-FL => SSS 2000 ; PSS 2200
+TSP-SH-01 => Standard 1300
+TCF-01 => SSS 7300
+TCF-02 => SSS 7700
+TCF-03 => SSS 6700
+TCF-316 => Pair 12400
+TCF-ROD-12mm/16mm => 12 mm (per m) 2600 ; 16 mm (per m) 2800
+TCF-01-S => SSS 2800
+TCF-02-S => SSS 2600
+TCF-03-S => SSS 1800
+
+@master 30
+TAV-SFS-V => BM (per m) 2300 ; BG (per m) 2750 ; CHM (per m) 2750
+TAV-SFS-H => BM (per m) 4200 ; BG (per m) 4900 ; CHM (per m) 4900
+TAV-SFS-TT => BM (per m) 3650 ; BG (per m) 4300 ; CHM (per m) 4300
+TAV-SFS-PIVOT => Set 8200
+TAV-SFS-HINGE => BM (per pc) 2200 ; BG (per pc) 2200 ; CHM (per pc) 2200
+TAV-SFS-LD => BM (per pc) 3000 ; BG (per pc) 3000 ; CHM (per pc) 3000
+TAV-SFS-WB => Set 3600
++TAV-SFS-V-STRIP-1 [Anti-collision Strip for Vertical Profile] => Per m 110
+TAV-SFS-EC => Per pc 100
++TAV-SFS-TT-STRIP [Seal Strip for Top Track] => Per m 30
+TAV-SFS-PVC => 2.5 / 3 m piece 220
+TAV-SFS-V-strip2 => Per pc 220
+TAV-SFS-MAGNET => Set 890
+TAV-SFS-DB => BM (per m) 570 ; BG (per m) 630
+TAV-SFS-MP => BM (per m) 1300 ; CHM (per m) 1400
+TCF-ROD => 12 mm (per m) 2600 ; 16 mm (per m) 2800
+TCF-ROD-12mm => 12 mm (per m) 2600
+TCF-02S => SSS 2600
+
+@master 32
+TSFS-A16 => SSS 5500
+TSFS-A17 => SSS 5400
+TSFS-A13 => SSS 10000
+TSFS-A6 => SSS 7600
+TSFS-A10 => SSS 9000
+TSFS-A12 => SSS 8600
+TSFS-A11 => SSS 5400
+TSFS-A14 => SSS 4400
+TSFS-A18 => SSS 5600
+TSFS-A9 => SSS 4600
+TSFS-TT => 3 m 16650 ; 4 m 22200
+TSFS-BT => 3 m 10450 ; 4 m 13930
+TWSF-01 => Set 9000
+TWSF-02 => Set 8100
+TWSF-03 => Set 17300
+TWSF-04 => Set 13500
+TWSF-05 => Standard 3200
+TWSF-011 => Per m 4900
+TWSF-043 => Per m 2700
+TWSL-ACC-22 => Standard 2600
+
+@master 36
+TAM-PS-01 => 4.2 m track (per set) 172000 ; 6 m track (per set) 189000
++TAM-PS-01-TRACK [Premium Slide Track] => 4.2 m 41000 ; 6 m 68000
+TAM-PS-01-CNTR => Standard 43000
+TAM-PS-01-MT => Standard 43000
+TAM-PS-01-PS => Standard 1800
+TAM-TB => Per m 810
+TAM-BC => Set 1300
+TAM-PS-01-RC => Pair 4500
+TAM-PS-01-TW => Standard 3800
+TAM-MS => Per pc 8900
+TAM-PS-01-STPR => Standard 1300
+TAM-PS-01-HGR => Per pc 3400
+TAM-EC-01-HGR => Per pc 3400
+TAM-SLB => Pair 9700
+TAM-GAC => 1 m pair 9900 ; 1.5 m pair 14200
+TAM-GFG => Pair 1250
+TAM-WFG => Pair 1950
+
+@master 37
+TAM-TS-200 => 4.2 m track (per set) 237000 ; 6 m track (per set) 253000
++TAM-TS-200-TRACK [Terrific Slide Track] => 4.2 m 49200 ; 6 m 83000
++TAM-TS-200-CNTR [Terrific Slide Controller] => Standard 68000
++TAM-TS-200-MT [Terrific Slide Motor] => Standard 68000
++TAM-TS-200-PS [Terrific Slide Power Switch] => Standard 2300
++TAM-TS-200-RC [Terrific Slide Remote Control] => Pair 2500
++TAM-TS-200-TW [Terrific Slide Adjustable Tension Wheel] => Standard 4600
++TAM-TS-200-STPR [Terrific Slide Stopper] => Standard 1700
++TAM-TS-200-HGR [Terrific Slide Hanger] => Per pc 4300
+
+@master 38
+TAM-ES-01 => 2.5 m track (per set) 97000 ; 4.2 m track (per set) 129000
+TAM-EXP-01 => 2.4 m track (per set) 75000 ; 4.2 m track (per set) 97000
+
+@master 39
+TAM-ASD-01 => Standard 91000
+TAM-CASD-03 => Standard 118000
+
+@master 41
+TAM-MS-THS => Standard 20500
+
+@master 42
+TAM-MS-ZS => Standard 15000
+
+@master 43
+TAM-WPB => Standard 20000
++TAM-PS-01-EL [Automatic Door Electronic Lock (Premium Slide)] => Standard 6900
+TAM-ES-01-EL => Standard 6900
+TAM-SW-11 => TAM-SW-11 1000 ; SW-11M 1400
+TAM-FP => Per pc 16700
+TAM-FP-CARD => WHITE 160 ; BLACK 160
+
+@master 45
+TAM-RF-LEANA-R/L => SSS 12400
+TAM-RF-URBANA-R/L => SSS 12500 ; BM 14000 ; GM 14000
+TAM-RF-ARENA-R/L => SSS 16100 ; PSS 16100 ; GM 16100
+TAM-RF-MAGNA-R/L => BM 21100
+TAM-RF-PLATINA-R/L => Coffee Golden 23500
+TAM-RF-SLATINA-R/L => SSS 22000
+TAM-RF-DIVINA-R/L => With Bluetooth 30000 ; Without Bluetooth 23000
+TAM-RF-SLIM => BM 17000
+TAM-RF-VIVIANA-R/L => BM 14000
+
+@master 46
+TAM-RF-CARD => WHITE 160 ; BM 160
+TAM-RF-QC-CARD => Standard 2100
+TAM-RF-CR => Standard 26000
+TAM-RF-PDA => Standard 76000
+TAM-RF-PS => WHITE 3500 ; BLACK 3800 ; GREY 3800
+TAM-RF-PS-PRO => BLACK 6300
+TAM-RF-SW => Standard 26000
+
+@master 47
+TAM-RF-ECS => Standard 185000
+TAM-RF-CDA => Standard 95000
++TAM-RF-DND-OP [Outside Panel Do Not Disturb System] => Standard 9000
+TAM-RF-DND-IP => Standard 6000
+TAM-RF-DND-DB => Standard 500
+TAM-HS-HD => Per pc 3700
+TAM-RF-SAFE-LT => Standard 14500
+TAM-SAFE-LT => Standard 11650
+TAM-SAFE-SQ => Standard 9500
+
+@master 48
+TAM-DL-SLIMSEC => Swing · with remote · BLACK 37700 ; Sliding · with remote · BLACK 37700 ; Swing · without remote · BLACK 33700 ; Sliding · without remote · BLACK 33700
+TAM-DL-G2G => BM 27500
+TAM-DL-W2W => BM 27500
+TAM-DL-G2W => BM 27000
+TAM-DL-W => BM 27000
+TAM-SDL-G2G => BM 27500
+TAM-SDL-W2W => BM 27500
+TAM-SDL-G2W => BM 27000
+TAM-SDL-W => BM 27000
+
+@master 49
+TAM-DL-W2W-E => BM 13200
+TAM-DL-W-E => BM 13000
+TAM-DL-REMOTE => Standard 5000
+
+@master 50
+TAM-DL-SUPREMA => BLACK 37500
+TAM-DL-SECURA-R/L-BLACK => BLACK 33700
+TAM-DL-MICROSEC-R/L-BLACK => BLACK 17000
+
+@master 51
+TAM-DL-MINISEC-R/L-BLACK => BLACK 25000
+TAM-DL-ULTIMA => Standard 35000
+
+@master 54
+TMH-11 => SSS 1700 ; BM 2000
+TMH-22 => SSS 1600 ; BM 2000
+TMH-33 => SSS 1550 ; BM 1800
+TMH-33N => SSS 1550 ; BM 1800
+TML-30 => SSS 1180 ; BM 1370
+TML-35 => SSS 1250 ; BM 1420
+TML-45 => SSS 1300 ; BM 1600
+TML-DL-30mm => SSS 1500 ; BM 1800 ; BG 2100
+TML-DL-35mm => SSS 1500 ; BM 1790 ; BG 2200
+TML-DL-45mm => SSS 1100
+TML-DL-S-30 => SSS 1080 ; BM 1300
++TML-L-43mm [Latch Bolt for Steel/Wooden Door] => Standard 620
+TML-20 => SSS 1300 ; BM 1400
+TML-HL-20mm => 20 mm · SSS 1550 ; 20 mm · BM 1750
+TMC-22-K2K-N => 60 mm · SSS 970 ; 60 mm · BM 1080 ; 70 mm · SSS 1000 ; 70 mm · BM 1200 ; 80 mm · SSS 1000
+TMC-22-K2N-N => 54 mm · SSS 1200 ; 54 mm · BM 1300 ; 60 mm · SSS 1150 ; 60 mm · BM 1350 ; 70 mm · SSS 1200 ; 70 mm · BM 1450 ; 80 mm · SSS 1300
+TMC-22-BT-N => 60 mm · SSS 850 ; 70 mm · SSS 970 ; 80 mm · SSS 1080
+TMC-22-HC-K-45 => Standard 810
+TMC-22-HC-N-45 => Standard 860
+TCKL-11 => Standard 1080
+TCKL-22 => Standard 970
+
+@master 55
+TA-DWDS => 900 mm · SILVER 2900 ; 1000 mm · SILVER 3000
+TIL-RA => SSS 1250
+TIL-RB => SSS 1400
+TML-IL => BM 900
+TA-BH => 4BB 5×3×3 · SSS (per pc) 580
+TA-BH-4BB => 4×3×3 · SSS (per pc) 500 ; 4×3×3 · BM (per pc) 600
+TA-BHM-2BB => 4×3×3 · SSS (per pc) 500
+TA-BH-NBB => 5×2.5×2.5 · SSS (per pc) 180 ; 4×2.5×2.5 · SS 201 (per pc) 140
+TA-DE-1 => SSS 750
+TA-DC-1 => SSS 1000
+TA-DG-1 => SSS 1150
+TA-CFB-300 => SSS 970 ; BM 1080
+TA-DST-1 => SSS 220 ; BM 260
++TA-DB-1 [Door Buffer PVC White 3"] => WHITE 130
+TA-DST-4M => SSS 1300
+TA-DST-2 => SSS 300
++TA-TB [Tower Bolt (Standard Type)] => 4" · SS304 250 ; 4" · SS201 150 ; 6" · SS304 390 ; 6" · SS201 230 ; 8" · SS304 530 ; 8" · SS201 320 ; 10" · SS304 660 ; 10" · SS201 400 ; 12" · SS304 800 ; 12" · SS201 460 ; 18" · SS304 1400 ; 18" · SS201 900
+
+@master 56
+TFS-5400-TP/BP => SSS 4100
+TFS-6000-GD => SSS 6400 ; BM 7300
+TFS-6400 => SSS 4500 ; BM 5400 ; GP 6400 ; RGP 7500
+TFS-RV-8400 => SSS 16200
+TFS-8400 => SSS 8600 ; BM 9700 ; GP 11600 ; RGP 12700
++TFS-9400 [Double Cylinder Floor Spring (Max Door Weight 150 kg)] => SSS 9500 ; BM 10500 ; GP 12600 ; RGP 13600
+TFS-10400 => SSS 16400
+TFS-10600 => SSS 80000
+TFS-ACC-TP/BP => SSS 1200
+TFS-ACC-MH-1 => SSS 1350 ; BM 1500
+TCFH-W-100 => SSS 11300
+TCFH-100 => SSS 9700 ; BM 10800 ; GP 13000 ; RGP 14000
+
+@master 57
+TSK-45 => SILVER 1250
+TSK-60 => SILVER 1650 ; BLACK 1850
+TSK-80 => SILVER 2800 ; BLACK 3150
+TSK-900-S => SILVER 6500 ; BM 7000
+TSK-ACC-900-S-PLATE => SILVER 2100 ; BLACK 2600
+TSK-900 => SILVER 7500 ; BM 8000
+TSK-ACC-900-PLATE => SILVER 2100 ; BLACK 2600
+TSK-150 => SILVER 10000
+TCD-3500 => SILVER 5200
+TCD-3800 => SILVER 6300
+TCD-4000 => SILVER 14000 ; BLACK 15500
+
+@master 58
+TA-HCH => Up to 80 kg · SILVER 32000 ; Up to 80 kg · BLACK 32000 ; Up to 100 kg · SILVER 37500 ; Up to 100 kg · BLACK 37500
+
+@master 59
+TWS-KIT-HP1 => 2 door · BM/BG/RG/GRY/CGP 35000 ; 3 door · BM/BG/RG/GRY/CGP 50000
+TWS-KIT-HP2 => 2 door · BM/GRY/CGP 35000 ; 3 door · BM/GRY/CGP 50000
+TWS-KIT-HP3 => 2 door · BM/RG/CGP 35000 ; 3 door · BM/RG/CGP 50000
+
+@master 60
+TVC-WHH-HP1 => 3 m · BM (L/R) 5100 ; 3 m · BG / RG / GRY (L/R) 5300
+TVC-WHH-HP2 => 3 m · BM (L/R) 4900 ; 3 m · BG / RG / GRY (L/R) 5100
++TVC-WHH-SP [Wardrobe Side Profile] => 3 m · BM (L/R) 2900 ; 3 m · BG / RG / GRY (L/R) 3100
++TVC-WHH-HINGE [Wardrobe Hydraulic Hinge (0°, 8° & 16°)] => SSS (per pc) 230 ; BM (per pc) 270
++TVC-WHH-CCN [Wardrobe Corner Connector] => SILVER (per pc) 210
+TVC-WHP-01 => 2.7 m · BM (L/R) 2600 ; 2.7 m · BG / RG / GRY (L/R) 3100
+TVC-WHP-02 => 2.7 m · BM (L/R) 3400 ; 2.7 m · BG / RG / GRY (L/R) 3900
+TVC-WHP-01-200MM => 2.7 m · BM 2600 ; 2.7 m · BG / RG / GRY 3100
+TVC-WHP-02-200MM => 2.7 m · BM 3400 ; 2.7 m · BG / RG / GRY 3900
+
+@master 61
+TAS-40-01 => 2.8 m · BM 3550 ; 2.8 m · BG 3800
+TAS-40-02 => 2.8 m · BM 2750 ; 2.8 m · BG 3000
+TAS-40-03 => 2.8 m · BM 1150 ; 2.8 m · BG 1250
+TAS-40-05 => 2.8 m · BM 7600 ; 2.8 m · BG 7800
+TAS-40-P1 => 2.8 m · BM 8600 ; 2.8 m · BG 9200
+TAS-40-DR => 2.8 m · BM 3600 ; 2.8 m · BG 3800
+TAS-40-P2 => 2.8 m · BM 1050 ; 2.8 m · BG 1150
+TAS-VDP-30 => 3.6 m · BM 4500 ; 3.6 m · BG 4700
+TGH-TBK-1 => BM 3100 ; BG 4100 ; RG 4100 ; GRY 4100 ; CHM 4100
+TGH-TBK-2 => BM 3100 ; BG 4100 ; RG 4100 ; GRY 4100 ; CHM 4100
++TSH-2S [Slim Hinge 90° Wall to Glass] => BM 3200 ; BG 3600 ; RG 3600 ; GRY 3600 ; CHM 3600
++TAV-30-L-CNTR [Framed Shower Connector] => BM 150
++TAV-DH-1 [Door Corner Hinges] => BM 1750 ; BG 1900
++TAV-AL-CDH [Concealed Door Hinge] => BM 1000 ; BG 1200 ; RG 1200 ; GRY 1200 ; CHM 1200
+TAV-PVC-STRIP => 5/6/8 mm · 3 m 220
+TAV-MS-T => Per m 280
++TAS-40-MS [Magnetic Seal] => Per m 300
+
+@office 5
++TAP-25-01 [Tavic 25 Fix Profile] => 6 m · Mill 4390 ; 6 m · SILVER 4690 ; 6 m · BLACK 4950
++TAP-25-02 [Tavic 25 Fix Male Profile] => 6 m · Mill 3115 ; 6 m · SILVER 3320 ; 6 m · BLACK 3500
++TAP-25-03 [Tavic 25 Fix Female Profile] => 6 m · Mill 2010 ; 6 m · SILVER 1910 ; 6 m · BLACK 1770
+
+@office 6
+TAP-45-01 => 2.5 m · Mill 2285 ; 2.5 m · SILVER 2410 ; 2.5 m · BLACK 2540 ; 2.8 m · Mill 2560 ; 2.8 m · SILVER 2700 ; 2.8 m · BLACK 2850 ; 3 m · BG 3700 ; 6 m · Mill 5485 ; 6 m · SILVER 5785 ; 6 m · BLACK 6100
+TAP-45-02 => 6 m · Mill 4485 ; 6 m · SILVER 4770 ; 6 m · BLACK 5030 ; 3 m · BG 3000
+TAP-45-03 => 6 m · Mill 1680 ; 6 m · SILVER 1810 ; 6 m · BLACK 1900 ; 3 m · BG 1300
+TAP-45-04 => 2.5 m · Mill 770 ; 2.5 m · SILVER 860 ; 2.5 m · BLACK 900 ; 2.8 m · Mill 865 ; 2.8 m · SILVER 965 ; 2.8 m · BLACK 1010 ; 3 m · BG 1400 ; 3.6 m · Mill 1110 ; 3.6 m · SILVER 1240 ; 3.6 m · BLACK 1300
+
+@office 7
++TAP-45-05 [Tavic 45 Door Outer Paithan Patti] => 2.4 m · Mill 4930 ; 2.4 m · SILVER 5380 ; 2.4 m · BLACK 5670 ; 2.8 m · Mill 5750 ; 2.8 m · SILVER 6275 ; 2.8 m · BLACK 6615
++TAP-45-06 [Tavic 45 Profile Block Fix] => 6 m · Mill 6940 ; 6 m · SILVER 7430 ; 6 m · BLACK 7800 ; 3 m · BG 4750
++TAP-45-07 [Tavic 45 Profile Male Block Fix] => 6 m · Mill 5160 ; 6 m · SILVER 5500 ; 6 m · BLACK 5800 ; 3 m · BG 3500
++TAP-45-08 [Tavic 45 Profile Female Block Fix] => 6 m · Mill 1390 ; 6 m · SILVER 1490 ; 6 m · BLACK 1570 ; 3 m · BG 950
+
+@office 8
+TAP-SG75-01 => 6 m · Mill 10810 ; 6 m · SILVER 11500 ; 6 m · BLACK 12190
+TAP-SG75-01C => 6 m · Mill 2700 ; 6 m · SILVER 2930 ; 6 m · BLACK 3080
+TAP-SG75-02 => 6 m · Mill 7570 ; 6 m · SILVER 8075 ; 6 m · BLACK 8500
+TAP-SG75-03 => 6 m · Mill 2160 ; 6 m · SILVER 2350 ; 6 m · BLACK 2470
+
+@office 9
+TAP-SG100-01T => 6 m · Mill 6925 ; 6 m · SILVER 7430 ; 6 m · BLACK 7800
+TAP-SG100-01B => 6 m · Mill 6670 ; 6 m · SILVER 7100 ; 6 m · BLACK 7480
+TAP-SG100-02 => 6 m · Mill 9000 ; 6 m · SILVER 9610 ; 6 m · BLACK 10120
+TAP-SG100-03 => 6 m · Mill 2540 ; 6 m · SILVER 2730 ; 6 m · BLACK 2880
+
+@office 11
+TAP-DG100-01 => 6 m · Mill 11625 ; 6 m · SILVER 12420 ; 6 m · BLACK 13100
+TAP-DG100-01C => 6 m · Mill 1800 ; 6 m · SILVER 1925 ; 6 m · BLACK 2020
+TAP-DG100-02 => 6 m · Mill 8890 ; 6 m · SILVER 9500 ; 6 m · BLACK 10000
+TAP-25-03 => DGU female · 6 m · Mill 1770 ; DGU female · 6 m · SILVER 1910 ; DGU female · 6 m · BLACK 2010
+
+@office 13
+TAP-SD60-01 => 2.5 m · Mill 4230 ; 2.5 m · SILVER 4510 ; 2.5 m · BLACK 4950 ; 5.6 m · Mill 9475 ; 5.6 m · SILVER 10100 ; 5.6 m · BLACK 11080 ; 5.6 m · BG 13300
+TAP-SD60-02 => 5.6 m · Mill 7840 ; 5.6 m · SILVER 8350 ; 5.6 m · BLACK 8800 ; 5.6 m · BG 10600
+TAP-SD60-03 => 5.6 m · Mill 1640 ; 5.6 m · SILVER 1720 ; 5.6 m · BLACK 1810 ; 5.6 m · BG 2150
++TAP-SD60-DR [Tavic SD60 Door Rebate] => 2.5 m · Mill 1570 ; 2.5 m · SILVER 1650 ; 2.5 m · BLACK 1720 ; 2.8 m · Mill 1400 ; 2.8 m · SILVER 1470 ; 2.8 m · BLACK 1535 ; 2.8 m · BG 2250
+TAP-SD60-WDR => 2.5 m · Mill 1925 ; 2.5 m · SILVER 2070 ; 2.5 m · BLACK 2185 ; 2.8 m · Mill 1720 ; 2.8 m · SILVER 1850 ; 2.8 m · BLACK 1950
+
+@office 14
+TAP-SD75-01 => 2.5 m · Mill 5875 ; 2.5 m · SILVER 6250 ; 2.5 m · BLACK 6590 ; 5.6 m · Mill 13160 ; 5.6 m · SILVER 14000 ; 5.6 m · BLACK 14760
+TAP-SD75-02 => 5.6 m · Mill 10700 ; 5.6 m · SILVER 11400 ; 5.6 m · BLACK 12000
+TAP-SD75-03 => 5.6 m · Mill 1650 ; 5.6 m · SILVER 1760 ; 5.6 m · BLACK 1850
+TAP-SD75-DR => 2.5 m · Mill 2225 ; 2.5 m · SILVER 2385 ; 2.5 m · BLACK 2500 ; 2.8 m · Mill 2490 ; 2.8 m · SILVER 2660 ; 2.8 m · BLACK 2800
+TAP-SD75-01-DG => 2.5 m · Mill 8400 ; 2.5 m · SILVER 8840 ; 2.5 m · BLACK 9300 ; 5.6 m · Mill 18815 ; 5.6 m · SILVER 19800 ; 5.6 m · BLACK 20800
+TAP-SD75-02-DG => 5.6 m · Mill 18815 ; 5.6 m · SILVER 19800 ; 5.6 m · BLACK 20800
+TAP-SD75-02-DS => 5.6 m · Mill 13990 ; 5.6 m · SILVER 14740 ; 5.6 m · BLACK 15480
+TAP-SD75-03-DG => 5.6 m · Mill 1380 ; 5.6 m · SILVER 1460 ; 5.6 m · BLACK 1540
+
+@office 15
+TAP-45-P1 => 3 m · Mill 3450 ; 3 m · SILVER 3680 ; 3 m · BLACK 3880
+TAP-45-P2 => 3 m · Mill 385 ; 3 m · SILVER 400 ; 3 m · BLACK 430
+TAP-45-P3 => 3 m · Mill 565 ; 3 m · SILVER 600 ; 3 m · BLACK 630
+TAP-100-P1 => 6 m · Mill 18220 ; 6 m · SILVER 19430 ; 6 m · BLACK 20470
+TAP-100-P2 => 6 m · Mill 3920 ; 6 m · SILVER 4210 ; 6 m · BLACK 4430
+
+@office 16
+TSL-WD-100 => Standard 1950
+TSL-TRACK-E2 => 2 m · SILVER 2300 ; 2 m · BLACK 2750 ; 3 m · SILVER 3400 ; 3 m · BLACK 4100 ; 4 m · SILVER 4600 ; 4 m · BLACK 5500
+
+@office 18
+TAP-SK-50MM => 3 m · Mill 1035 ; 3 m · SILVER 1090 ; 3 m · BLACK 1150
+TAP-SK-75MM => 3 m · Mill 1410 ; 3 m · SILVER 1415 ; 3 m · BLACK 1485
+TAP-SK-100MM => 3 m · Mill 1915 ; 3 m · SILVER 2070 ; 3 m · BLACK 2280
+TAP-CG-12 => 3 m · Mill 370 ; 3 m · SILVER 390 ; 3 m · BLACK 430
+TAP-CG-15 => 3 m · Mill 450 ; 3 m · SILVER 470 ; 3 m · BLACK 520
+TAP-CG-19 => 3 m · Mill 565 ; 3 m · SILVER 600 ; 3 m · BLACK 660
+TAP-CG-25 => 3 m · Mill 730 ; 3 m · SILVER 790 ; 3 m · BLACK 865
+TAP-ZC => 3 m · Mill 1120 ; 3 m · SILVER 1160 ; 3 m · BLACK 1220
+TAP-TC => 3 m · Mill 710 ; 3 m · SILVER 750 ; 3 m · BLACK 780
+TAP-SP-12 => 3 m · Mill 795 ; 3 m · SILVER 845 ; 3 m · BLACK 890
+TAP-SP-17 => 3 m · Mill 900 ; 3 m · SILVER 960 ; 3 m · BLACK 1000
+TAP-HS-5 => 3 m · Mill 240 ; 3 m · SILVER 265 ; 3 m · BLACK 280
+TAP-HS-8 => 3 m · Mill 320 ; 3 m · SILVER 340 ; 3 m · BLACK 360
+TAP-HS-10 => 3 m · Mill 400 ; 3 m · SILVER 420 ; 3 m · BLACK 440
+TAP-IS-8 => 3 m · Mill 450 ; 3 m · SILVER 485 ; 3 m · BLACK 510
+TAP-IS-10 => 3 m · Mill 550 ; 3 m · SILVER 580 ; 3 m · BLACK 610
+TAP-IS-12 => 3 m · Mill 625 ; 3 m · SILVER 670 ; 3 m · BLACK 700
+TAP-CS-8 => 3 m · Mill 1025 ; 3 m · SILVER 1100 ; 3 m · BLACK 1150
+TAP-CS-10 => 3 m · Mill 1440 ; 3 m · SILVER 1530 ; 3 m · BLACK 1610
+TAP-CS-12 => 3 m · Mill 1740 ; 3 m · SILVER 1870 ; 3 m · BLACK 1970
+TAP-TS-8 => 3 m · Mill 990 ; 3 m · SILVER 1050 ; 3 m · BLACK 1100
+TAP-TS-10 => 3 m · Mill 1335 ; 3 m · SILVER 1420 ; 3 m · BLACK 1500
+TAP-TS-12 => 3 m · Mill 1220 ; 3 m · SILVER 1310 ; 3 m · BLACK 1380
+
+@office 19
+TAGHL-11 => K2K · SILVER 11700 ; K2K · BM 12300 ; K2N · SILVER 11800 ; K2N · BM 12400
+TAGHL-33 => K2K · SILVER 11700 ; K2K · BM 12300 ; K2N · SILVER 11800 ; K2N · BM 12400
++TAGH-1 [Wall to Glass 90° Aluminium Door Hinge] => SILVER 2700 ; BM 2800
+TML-HL => 20 mm · SSS 1550 ; 20 mm · BM 1750
++TAGL-11-SB [Strike Box for D Type Glass Door Lock] => SILVER 5000 ; BM 5300
+TAV-TAPE => 6 mm roll (10 m) 150 ; 8 mm roll (10 m) 190 ; 10 mm roll (10 m) 240 ; 12 mm roll (10 m) 280 ; 25 mm roll (10 m) 560
+
+@office 20
+TMH-33N => SSS 1550 ; BM 1800
+TML-30 => SSS 1180 ; BM 1370
+TML-35 => SSS 1250 ; BM 1420
++TML-DL-35MM [Narrow Style Lock Body with Dead Bolt 35 mm] => SSS 1600 ; BM 1900
++TML-DL-30MM [Narrow Style Lock Body with Dead Bolt 30 mm] => SSS 1500 ; BM 1800
+TMC-22-K2K-N => 60 mm · SSS 970 ; 60 mm · BM 1080 ; 70 mm · SSS 1000 ; 70 mm · BM 1200 ; 80 mm · SSS 1000
++TMC-22-K2N-N [Euro Cylinder, One Side Key & One Side Knob] => 60 mm · SSS 1150 ; 60 mm · BM 1350 ; 70 mm · SSS 1200 ; 70 mm · BM 1450 ; 80 mm · SSS 1300
+TA-BFH-4/5 => 4" · SILVER (per pc) 330 ; 4" · BM (per pc) 380 ; 5" · SILVER (per pc) 400 ; 5" · BM (per pc) 430
+TGHL-55 => 35×1125×1500 mm · SSS 20000 ; 35×1125×1500 mm · BM 25900 ; 35×1125×1500 mm · GP 29700 ; 35×1125×1500 mm · RGP 32400
+TGH-11-D => 25×250×275 mm · SSS 3200 ; 25×300×325 mm · SSS 3500 ; 25×450×475 mm · SSS 3700 ; 25×600×625 mm · SSS 4100
+TGH-11-D-BM => 25×250×275 mm · BM 3700 ; 25×300×325 mm · BM 4000 ; 25×450×475 mm · BM 4300 ; 25×600×625 mm · BM 4600
+
+@office 21
+TGH-55 => 25×250×300 mm · SSS 1900 ; 25×250×300 mm · P/S 2000 ; 25×250×300 mm · BM 2400 ; 25×250×300 mm · GP 3000 ; 25×250×300 mm · RGP 3200 ; 25×302×450 mm · SSS 2100 ; 25×302×450 mm · P/S 2300 ; 25×302×450 mm · BM 3000 ; 25×302×450 mm · GP 3800 ; 25×302×450 mm · RGP 4000 ; 25×350×450 mm · SSS 2100 ; 25×350×450 mm · P/S 2200 ; 32×302×450 mm · SSS 2300 ; 32×302×450 mm · P/S 2400 ; 32×302×450 mm · BM 3200 ; 32×302×450 mm · GP 3900 ; 32×302×450 mm · RGP 4200 ; 25×450×600 mm · SSS 2400 ; 25×450×600 mm · BM 2900 ; 32×450×600 mm (A) · SSS 2700 ; 32×450×600 mm (A) · P/S 3000 ; 32×450×600 mm (A) · BM 3500 ; 32×450×600 mm (A) · GP 4300 ; 32×450×600 mm (A) · RGP 4500 ; 32×480×600 mm (B) · SSS 2700 ; 32×600×900 mm (A) · SSS 3700 ; 32×700×900 mm (B) · SSS 3700 ; 32×700×900 mm (B) · BM 4500 ; 32×700×900 mm (B) · GP 5400 ; 32×700×900 mm (B) · RGP 5700 ; 32×1100×1300 mm · SSS 7500 ; 32×1100×1300 mm · BM 7800 ; 32×1100×1300 mm · GP 8200 ; 32×1100×1300 mm · RGP 8600
+
+@office 22
++TGH-11 [D Type Handle] => 19×152×171 mm · PSS 1400 ; 19×152×171 mm · BM 1500 ; 19×152×171 mm · GP 1800 ; 19×152×171 mm · RGP 1900 ; 19×250×269 mm · SSS 1600 ; 19×250×269 mm · BM 1900 ; 25×300×325 mm · SSS 1900 ; 25×300×325 mm · P/S 2000 ; 25×300×325 mm · BM 2100 ; 25×300×325 mm · GP 2300 ; 25×300×325 mm · RGP 2400 ; 25×425×450 mm · SSS 2100 ; 25×425×450 mm · P/S 2200 ; 25×425×450 mm · BM 2400 ; 25×425×450 mm · GP 2700 ; 25×425×450 mm · RGP 2800 ; 32×568×600 mm · SSS 3000 ; 32×568×600 mm · P/S 3200
+TA-DGDS => 900 mm 5000 ; 1000 mm 5200
++TA-DWDS [Drop Down Seal for Framed Doors] => 900 mm 2700 ; 1000 mm 2800
+
+@office 23
+TSK-900-S => SILVER 6500 ; BM 7000
+TSK-900 => SILVER 7500 ; BM 8000
+TCD-4000 => SILVER 14000 ; BLACK 15500
+TSK-ACC-900-S-PLATE => SILVER 2100 ; BLACK 2600
+TSK-ACC-900-PLATE => SILVER 2100 ; BLACK 2600
+
+@office 26
++TAV-TT [Sliding Top Track] => 2 m · BM 4265 ; 3 m · BM 6400 ; 4 m · BM 8530 ; 5 m · BM 10660 ; 2 m · BG / RG / GRY / CHM 4730 ; 3 m · BG / RG / GRY / CHM 7100 ; 4 m · BG / RG / GRY / CHM 9460 ; 5 m · BG / RG / GRY / CHM 11830
+TAV-TT-COVER => 2 m · BM 1865 ; 3 m · BM 2800 ; 4 m · BM 3730 ; 5 m · BM 4660 ; 2 m · BG / RG / GRY / CHM 2130 ; 3 m · BG / RG / GRY / CHM 3200 ; 4 m · BG / RG / GRY / CHM 4260 ; 5 m · BG / RG / GRY / CHM 5330
++TAV-VDP-35 [Vertical Profile] => 3 m · BM 3400 ; 3.5 m · BM 3960 ; 3 m · BG / RG / GRY / CHM 3700 ; 3.5 m · BG / RG / GRY / CHM 4320
+TAV-VDP-35-HK => 3 m · BM 3750 ; 3 m · BG / RG / GRY / CHM 4050
+TAV-HDP-35 => 3 m · BM 4600 ; 4 m · BM 6130 ; 3 m · BG / RG / GRY / CHM 4860
+TAV-ODR-35 => 2.5 m · BM 4750 ; 3 m · BM 5700 ; 3.6 m · BM 6840 ; 2.5 m · BG / RG / GRY / CHM 5000 ; 2.8 m · BG / RG / GRY / CHM 5600 ; 3 m · BG / RG / GRY / CHM 6000
+TAV-MP-35 => 3 m · BM 3600 ; 3 m · BG / RG / GRY / CHM 4100
+TAV-MSP => 3 m · BM 1550 ; 5.8 m · BG / RG / GRY / CHM 3200
+TAV-DDR-35 => 2.5 m · BM 2580 ; 3 m · BM 3100 ; 5.8 m · BG / RG / GRY / CHM 6200
+TAV-CS-35 => 3 m · BM 2570 ; 3.5 m · BM 3000 ; 3 m · BG / RG / GRY / CHM 2900
+TAV-VDP-M-35 => 3 m · BM 3250 ; 3 m · BG / RG / GRY / CHM 3600
+TAV-VDP-F-35 => 3 m · BM 450 ; 3 m · BG / RG / GRY / CHM 520
+
+@office 24
+TAM-DL-SLIMSEC => Swing · with remote · BLACK 37700 ; Sliding · with remote · BLACK 37700 ; Swing · without remote · BLACK 33700 ; Sliding · without remote · BLACK 33700
+TAM-DL-G2G => BM 27500
+TAM-DL-W2W => BM 27500
+TAM-DL-G2W => BM 27000
+TAM-DL-W => BM 27000
+TAM-SDL-G2G => BM 27500
+TAM-SDL-W2W => BM 27500
+TAM-SDL-G2W => BM 27000
+TAM-SDL-W => BM 27000
+
+@office 25
+TAM-DL-W2W-E => BM 13200
+TAM-DL-W-E => BM 13000
+TAM-DL-REMOTE => Standard 5000
+
+@office 27
+TAV-SDL-35 => BM (per pc) 6500 ; BG / RG / GRY / CHM (per pc) 7000
+TAV-DL-35 => BM (per pc) 5200 ; BG / RG / GRY / CHM (per pc) 5900
+TAV-HL-35 => BM (per pc) 1700 ; BG / RG / GRY / CHM (per pc) 1800
++TFS-8400 [Floor Spring] => SSS 8600 ; BM 9700 ; GP 11600 ; RGP 12700
++TAV-TP/BP [Top & Bottom Pivots] => SSS (per pc) 3600 ; BG / RG / GRY / CHM (per pc) 3700
++TAV-DH-1 [Door Corner Hinges] => BM (per pc) 1750 ; BG (per pc) 1900
++TAV-H-35 [Sliding Handle] => BM (per pc) 1000 ; BG / RG / GRY / CHM (per pc) 1100
+TAV-AL-BFH => BM (set of 2) 580 ; BG / RG / GRY / CHM (set of 2) 600
+TAV-35-L-CNTR => Silver (per pc) 220
+TAV-LHW => Per set 2000
+TAV-CH-35 => Black (per pc) 1200
++TAV-TH-35 [Sliding Handle] => Black (per pc) 1000
+
+@tavic 22
++TAV-TT [Sliding Top Track] => 2 m · BM 4265 ; 3 m · BM 6400 ; 4 m · BM 8530 ; 5 m · BM 10660 ; 2 m · BG / RG / GRY / CHM 4730 ; 3 m · BG / RG / GRY / CHM 7100 ; 4 m · BG / RG / GRY / CHM 9460 ; 5 m · BG / RG / GRY / CHM 11830
+TAV-TT-COVER => 2 m · BM 1865 ; 3 m · BM 2800 ; 4 m · BM 3730 ; 5 m · BM 4660 ; 2 m · BG / RG / GRY / CHM 2130 ; 3 m · BG / RG / GRY / CHM 3200 ; 4 m · BG / RG / GRY / CHM 4260 ; 5 m · BG / RG / GRY / CHM 5330
+TAV-HD-TT => 2 m · BM 4830 ; 3 m · BM 7250 ; 4 m · BM 9665 ; 5 m · BM 12080 ; 6 m · BM 14500 ; 2 m · BG / RG / GRY / CHM 5200 ; 3 m · BG / RG / GRY / CHM 7800 ; 4 m · BG / RG / GRY / CHM 10400 ; 5 m · BG / RG / GRY / CHM 13000 ; 6 m · BG / RG / GRY / CHM 15600
++TAV-HD-TT-COVER [Heavy Duty Top Track Cover] => 2 m · BM 2065 ; 3 m · BM 3100 ; 4 m · BM 4130 ; 5 m · BM 5170 ; 6 m · BM 6200 ; 2 m · BG / RG / GRY / CHM 2330 ; 3 m · BG / RG / GRY / CHM 3500 ; 4 m · BG / RG / GRY / CHM 4670 ; 5 m · BG / RG / GRY / CHM 5830 ; 6 m · BG / RG / GRY / CHM 7000
+TAV-VDP-35 => 3 m · BM 3400 ; 3.5 m · BM 3960 ; 3 m · BG / RG / GRY / CHM 3700 ; 3.5 m · BG / RG / GRY / CHM 4320
+TAV-VDP-35-HK => 3 m · BM 3750 ; 3 m · BG / RG / GRY / CHM 4050
++TAV-HDP-35 [Horizontal Door Profile] => 3 m · BM 4600 ; 4 m · BM 6130 ; 3 m · BG / RG / GRY / CHM 4860
+TAV-MP-35 => 3 m · BM 3600 ; 3 m · BG / RG / GRY / CHM 4100
+TAV-MSP => 3 m · BM 1550 ; 5.8 m · BG / RG / GRY / CHM 3200
++TAV-CS-35 [Corner System] => 3 m · BM 2570 ; 3.5 m · BM 3000 ; 3 m · BG / RG / GRY / CHM 2900
+TAV-35-L-CNTR => Silver (per pc) 220
+TAV-AL-FH => Set 1500
+TAV-SDL-35 => BM (per pc) 6500 ; BG / RG / GRY / CHM (per pc) 7000
+TAV-PVC-STRIP5/6/8MM => 5/6/8 mm · 3 m 220
+TAV-ODR-35-STRIP-1 => Per m 165
+TAV-ODR-35-STRIP-2 => Per m 165
+TAV-CS-35-STRIP => Per m 75
+TAV-HK-STRIP => Per m 110
+
+@tavic 23
+TAV-1-AL => Set 7100
++TAV-2-AL-KIT [Two Door Sliding Kit] => Set 15500
++TAV-2HD-AL-KIT [Two Door Heavy Duty Sliding Kit] => Set 23000
+TAV-OPP-2-AL => Set 16700
++TAV-OPP-2HD-AL-KIT [Four Door Heavy Duty Sliding Kit] => Set 24800
++TAV-3-AL-KIT [Three Door Sliding Kit] => Set 22200
++TAV-3HD-AL-KIT [Three Door Heavy Duty Sliding Kit] => Set 31200
++TAV-4HD-AL-KIT [Four Door Heavy Duty Sliding Kit] => Set 38100
++TAV-OPP-4HD-AL-KIT [Four Door Opposite Sliding Kit] => Set 46400
++TAV-OPP-6HD-AL-KIT [Six Door Opposite Sliding Kit] => Set 63100
+TAV-ODR-35-CNTR => Silver (per pc) 330
++TAV-HL-35 [Latch Handle] => BM (per pc) 1700 ; BG / RG / GRY / CHM (per pc) 1800
++TAV-H-35 [Sliding Handle] => BM (per pc) 1000 ; BG / RG / GRY / CHM (per pc) 1100
+TAV-HL-NC-35 => BM (per pc) 2400 ; BG (per pc) 2500
+TAV-STH => BM (per pc) 520 ; BG (per pc) 570
++TAV-HL-N-35 [Sliding Handle] => BM (per pc) 2400 ; BG (per pc) 2500
++TAV-CH-35 [Sliding Handle] => BM (per pc) 1200
+TAV-TH-35 => BM (per pc) 1000
++TAV-STH-35 [Sliding Handle] => BM (per pc) 1250
+
+@tavic 28
+TAV-3+1 => WD kit · BM 65700 ; WD kit · BG 70500
+TAV-2+1 => WD kit · BM 41800 ; WD kit · BG 44700
+TAV-1+1 => WD kit · BM 24000 ; WD kit · BG 25400
+TAV-OPP-2+2 => WD kit · BM 43100 ; WD kit · BG 46000
+
+@tavic 29
+TAV-1-WD-KIT => Standard 10200
+TAV-WD-FH => Set 1550
+TAV-2-WD-KIT => Standard 15500
+TAV-TT => 2 m · BM 4265 ; 3 m · BM 6400 ; 4 m · BM 8530 ; 5 m · BM 10660 ; 2 m · BG / RG / GRY / CHM 4730 ; 3 m · BG / RG / GRY / CHM 7100 ; 4 m · BG / RG / GRY / CHM 9460 ; 5 m · BG / RG / GRY / CHM 11830
+TAV-TT-COVER => 2 m · BM 1865 ; 3 m · BM 2800 ; 4 m · BM 3730 ; 5 m · BM 4660 ; 2 m · BG / RG / GRY / CHM 2130 ; 3 m · BG / RG / GRY / CHM 3200 ; 4 m · BG / RG / GRY / CHM 4260 ; 5 m · BG / RG / GRY / CHM 5330
+TAV-OPP-2-WD-KIT => Standard 15500
+TAV-3-WD-KIT => Standard 22600
++TAV-1+0-WD-KIT [1+0 Wooden Telescopic Sliding Kit] => BM 16300 ; BG 17000
++TAV-1+1-WD-KIT [1+1 Wooden Telescopic Sliding Kit] => BM 24000 ; BG 25400
++TAV-2+0-WD-KIT [2+0 Wooden Telescopic Sliding Kit] => BM 33900 ; BG 36100
++TAV-2+1-WD-KIT [2+1 Wooden Telescopic Sliding Kit] => BM 41800 ; BG 44700
++TAV-3+0-WD-KIT [3+0 Wooden Telescopic Sliding Kit] => BM 55600 ; BG 59500
++TAV-3+1-WD-KIT [3+1 Wooden Telescopic Sliding Kit] => BM 65700 ; BG 70500
++TAV-OPP-2+0-WD-KIT [2+0 Wooden Synchro Sliding Kit] => BM 40000 ; BG 42900
++TAV-OPP-2+2-WD-KIT [2+2 Wooden Synchro Sliding Kit] => BM 43100 ; BG 46000
+
+@tavic 31
++TAV-1-MG [Magnetic 1 Door Roller Kit] => BM 136000
++TAV-1-MG-FH [Fix Hardware for Magnetic 1 Door] => BM 19400
+TAV-2-MG => BM 205000
++TAV-2-MG-FH [Fix Hardware for Magnetic 2 Door] => BM 22600
++TAV-3-MG [Magnetic 3 Door Roller Kit] => BM 235000
++TAV-3-MG-FH [Fix Hardware for Magnetic 3 Door] => BM 26000
++TAV-OPP-2-MG [Magnetic 2+2 Opposite Door Roller Kit] => BM 277000
++TAV-OPP-2-MG-FH [Fix Hardware for Magnetic 2+2 Opposite Door] => BM 35600
+
+@tavic 32
+TAV-HDP-35 => 3 m · BM 4600 ; 4 m · BM 6130 ; 3 m · BG / RG / GRY / CHM 4860
+TAV-MP-35 => 3 m · BM 3600 ; 3 m · BG / RG / GRY / CHM 4100
+TAV-MG-FH => Set 1500
+TAV-MSP => 3 m · BM 1550 ; 5.8 m · BG / RG / GRY / CHM 3200
+TAV-MG-RC => Standard 6800
+
+@tavic 34
++TFS-8400 [Floor Spring] => SSS 8600 ; BM 9700 ; GP 11600 ; RGP 12700
++TFS-ACC-MH-1 [Mini Floor Hinge] => SSS 1350 ; BM 1500
+TAV-TP/BP => SSS (per pc) 3600 ; BM / BG / RG / GRY / CHM (per pc) 3700
++TAV-HDP-35 [Horizontal Profile] => 3 m · BM 4600 ; 4 m · BM 6130 ; 3 m · BG / RG / GRY / CHM 4860
+TAV-VDP-35 => 3 m · BM 3400 ; 3.5 m · BM 3960 ; 3 m · BG / RG / GRY / CHM 3700 ; 3.5 m · BG / RG / GRY / CHM 4320
++TAV-VDP-35-CAP [Vertical Door Profile Cap] => 3 m · BM 460 ; 3 m · BG / RG / GRY / CHM 570
++TAV-VDP-M-35 [Male Profile] => 3 m · BM 3250 ; 3 m · BG / RG / GRY / CHM 3600
++TAV-VDP-F-35 [Female Profile] => 3 m · BM 450 ; 3 m · BG / RG / GRY / CHM 520
+TAV-DDR-35 => 2.5 m · BM 2580 ; 3 m · BM 3100 ; 5.8 m · BG / RG / GRY / CHM 6200
+TAV-ODR-35 => 2.5 m · BM 4750 ; 3 m · BM 5700 ; 3.6 m · BM 6840 ; 2.5 m · BG / RG / GRY / CHM 5000 ; 2.8 m · BG / RG / GRY / CHM 5600 ; 3 m · BG / RG / GRY / CHM 6000
+TAV-ODR-35-CNTR => Silver (per pc) 330
++TAV-MSP [Stick on Profile] => 3 m · BM 1550 ; 5.8 m · BG / RG / GRY / CHM 3200
+TAV-AL-CDH => BM (per pc) 1000 ; BG / RG / GRY / CHM (per pc) 1200
++TAV-AL-BFH [Aluminium Hinges] => BM (set of 2) 580 ; BG / RG / GRY / CHM (set of 2) 600
+TAV-RHP => Per set 1850
++TAV-DH-1 [Door Corner Hinges] => BM (per pc) 1750 ; BG (per pc) 1900
++TAV-LHW [Concealed Flush Bolt] => Per set 2000
++TAV-SH-1 [Swing Door Hinge] => BM 2100 ; BG 2300
+TAV-DL-35 => BM (per pc) 5200 ; BG / RG / GRY (per pc) 5900
++TAV-BT-35 [Mortice Lever Lock without Key] => BM (per pc) 4900 ; BG / RG / GRY (per pc) 5400
++TAV-SWH [Swing Door Handle] => BM (per pc) 1500 ; BG (per pc) 1700
++TAV-ODR-35-MS [Magnetic Strip] => Per m 280
++TAV-MS-T [Magnetic Strip with Tape] => Per m 280
++TAV-MG [Concealed Magnet] => Set 5400
++TAV-TAPE [Double Gum Tape Roll 10 m] => 6 mm roll (10 m) 150 ; 8 mm roll (10 m) 190 ; 10 mm roll (10 m) 240 ; 12 mm roll (10 m) 280 ; 25 mm roll (10 m) 560
+
+@tavic 36
+TA-BFH-SC-5 => SILVER / BM (per pc) 2800 ; BG / RG / GRY / CHM (per pc) 3200
+
+@tavic 38
+TAV-INV-AL => BM (per set) 46000
+TAV-INV-WD => BM (per set) 30200
+
+@tavic 39
+TAV-PKT => BM (per set) 55000
+
+@tavic 42
+TAV-PT-2 => Standard 140000
+
+@tavic 43
+TAV-PT-3 => Standard 216000
+
+@tavic 45
++TWS-KIT-HP1 [Carnival Wardrobe Sliding Kit] => 2 door · BM/BG/RG/GRY/CGP 35000 ; 3 door · BM/BG/RG/GRY/CGP 50000
+TWS-MP1 => 3.96 m · BM/BG/RG/GRY/CGP 2700 ; 2.75 m · BM/BG/RG/GRY/CGP 1850
+TWS-LK => BM 1300 ; BG / RG / GRY / CGP 1600
+
+@tavic 47
++TWS-KIT-HP3 [Celebrity Wardrobe Sliding Kit] => 2 door · BM/RG/CGP 35000 ; 3 door · BM/RG/CGP 50000
+TWS-MP3 => 3.96 m · BM/BG/RG/GRY/CGP 2500 ; 2.75 m · BM/BG/RG/GRY/CGP 1850
++TWS-LK [Wardrobe Lock] => BM 1300 ; BG / RG / GRY / CGP 1600
+
+@tavic 50
+TVC-WHH-SP => 3 m · BM (L/R) 2900 ; 3 m · BG / RG / GRY (L/R) 3100
+TVC-WHH-HINGE => SSS (per pc) 230 ; BM (per pc) 270
+TVC-WHH-HP1-200MM => 3 m · BM (L/R) 5100 ; 3 m · BG / RG / GRY (L/R) 5300
+TVC-WHH-HP1-200MM-3 => 3 m · BM (L/R) 5100 ; 3 m · BG / RG / GRY (L/R) 5300
+TVC-WHH-HP2-200MM => 3 m · BM (L/R) 4900 ; 3 m · BG / RG / GRY (L/R) 5100
+TVC-WHH-HP2-200MM-3 => 3 m · BM (L/R) 4900 ; 3 m · BG / RG / GRY (L/R) 5100
+
+@tavic 51
+TVC-WAH-SP => 3 m · BM 5900 ; 3 m · BG / RG / GRY 6500
+TVC-WAH-TBP => 2 m · BM 7700 ; 2 m · BG 8300
++TVC-WAH-HP1 [Wardrobe Air Hinge Handle Profile] => 3 m · BM 7300 ; 3 m · BG / RG / GRY 8000
++TVC-WAH-AH [Wardrobe Air Hinges] => SILVER (per set) 5900
++TVC-WAH-CCN [Wardrobe Air Hinge Corner Connectors] => BG (set of 4) 1100
+
+@tavic 41
+TAV-SFS-MP-CNTR => Per pc 220
+
+@tavic 56
++TVC-CSS-CORNER [Cube Shelf Profile Connector] => Standard 220
++TVC-CSS-CAP [Cube Shelf Endcap] => BM 220 ; BG 220
++TVC-CSS-LEG [Cube Shelf Footleg] => BM 270 ; BG 270
+TVC-CSS-07 => 3 m · BM 6000 ; 3 m · BG 6000
++TVC-CSS-08 [Cube Shelf Vertical Profile] => 3 m · BM 5400 ; 3 m · BG 5400
++TVC-CSS-09 [Cube Shelf Glazing Profile] => 3 m · BM 5600 ; 3 m · BG 5600
+
+@tavic 57
+TVC-GLS-CNTR => Set of 4 430
+TVC-GLS-64 => 3 m 4400
+
+@tavic 58
+TSC-GRSF => BLACK 58000

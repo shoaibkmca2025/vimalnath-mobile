@@ -106,10 +106,10 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', gap: 8, marginBottom: 18 },
   // space-between keeps values on one baseline when a label wraps to two lines.
   stat: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 11, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12 },
-  statLabel: { marginBottom: 5, color: '#aab6ce', fontFamily: fonts.regular, fontSize: 11 },
+  statLabel: { marginBottom: 5, color: '#bcd0ff', fontFamily: fonts.regular, fontSize: 11 },
   statValue: { color: colors.white, fontFamily: fonts.bold, fontSize: 14 },
   layoutTitle: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
-  layoutTitleText: { color: '#aab6ce', fontFamily: fonts.regular, fontSize: 11 },
+  layoutTitleText: { color: '#bcd0ff', fontFamily: fonts.regular, fontSize: 11 },
   bars: { gap: 12 },
   barLabel: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   barLabelText: { color: colors.white, fontFamily: fonts.medium, fontSize: 11 },

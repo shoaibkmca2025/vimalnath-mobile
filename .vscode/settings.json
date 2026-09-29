@@ -1,0 +1,7 @@
+{
+  // Stop the VS Code Java/Gradle extensions from importing android/ in the background:
+  // their Gradle runs share the cache with the APK build and corrupt it.
+  "java.import.gradle.enabled": false,
+  "java.configuration.updateBuildConfiguration": "disabled",
+  "gradle.autoDetect": "off"
+}

@@ -2,16 +2,14 @@ import Feather from '@expo/vector-icons/Feather';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Screen } from '@/components/Screen';
 import { computeGlassPlan, parsePanelCount, type GlassPlanResult } from '@/lib/glass-calculator';
 import { buildGlassPlanHtml } from '@/lib/glass-plan-pdf';
-import { withTimeout } from '@/lib/pdf-html';
+import { pdfFileName, savePdf, sharePdf } from '@/lib/pdf-export';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, fonts, type } from '@/theme';
 
@@ -19,7 +17,7 @@ const digitsOnly = (text: string) => text.replace(/[^0-9]/g, '');
 
 export default function GlassCalculatorScreen() {
   const { showToast } = useAppUI();
-  const { name } = useLocalSearchParams<{ name?: string }>();
+  const { name, eyebrow, fallbackRoute } = useLocalSearchParams<{ name?: string; eyebrow?: string; fallbackRoute?: string }>();
   const systemName = name ?? 'Sliding System';
   const panelCount = parsePanelCount(systemName);
 
@@ -27,11 +25,11 @@ export default function GlassCalculatorScreen() {
   const [height, setHeight] = useState('');
   const [result, setResult] = useState<GlassPlanResult | null>(null);
   const [sizeError, setSizeError] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
+  const [busy, setBusy] = useState<'share' | 'save' | null>(null);
 
   const goBack = () => {
     if (router.canGoBack()) router.back();
-    else router.replace('/telescopic');
+    else router.replace(fallbackRoute ?? '/cutlist');
   };
 
   const calculate = () => {
@@ -51,28 +49,24 @@ export default function GlassCalculatorScreen() {
     setResult(outcome.result);
   };
 
-  const sharePdf = async () => {
+  const exportPdf = async (mode: 'share' | 'save') => {
     if (!result) return;
-    setSharing(true);
+    setBusy(mode);
     try {
       const html = buildGlassPlanHtml({ systemName, result });
-      // A4 at 72 PPI. Guarded with a timeout so a stuck native call can't leave the button spinning forever
-      // (the share sheet itself waits on the user, so it isn't timed).
-      if (Platform.OS === 'web') {
-        // On web this just opens the browser's print dialog — it doesn't return a usable file uri to share.
-        await withTimeout(Print.printToFileAsync({ html, width: 595, height: 842 }), 20000, 'Generating PDF');
+      const fileName = pdfFileName(`${systemName} ${result.openingWidth}x${result.openingHeight}`);
+      if (mode === 'share') {
+        await sharePdf(html, fileName, 'Share glass cutting plan');
       } else {
-        const { uri } = await withTimeout(Print.printToFileAsync({ html, width: 595, height: 842 }), 20000, 'Generating PDF');
-        if (await withTimeout(Sharing.isAvailableAsync(), 5000, 'Checking sharing availability')) {
-          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Share glass cutting plan', UTI: 'com.adobe.pdf' });
-        }
+        const outcome = await savePdf(html, fileName);
+        if (outcome.saved) showToast(`Saved ${fileName} to ${outcome.location}.`);
       }
     } catch (err) {
       console.error('PDF export failed:', err);
       const reason = err instanceof Error && err.message ? err.message : 'Unknown error';
       showToast(`Could not create the PDF: ${reason}`);
     } finally {
-      setSharing(false);
+      setBusy(null);
     }
   };
 
@@ -82,13 +76,13 @@ export default function GlassCalculatorScreen() {
         <Pressable
           onPress={goBack}
           accessibilityRole="button"
-          accessibilityLabel="Back to telescopic sliding"
+          accessibilityLabel="Back to configurations"
           style={({ pressed }) => [styles.back, pressed && { backgroundColor: colors.blueTint }]}
         >
           <Feather name="arrow-left" size={21} color={colors.ink} />
         </Pressable>
         <View style={{ flexShrink: 1 }}>
-          <Text style={type.eyebrow}>TELESCOPIC SLIDING</Text>
+          <Text style={type.eyebrow}>{eyebrow ?? 'CUTLIST SYSTEM'}</Text>
           <Text style={[type.title, { fontSize: 24, lineHeight: 28 }]} numberOfLines={1} accessibilityRole="header">
             {systemName}
           </Text>
@@ -161,28 +155,32 @@ export default function GlassCalculatorScreen() {
               <Text style={styles.resultTitle}>Material List</Text>
               <View style={styles.materialRows}>
                 {result.materials.map((item) => (
-                  <MaterialRow key={item.label} label={item.label} value={item.value} />
+                  <MaterialRow key={item.label} label={item.label} value={item.value} note={item.note} />
                 ))}
               </View>
             </View>
           </View>
 
-          <Pressable
-            onPress={sharePdf}
-            disabled={sharing}
-            accessibilityRole="button"
-            accessibilityLabel="Share as PDF"
-            style={({ pressed }) => [styles.shareButton, pressed && !sharing && styles.shareButtonPressed, sharing && styles.shareButtonDisabled]}
-          >
-            {sharing ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <>
-                <Feather name="share-2" size={17} color={colors.white} />
-                <Text style={styles.shareButtonText}>Share as PDF</Text>
-              </>
-            )}
-          </Pressable>
+          <View style={styles.exportRow}>
+            <ExportButton
+              label="Share PDF"
+              icon="share-2"
+              hint="WhatsApp, email and more"
+              tone="dark"
+              loading={busy === 'share'}
+              disabled={busy !== null}
+              onPress={() => exportPdf('share')}
+            />
+            <ExportButton
+              label="Save PDF"
+              icon="download"
+              hint="Save to phone storage"
+              tone="blue"
+              loading={busy === 'save'}
+              disabled={busy !== null}
+              onPress={() => exportPdf('save')}
+            />
+          </View>
         </View>
       )}
     </Screen>
@@ -251,10 +249,51 @@ function ResultCard({ tone, icon, title, value, note }: ResultCardProps) {
   );
 }
 
-function MaterialRow({ label, value }: { label: string; value: string }) {
+type ExportButtonProps = {
+  label: string;
+  icon: keyof typeof Feather.glyphMap;
+  hint: string;
+  tone: 'dark' | 'blue';
+  loading: boolean;
+  disabled: boolean;
+  onPress: () => void;
+};
+
+function ExportButton({ label, icon, hint, tone, loading, disabled, onPress }: ExportButtonProps) {
+  const base = tone === 'dark' ? colors.ink : colors.blue;
+  const pressedColor = tone === 'dark' ? '#000000' : colors.blueDark;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={hint}
+      style={({ pressed }) => [
+        styles.exportButton,
+        { backgroundColor: pressed && !disabled ? pressedColor : base },
+        disabled && !loading && styles.exportButtonDisabled,
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator color={colors.white} />
+      ) : (
+        <>
+          <Feather name={icon} size={17} color={colors.white} />
+          <Text style={styles.exportButtonText}>{label}</Text>
+        </>
+      )}
+    </Pressable>
+  );
+}
+
+function MaterialRow({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <View style={styles.materialRow}>
-      <Text style={styles.materialLabel}>{label}</Text>
+      <View style={{ flexShrink: 1 }}>
+        <Text style={styles.materialLabel}>{label}</Text>
+        {note && <Text style={styles.materialNote}>{note}</Text>}
+      </View>
       <Text style={styles.materialValue}>{value}</Text>
     </View>
   );
@@ -353,18 +392,18 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(16,24,39,0.1)',
   },
   materialLabel: { flexShrink: 1, color: colors.ink, fontFamily: fonts.medium, fontSize: 13 },
+  materialNote: { marginTop: 2, color: colors.muted, fontFamily: fonts.regular, fontSize: 11 },
   materialValue: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 13 },
-  shareButton: {
+  exportRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  exportButton: {
+    flex: 1,
     height: 54,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    marginTop: 4,
-    backgroundColor: colors.ink,
+    gap: 8,
     borderRadius: 15,
   },
-  shareButtonPressed: { backgroundColor: '#000000' },
-  shareButtonDisabled: { opacity: 0.7 },
-  shareButtonText: { color: colors.white, fontFamily: fonts.bold, fontSize: 15 },
+  exportButtonDisabled: { opacity: 0.6 },
+  exportButtonText: { color: colors.white, fontFamily: fonts.bold, fontSize: 15 },
 });

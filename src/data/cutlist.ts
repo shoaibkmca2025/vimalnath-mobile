@@ -45,12 +45,26 @@ export const telescopicConfigurations: TelescopicConfiguration[] = [
 
 export type SynchronizedConfiguration = { name: string; image: ImageSourcePropType };
 
-// Placeholder photos reused from the telescopic tiles until the real synchronized-system photos are provided.
 export const synchronizedConfigurations: SynchronizedConfiguration[] = [
-  { name: '2+0 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-01.jpg') },
-  { name: '2+2 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-02.jpg') },
-  { name: '4+0 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-03.jpg') },
-  { name: '4+2 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-04.jpg') },
-  { name: '6+0 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-05.jpg') },
-  { name: '6+2 Synchro Sliding System', image: require('../../assets/images/telescopic/tile-06.jpg') },
+  { name: '2+0 Synchro Sliding System', image: require('../../assets/images/synchronized/tile-01.jpg') },
+  { name: '2+2 Synchro Sliding System', image: require('../../assets/images/synchronized/tile-02.jpg') },
+  { name: '4+0 Synchro Sliding System', image: require('../../assets/images/synchronized/tile-03.jpg') },
+  { name: '4+2 Synchro Sliding System', image: require('../../assets/images/synchronized/tile-04.jpg') },
+  { name: '6+0 Synchro Sliding System', image: require('../../assets/images/synchronized/tile-05.jpg') },
+  { name: '6+2 Synchro Sliding System', image: require('../../assets/images/synchronized/tile-06.jpg') },
+];
+
+export type FoldingConfiguration = { name: string; image: ImageSourcePropType };
+
+// Drawn panel diagrams (2 to 10 doors, matching the Tavic sliding folding kits) until photos are supplied.
+export const foldingConfigurations: FoldingConfiguration[] = [
+  { name: '2 Door Sliding Folding System', image: require('../../assets/images/folding/tile-02.jpg') },
+  { name: '3 Door Sliding Folding System', image: require('../../assets/images/folding/tile-03.jpg') },
+  { name: '4 Door Sliding Folding System', image: require('../../assets/images/folding/tile-04.jpg') },
+  { name: '5 Door Sliding Folding System', image: require('../../assets/images/folding/tile-05.jpg') },
+  { name: '6 Door Sliding Folding System', image: require('../../assets/images/folding/tile-06.jpg') },
+  { name: '7 Door Sliding Folding System', image: require('../../assets/images/folding/tile-07.jpg') },
+  { name: '8 Door Sliding Folding System', image: require('../../assets/images/folding/tile-08.jpg') },
+  { name: '9 Door Sliding Folding System', image: require('../../assets/images/folding/tile-09.jpg') },
+  { name: '10 Door Sliding Folding System', image: require('../../assets/images/folding/tile-10.jpg') },
 ];

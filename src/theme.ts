@@ -1,26 +1,29 @@
 import { StyleSheet } from 'react-native';
 
+// Blue & white brand theme: every accent is a shade of blue. Red is kept only for error messages.
 export const colors = {
-  ink: '#101827',
-  muted: '#6c7482',
-  subtle: '#9aa1ac',
-  line: '#e8ebef',
-  soft: '#f5f7f9',
+  ink: '#0b1f4d',
+  muted: '#5a6b8c',
+  subtle: '#93a1bd',
+  line: '#e1e8f7',
+  soft: '#f3f6fd',
   white: '#ffffff',
   blue: '#2458e8',
   blueDark: '#163ca8',
   blueTint: '#edf2ff',
   blueWash: '#f5f8ff',
-  orange: '#ee8349',
-  green: '#23a779',
-  greenTint: '#e9f8f2',
-  purple: '#7c5cea',
-  purpleTint: '#f3f0ff',
+  // Highlight accent (notification dot, badges) — a light blue that shows on both white and dark blue.
+  orange: '#7fa6ff',
+  // Secondary accents, kept as separate tokens so each can still be tuned on its own.
+  green: '#0f3fb8',
+  greenTint: '#e6eeff',
+  purple: '#3867f0',
+  purpleTint: '#eef3ff',
   red: '#d9382f',
   redTint: '#fdecec',
-  navy: '#111c31',
-  navyRaised: '#263554',
-  backdrop: 'rgba(12, 19, 32, 0.42)',
+  navy: '#0f2f86',
+  navyRaised: '#2046b3',
+  backdrop: 'rgba(11, 31, 77, 0.42)',
 };
 
 // Keys must match the names registered with useFonts in app/_layout.tsx.

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandLockup } from '@/components/BrandLockup';
 import { NavIcon, primaryNav } from '@/components/NavIcon';
 import { useOverlayTransition } from '@/hooks/useOverlayTransition';
+import { useCart } from '@/providers/CartProvider';
 import { colors, fonts } from '@/theme';
 
 type Props = { visible: boolean; onClose: () => void; onEnquiry: () => void };
@@ -15,12 +16,13 @@ export function MenuDrawer({ visible, onClose, onEnquiry }: Props) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
+  const { count } = useCart();
   const drawerWidth = Math.min(width * 0.84, 340);
 
   const go = (href: Href) => {
     onClose();
     // From a screen pushed over the tabs, unwind the stack instead of stacking another copy.
-    if (pathname === '/telescopic') router.dismissTo(href);
+    if (!primaryNav.some((item) => item.href === pathname)) router.dismissTo(href);
     else router.navigate(href);
   };
 
@@ -71,7 +73,7 @@ export function MenuDrawer({ visible, onClose, onEnquiry }: Props) {
                 accessibilityState={{ selected: active }}
                 style={({ pressed }) => [styles.link, (active || pressed) && styles.linkActive]}
               >
-                <NavIcon name={item.key} size={20} color={active ? colors.white : '#cdd6e8'} />
+                <NavIcon name={item.key} size={20} color={active ? colors.white : '#dbe5ff'} />
                 <Text style={[styles.linkText, active && { color: colors.white }]}>{item.drawerLabel}</Text>
               </Pressable>
             );
@@ -79,15 +81,15 @@ export function MenuDrawer({ visible, onClose, onEnquiry }: Props) {
           <Pressable
             onPress={onEnquiry}
             accessibilityRole="button"
-            accessibilityLabel="My enquiry, 0 items"
+            accessibilityLabel={`My cart, ${count} items`}
             style={({ pressed }) => [styles.link, pressed && styles.linkActive]}
           >
             <View style={styles.iconBox}>
-              <Feather name="mail" size={20} color="#cdd6e8" />
+              <Feather name="shopping-cart" size={20} color="#dbe5ff" />
             </View>
-            <Text style={styles.linkText}>My enquiry</Text>
+            <Text style={styles.linkText}>My cart</Text>
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>0</Text>
+              <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
             </View>
           </Pressable>
         </View>
@@ -127,16 +129,16 @@ const styles = StyleSheet.create({
   },
   avatarText: { color: colors.white, fontFamily: fonts.bold, fontSize: 13 },
   profileName: { color: colors.white, fontFamily: fonts.bold, fontSize: 15 },
-  profileMeta: { marginTop: 3, color: '#9ca9c5', fontFamily: fonts.regular, fontSize: 12 },
+  profileMeta: { marginTop: 3, color: '#bcd0ff', fontFamily: fonts.regular, fontSize: 12 },
   links: { gap: 4 },
   link: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 50, paddingHorizontal: 12, borderRadius: 12 },
   linkActive: { backgroundColor: 'rgba(255,255,255,0.08)' },
   // Same footprint as NavIcon (size + 2) so every label starts on one line.
   iconBox: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
-  linkText: { flex: 1, color: '#cdd6e8', fontFamily: fonts.medium, fontSize: 15 },
+  linkText: { flex: 1, color: '#dbe5ff', fontFamily: fonts.medium, fontSize: 15 },
   badge: { minWidth: 24, paddingHorizontal: 7, paddingVertical: 3, alignItems: 'center', backgroundColor: colors.orange, borderRadius: 10 },
   badgeText: { color: colors.white, fontFamily: fonts.bold, fontSize: 11 },
   footer: { marginTop: 'auto', paddingTop: 18, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
   footerTitle: { color: colors.white, fontFamily: fonts.display, fontSize: 14 },
-  footerMeta: { marginTop: 4, color: '#9ca9c5', fontFamily: fonts.regular, fontSize: 12 },
+  footerMeta: { marginTop: 4, color: '#bcd0ff', fontFamily: fonts.regular, fontSize: 12 },
 });

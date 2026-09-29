@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
 import { MenuDrawer } from '@/components/MenuDrawer';
@@ -19,17 +20,16 @@ export function AppUIProvider({ children }: { children: ReactNode }) {
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const value = useMemo(() => ({ showToast: toast.show, openDrawer, closeDrawer }), [toast.show, openDrawer, closeDrawer]);
 
-  // The drawer is a native Modal that would cover the toast, so close it before showing feedback.
-  const openEnquiry = useCallback(() => {
+  const openCart = useCallback(() => {
     setDrawerOpen(false);
-    toast.show('Your enquiry list is empty.');
-  }, [toast.show]);
+    router.push('/cart');
+  }, []);
 
   return (
     <AppUIContext.Provider value={value}>
       {children}
       <Toast controller={toast} />
-      <MenuDrawer visible={drawerOpen} onClose={closeDrawer} onEnquiry={openEnquiry} />
+      <MenuDrawer visible={drawerOpen} onClose={closeDrawer} onEnquiry={openCart} />
     </AppUIContext.Provider>
   );
 }

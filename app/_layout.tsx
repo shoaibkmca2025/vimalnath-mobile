@@ -12,6 +12,8 @@ import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppUIProvider } from '@/providers/AppUIProvider';
+import { CartProvider } from '@/providers/CartProvider';
+import { OrdersProvider } from '@/providers/OrdersProvider';
 import { colors } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -36,15 +38,24 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <AppUIProvider>
-        <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.white } }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="telescopic" />
-          <Stack.Screen name="synchronized" />
-          <Stack.Screen name="glass-calculator" />
-        </Stack>
-      </AppUIProvider>
+      {/* Outside AppUIProvider so the menu drawer it renders can show the cart count. */}
+      <CartProvider>
+        <OrdersProvider>
+        <AppUIProvider>
+          <StatusBar style="dark" />
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.white } }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="telescopic" />
+            <Stack.Screen name="synchronized" />
+            <Stack.Screen name="folding" />
+            <Stack.Screen name="glass-calculator" />
+            <Stack.Screen name="cart" />
+            <Stack.Screen name="product/[id]" />
+            <Stack.Screen name="order/[id]" />
+          </Stack>
+        </AppUIProvider>
+        </OrdersProvider>
+      </CartProvider>
     </SafeAreaProvider>
   );
 }

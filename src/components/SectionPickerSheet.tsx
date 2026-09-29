@@ -74,7 +74,7 @@ export function SectionPickerSheet({ visible, selectedCode, onSelect, onClose }:
                     {section.system} · {section.dimensions} · {formatMm(section.bar)} bar
                   </Text>
                 </View>
-                <Feather name={selected ? 'check-circle' : 'circle'} size={20} color={selected ? colors.blue : '#c9cfd8'} />
+                <Feather name={selected ? 'check-circle' : 'circle'} size={20} color={selected ? colors.blue : '#b9c8ec'} />
               </Pressable>
             );
           })}
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
   },
-  handle: { alignSelf: 'center', width: 40, height: 5, marginTop: 10, borderRadius: 3, backgroundColor: '#d6dbe2' },
+  handle: { alignSelf: 'center', width: 40, height: 5, marginTop: 10, borderRadius: 3, backgroundColor: '#d3def7' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12 },
   title: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, letterSpacing: -0.5 },
   close: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.soft, borderRadius: 19 },

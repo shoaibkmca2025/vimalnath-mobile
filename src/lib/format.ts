@@ -4,3 +4,8 @@ export const pad2 = (value: number) => String(value).padStart(2, '0');
 export const formatNumber = (value: number) => String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 export const formatMm = (value: number) => `${formatNumber(value)} mm`;
+
+/** "29 Sep 2026" */
+export function formatOrderDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}

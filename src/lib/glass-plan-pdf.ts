@@ -19,25 +19,26 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
         <style>
           @page { margin: 28px; }
           * { box-sizing: border-box; }
-          body { margin: 0; font-family: -apple-system, Helvetica, Arial, sans-serif; color: #101827; }
-          .header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 2px solid #101827; padding-bottom: 14px; margin-bottom: 22px; }
-          .brand { font-size: 12px; letter-spacing: 1.5px; color: #6c7482; text-transform: uppercase; }
+          body { margin: 0; font-family: -apple-system, Helvetica, Arial, sans-serif; color: #0b1f4d; }
+          .header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 2px solid #0b1f4d; padding-bottom: 14px; margin-bottom: 22px; }
+          .brand { font-size: 12px; letter-spacing: 1.5px; color: #5a6b8c; text-transform: uppercase; }
           .title { font-size: 24px; font-weight: 700; margin-top: 4px; }
-          .meta { text-align: right; font-size: 12px; color: #6c7482; }
-          .meta b { color: #101827; }
+          .meta { text-align: right; font-size: 12px; color: #5a6b8c; }
+          .meta b { color: #0b1f4d; }
           section { margin-bottom: 16px; padding: 16px 18px; border-radius: 14px; }
           section h2 { margin: 0 0 4px; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; }
           section .value { font-size: 23px; font-weight: 700; }
-          section .note { margin-top: 4px; font-size: 12px; color: #6c7482; }
-          .cutting { background: #e9f8f2; }
-          .cutting h2, .cutting .value { color: #23a779; }
+          section .note { margin-top: 4px; font-size: 12px; color: #5a6b8c; }
+          .cutting { background: #e6eeff; }
+          .cutting h2, .cutting .value { color: #0f3fb8; }
           .glass { background: #edf2ff; }
           .glass h2, .glass .value { color: #2458e8; }
-          .material { background: #f3f0ff; }
-          .material h2 { color: #7c5cea; }
-          .material-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px solid rgba(16,24,39,0.08); }
+          .material { background: #eef3ff; }
+          .material h2 { color: #3867f0; }
+          .material-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px solid rgba(11,31,77,0.1); }
           .material-row:last-child { border-bottom: none; }
-          .footer { margin-top: 10px; padding-top: 10px; border-top: 1px solid #e8ebef; font-size: 10px; color: #9aa1ac; }
+          .material-row small { display: block; margin-top: 2px; font-size: 10px; color: #5a6b8c; }
+          .footer { margin-top: 10px; padding-top: 10px; border-top: 1px solid #e1e8f7; font-size: 10px; color: #93a1bd; }
         </style>
       </head>
       <body>
@@ -66,7 +67,12 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
 
         <section class="material">
           <h2>Material List</h2>
-          ${result.materials.map((item) => `<div class="material-row"><span>${escapeHtml(item.label)}</span><span>${escapeHtml(item.value)}</span></div>`).join('')}
+          ${result.materials
+            .map(
+              (item) =>
+                `<div class="material-row"><span>${escapeHtml(item.label)}${item.note ? `<small>${escapeHtml(item.note)}</small>` : ''}</span><span>${escapeHtml(item.value)}</span></div>`,
+            )
+            .join('')}
         </section>
 
         <div class="footer">Vimalnath Sales Corporation · Glass Cutting & Material Calculator · Generated on ${escapeHtml(generatedOn)}</div>

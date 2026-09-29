@@ -8,16 +8,13 @@ import { Screen } from '@/components/Screen';
 import { ScreenTitle } from '@/components/ScreenTitle';
 import { cutlistSystems, type CutlistSystem } from '@/data/cutlist';
 import { pad2 } from '@/lib/format';
-import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, fonts } from '@/theme';
 
 export default function CutlistScreen() {
-  const { showToast } = useAppUI();
-
   const open = (system: CutlistSystem) => {
     if (system.id === 'telescopic') router.push('/telescopic');
     else if (system.id === 'synchronized') router.push('/synchronized');
-    else showToast(`${system.name} selected.`);
+    else router.push('/folding');
   };
 
   return (

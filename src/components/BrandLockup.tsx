@@ -11,7 +11,7 @@ export function BrandLockup({ inverted = false }: { inverted?: boolean }) {
       </View>
       <View>
         <Text style={[styles.name, inverted && { color: colors.white }]}>Vimalnath</Text>
-        <Text style={[styles.subtitle, inverted && { color: '#9ca9c5' }]}>SALES CORPORATION</Text>
+        <Text style={[styles.subtitle, inverted && { color: '#bcd0ff' }]}>SALES CORPORATION</Text>
       </View>
     </View>
   );
@@ -25,7 +25,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: '#dce4ef',
+    borderColor: '#e1e8f7',
     borderRadius: 10,
     transform: [{ skewX: '-8deg' }],
   },

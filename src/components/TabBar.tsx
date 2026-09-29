@@ -11,7 +11,7 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
         const item = primaryNav.find((nav) => nav.route === route.name);
         if (!item) return null;
         const focused = state.index === index;
-        const tint = focused ? colors.blue : '#a0a7b4';
+        const tint = focused ? colors.blue : '#93a1bd';
 
         const onPress = () => {
           const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     backgroundColor: colors.white,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#dfe3e8',
+    borderTopColor: '#e1e8f7',
   },
   item: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 14 },
   itemActive: { backgroundColor: '#f1f5ff' },

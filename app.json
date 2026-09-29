@@ -11,6 +11,8 @@
       "supportsTablet": false
     },
     "android": {
+      "package": "com.vimalnath.sales",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#F4F7FB",
         "foregroundImage": "./assets/adaptive-icon.png"

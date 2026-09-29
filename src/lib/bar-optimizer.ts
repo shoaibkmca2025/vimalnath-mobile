@@ -33,6 +33,13 @@ export function calculateBars(pieces: Piece[], stock: BarStock[], kerf: number):
   }
   const sortedStock = [...remaining.keys()].sort((a, b) => a - b);
 
+  // Small jobs (e.g. one window's verticals) are solved exactly; the heuristic below can pick a
+  // poor mix of stock lengths, like four 2450 mm bars where two 3000 mm bars would do.
+  if (lengths.length <= EXACT_MAX_PIECES && sortedStock.length <= EXACT_MAX_STOCK_LENGTHS) {
+    const exact = exactBars(lengths, sortedStock, remaining, kerf);
+    if (exact) return exact;
+  }
+
   const bars: Bar[] = [];
   for (const length of lengths) {
     // Every open bar already holds a piece, so adding another always costs one kerf.
@@ -57,6 +64,70 @@ export function calculateBars(pieces: Piece[], stock: BarStock[], kerf: number):
     bars.push({ length: chosen, used: length, pieces: [length] });
   }
   return bars;
+}
+
+const EXACT_MAX_PIECES = 12;
+const EXACT_MAX_STOCK_LENGTHS = 3;
+
+/**
+ * Tries every mix of stock bars in order of total length (then fewest bars) and returns the first
+ * mix the pieces can actually be packed into, i.e. the one with the least material bought.
+ * `lengths` must be sorted longest first. Returns null if no mix within the stock limits works.
+ */
+function exactBars(lengths: number[], stockLengths: number[], caps: Map<number, number | null>, kerf: number): Bar[] | null {
+  const n = lengths.length;
+  const combos: number[][] = [];
+  const build = (index: number, counts: number[], barsSoFar: number) => {
+    if (index === stockLengths.length) {
+      if (barsSoFar > 0) combos.push([...counts]);
+      return;
+    }
+    const cap = caps.get(stockLengths[index]);
+    const max = Math.min(n - barsSoFar, cap ?? Infinity);
+    for (let count = 0; count <= max; count++) {
+      counts.push(count);
+      build(index + 1, counts, barsSoFar + count);
+      counts.pop();
+    }
+  };
+  build(0, [], 0);
+
+  const total = (counts: number[]) => counts.reduce((sum, count, i) => sum + count * stockLengths[i], 0);
+  const barCount = (counts: number[]) => counts.reduce((sum, count) => sum + count, 0);
+  combos.sort((a, b) => total(a) - total(b) || barCount(a) - barCount(b));
+
+  const pieceTotal = lengths.reduce((sum, length) => sum + length, 0);
+  for (const counts of combos) {
+    if (total(counts) < pieceTotal) continue;
+    const bars: Bar[] = counts
+      .flatMap((count, i) => Array.from({ length: count }, () => stockLengths[i]))
+      .sort((a, b) => b - a)
+      .map((length) => ({ length, used: 0, pieces: [] }));
+    if (lengths[0] > bars[0].length) continue;
+    if (packInto(lengths, 0, bars, kerf)) return bars.filter((bar) => bar.pieces.length > 0);
+  }
+  return null;
+}
+
+/** Depth-first placement of lengths[index…] into the given bars; mutates the bars on success. */
+function packInto(lengths: number[], index: number, bars: Bar[], kerf: number): boolean {
+  if (index === lengths.length) return true;
+  const length = lengths[index];
+  const tried = new Set<string>();
+  for (const bar of bars) {
+    const extra = bar.pieces.length ? kerf + length : length;
+    if (bar.used + extra > bar.length) continue;
+    // Bars in the same state are interchangeable; trying one of them is enough.
+    const state = `${bar.length}:${bar.used}`;
+    if (tried.has(state)) continue;
+    tried.add(state);
+    bar.used += extra;
+    bar.pieces.push(length);
+    if (packInto(lengths, index + 1, bars, kerf)) return true;
+    bar.pieces.pop();
+    bar.used -= extra;
+  }
+  return false;
 }
 
 export function summarizePlan(bars: Bar[], kerf: number): BarPlan {
