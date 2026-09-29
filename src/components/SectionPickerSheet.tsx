@@ -1,12 +1,12 @@
-import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { InsetGroup } from '@/components/InsetGroup';
+import { Sheet } from '@/components/Sheet';
 import { sections, sectionTones, type Section } from '@/data/sections';
-import { useOverlayTransition } from '@/hooks/useOverlayTransition';
 import { formatMm } from '@/lib/format';
-import { colors, fonts, type } from '@/theme';
+import { colors, type } from '@/theme';
 
 type Props = {
   visible: boolean;
@@ -16,39 +16,10 @@ type Props = {
 };
 
 export function SectionPickerSheet({ visible, selectedCode, onSelect, onClose }: Props) {
-  const { mounted, progress } = useOverlayTransition(visible);
-  const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-
   return (
-    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.backdrop, opacity: progress }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close section library" />
-      </Animated.View>
-
-      <Animated.View
-        accessibilityViewIsModal
-        style={[
-          styles.sheet,
-          {
-            maxHeight: height * 0.82,
-            paddingBottom: insets.bottom + 12,
-            transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }) }],
-          },
-        ]}
-      >
-        <View style={styles.handle} />
-        <View style={styles.header}>
-          <View style={{ flexShrink: 1 }}>
-            <Text style={type.eyebrow}>SECTION LIBRARY</Text>
-            <Text style={styles.title}>Choose a profile</Text>
-          </View>
-          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.close}>
-            <Feather name="x" size={20} color={colors.ink} />
-          </Pressable>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+    <Sheet visible={visible} title="Choose Profile" onClose={onClose}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <InsetGroup header="Section library" separatorInset={86}>
           {sections.map((section, index) => {
             const selected = section.code === selectedCode;
             return (
@@ -57,14 +28,17 @@ export function SectionPickerSheet({ visible, selectedCode, onSelect, onClose }:
                 onPress={() => onSelect(section)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
-                style={({ pressed }) => [styles.row, selected && styles.rowSelected, pressed && !selected && styles.rowPressed]}
+                accessibilityLabel={`${section.code}, ${section.name}. ${section.system}, ${section.dimensions}, ${formatMm(section.bar)} bar`}
+                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               >
                 <LinearGradient colors={sectionTones[index % sectionTones.length]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.thumb}>
                   <View style={styles.thumbFrame} />
-                  <Text style={styles.thumbCode}>{section.code}</Text>
+                  <Text style={styles.thumbCode} maxFontSizeMultiplier={1}>
+                    {section.code}
+                  </Text>
                 </LinearGradient>
                 <View style={styles.rowCopy}>
-                  <Text style={styles.rowTitle} numberOfLines={1}>
+                  <Text style={type.headline} numberOfLines={1}>
                     {section.name}
                   </Text>
                   <Text style={styles.rowDescription} numberOfLines={2}>
@@ -74,35 +48,21 @@ export function SectionPickerSheet({ visible, selectedCode, onSelect, onClose }:
                     {section.system} · {section.dimensions} · {formatMm(section.bar)} bar
                   </Text>
                 </View>
-                <Feather name={selected ? 'check-circle' : 'circle'} size={20} color={selected ? colors.blue : '#b9c8ec'} />
+                <View style={styles.check}>{selected && <Ionicons name="checkmark" size={22} color={colors.tint} />}</View>
               </Pressable>
             );
           })}
-        </ScrollView>
-      </Animated.View>
-    </Modal>
+        </InsetGroup>
+      </ScrollView>
+    </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-  },
-  handle: { alignSelf: 'center', width: 40, height: 5, marginTop: 10, borderRadius: 3, backgroundColor: '#d3def7' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12 },
-  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, letterSpacing: -0.5 },
-  close: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.soft, borderRadius: 19 },
-  list: { paddingHorizontal: 14, paddingBottom: 8, gap: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderWidth: 1, borderColor: 'transparent', borderRadius: 16 },
-  rowSelected: { backgroundColor: colors.blueWash, borderColor: '#d6e1ff' },
-  rowPressed: { backgroundColor: colors.soft },
-  thumb: { width: 58, height: 58, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 13 },
+  content: { paddingHorizontal: 16, paddingTop: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingLeft: 16, paddingRight: 12 },
+  rowPressed: { backgroundColor: colors.fill },
+  thumb: { width: 58, height: 58, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 10 },
   thumbFrame: {
     position: 'absolute',
     width: 34,
@@ -115,14 +75,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 2,
     overflow: 'hidden',
-    color: 'rgba(16,24,39,0.75)',
-    backgroundColor: 'rgba(255,255,255,0.6)',
+    color: 'rgba(16,24,39,0.85)',
+    backgroundColor: 'rgba(255,255,255,0.7)',
     borderRadius: 4,
-    fontFamily: fonts.display,
-    fontSize: 10,
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: '700',
   },
   rowCopy: { flex: 1, gap: 2 },
-  rowTitle: { color: colors.ink, fontFamily: fonts.bold, fontSize: 15 },
-  rowDescription: { color: colors.muted, fontFamily: fonts.regular, fontSize: 12, lineHeight: 16 },
-  rowMeta: { marginTop: 2, color: colors.blue, fontFamily: fonts.semibold, fontSize: 11 },
+  rowDescription: { ...type.footnote, color: colors.secondaryLabel },
+  rowMeta: { ...type.caption1, color: colors.secondaryLabel },
+  check: { width: 24, alignItems: 'center' },
 });

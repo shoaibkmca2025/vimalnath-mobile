@@ -1,11 +1,10 @@
-import Feather from '@expo/vector-icons/Feather';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { Button } from '@/components/Button';
 import { WasteStripes } from '@/components/WasteStripes';
 import type { BarPlan } from '@/lib/bar-optimizer';
 import { formatMm, formatNumber, pad2 } from '@/lib/format';
-import { colors, fonts } from '@/theme';
+import { colors, radius, type } from '@/theme';
 
 type Props = {
   plan: BarPlan;
@@ -13,10 +12,13 @@ type Props = {
   onExport: () => void;
 };
 
+// Neighbouring pieces alternate between two blues; white text keeps at least 4.5:1 on both.
+const PIECE_COLORS = [colors.tint, '#1a3fa8'];
+
 export function BarResultPanel({ plan, onShare, onExport }: Props) {
   const stats = [
     { label: 'Total material', value: formatMm(plan.totalMaterial) },
-    { label: 'Estimated waste', value: formatMm(plan.waste) },
+    { label: 'Waste', value: formatMm(plan.waste) },
     { label: 'Utilization', value: `${plan.utilization.toFixed(1)}%` },
   ];
 
@@ -24,10 +26,14 @@ export function BarResultPanel({ plan, onShare, onExport }: Props) {
     <View style={styles.panel}>
       <View style={styles.header}>
         <View style={{ flexShrink: 1 }}>
-          <Text style={styles.kicker}>OPTIMIZED RESULT</Text>
-          <Text style={styles.title}>Bar plan ready</Text>
+          <Text style={type.title3} accessibilityRole="header">
+            Bar Plan
+          </Text>
+          <Text style={styles.headerMeta}>
+            {plan.cuts} cuts · {plan.kerf} mm loss per cut
+          </Text>
         </View>
-        <View style={styles.headline}>
+        <View style={styles.headline} accessible accessibilityLabel={`${plan.bars.length} ${plan.bars.length === 1 ? 'bar' : 'bars'} required`}>
           <Text style={styles.headlineNumber}>{plan.bars.length}</Text>
           <Text style={styles.headlineLabel}>{plan.bars.length === 1 ? 'bar required' : 'bars required'}</Text>
         </View>
@@ -35,7 +41,7 @@ export function BarResultPanel({ plan, onShare, onExport }: Props) {
 
       <View style={styles.stats}>
         {stats.map((stat) => (
-          <View key={stat.label} style={styles.stat}>
+          <View key={stat.label} style={styles.stat} accessible accessibilityLabel={`${stat.label}, ${stat.value}`}>
             <Text style={styles.statLabel}>{stat.label}</Text>
             <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
               {stat.value}
@@ -44,34 +50,25 @@ export function BarResultPanel({ plan, onShare, onExport }: Props) {
         ))}
       </View>
 
-      <View style={styles.layoutTitle}>
-        <Text style={styles.layoutTitleText}>Cut arrangement · {plan.kerf} mm loss per cut</Text>
-        <Text style={styles.layoutTitleText}>{plan.cuts} cuts</Text>
-      </View>
-
       <View style={styles.bars}>
         {plan.bars.map((bar, barIndex) => (
-          <View key={barIndex} accessible accessibilityLabel={`Bar ${barIndex + 1}: pieces ${bar.pieces.join(', ')} millimetres, ${formatMm(bar.used)} used`}>
+          <View key={barIndex} accessible accessibilityLabel={`Bar ${barIndex + 1}: pieces ${bar.pieces.join(', ')} millimetres, ${formatMm(bar.used)} used of ${formatMm(bar.length)}`}>
             <View style={styles.barLabel}>
-              <Text style={styles.barLabelText}>BAR {pad2(barIndex + 1)}</Text>
+              <Text style={styles.barLabelText}>Bar {pad2(barIndex + 1)}</Text>
               <Text style={styles.barLabelText}>
                 {formatNumber(bar.used)} / {formatMm(bar.length)}
               </Text>
             </View>
             <View style={styles.track}>
               {bar.pieces.map((piece, pieceIndex) => (
-                <LinearGradient
+                <View
                   key={pieceIndex}
-                  colors={pieceIndex % 2 ? ['#a9c1ff', '#5c85f5'] : ['#8caeff', '#3a63e0']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={[styles.piece, { width: `${(piece / bar.length) * 100}%` }]}
+                  style={[styles.piece, { width: `${(piece / bar.length) * 100}%`, backgroundColor: PIECE_COLORS[pieceIndex % 2] }]}
                 >
-                  <View style={styles.pieceHighlight} />
-                  <Text style={styles.pieceText} numberOfLines={1}>
+                  <Text style={styles.pieceText} numberOfLines={1} maxFontSizeMultiplier={1}>
                     {piece}
                   </Text>
-                </LinearGradient>
+                </View>
               ))}
               <View style={styles.waste}>
                 <WasteStripes />
@@ -81,68 +78,51 @@ export function BarResultPanel({ plan, onShare, onExport }: Props) {
         ))}
       </View>
 
+      {/* Waste is shown by the hatch pattern as well as its color. */}
+      <View style={styles.legend} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <View style={styles.legendItem}>
+          <View style={[styles.legendSwatch, { backgroundColor: colors.tint }]} />
+          <Text style={styles.legendText}>Cut piece</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={styles.legendSwatch}>
+            <WasteStripes />
+          </View>
+          <Text style={styles.legendText}>Offcut</Text>
+        </View>
+      </View>
+
       <View style={styles.actions}>
-        <Pressable onPress={onShare} accessibilityRole="button" style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}>
-          <Feather name="share-2" size={16} color="#d9e3ff" />
-          <Text style={styles.actionText}>Share plan</Text>
-        </Pressable>
-        <Pressable onPress={onExport} accessibilityRole="button" style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}>
-          <Feather name="file-text" size={16} color="#d9e3ff" />
-          <Text style={styles.actionText}>Export report</Text>
-        </Pressable>
+        <Button label="Share Plan" icon="share-outline" variant="gray" size="medium" onPress={onShare} style={styles.action} />
+        <Button label="Export PDF" icon="document-text-outline" variant="gray" size="medium" onPress={onExport} style={styles.action} />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  panel: { marginTop: 24, padding: 18, backgroundColor: colors.navy, borderRadius: 22 },
-  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 },
-  kicker: { marginBottom: 6, color: '#91adf5', fontFamily: fonts.bold, fontSize: 10, letterSpacing: 1.3 },
-  title: { color: colors.white, fontFamily: fonts.display, fontSize: 22, letterSpacing: -0.5 },
+  panel: { marginTop: 28, padding: 16, backgroundColor: colors.card, borderRadius: radius.lg },
+  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 },
+  headerMeta: { ...type.footnote, marginTop: 2, color: colors.secondaryLabel },
   headline: { alignItems: 'flex-end' },
-  headlineNumber: { color: '#9db8ff', fontFamily: fonts.display, fontSize: 40, lineHeight: 42 },
-  headlineLabel: { color: '#9aa7c5', fontFamily: fonts.regular, fontSize: 11 },
-  stats: { flexDirection: 'row', gap: 8, marginBottom: 18 },
+  headlineNumber: { ...type.largeTitle, fontVariant: ['tabular-nums'] },
+  headlineLabel: { ...type.caption1, color: colors.secondaryLabel },
+  stats: { flexDirection: 'row', gap: 8, marginBottom: 20 },
   // space-between keeps values on one baseline when a label wraps to two lines.
-  stat: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 11, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12 },
-  statLabel: { marginBottom: 5, color: '#bcd0ff', fontFamily: fonts.regular, fontSize: 11 },
-  statValue: { color: colors.white, fontFamily: fonts.bold, fontSize: 14 },
-  layoutTitle: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
-  layoutTitleText: { color: '#bcd0ff', fontFamily: fonts.regular, fontSize: 11 },
-  bars: { gap: 12 },
-  barLabel: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  barLabelText: { color: colors.white, fontFamily: fonts.medium, fontSize: 11 },
-  track: {
-    flexDirection: 'row',
-    height: 32,
-    overflow: 'hidden',
-    backgroundColor: colors.navyRaised,
-    borderRadius: 7,
-    boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.35)',
-  },
-  piece: { minWidth: 2, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRightWidth: 2, borderRightColor: colors.navy },
-  pieceHighlight: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: 'rgba(255,255,255,0.4)' },
-  pieceText: {
-    color: colors.white,
-    fontFamily: fonts.semibold,
-    fontSize: 10,
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
-  },
+  stat: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 10, backgroundColor: colors.groupedBackground, borderRadius: radius.sm + 2 },
+  statLabel: { ...type.caption1, marginBottom: 4, color: colors.secondaryLabel },
+  statValue: { ...type.headline, fontVariant: ['tabular-nums'] },
+  bars: { gap: 14 },
+  barLabel: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  barLabelText: { ...type.caption1, color: colors.secondaryLabel, fontVariant: ['tabular-nums'] },
+  track: { flexDirection: 'row', height: 28, overflow: 'hidden', backgroundColor: colors.groupedBackground, borderRadius: 6 },
+  piece: { minWidth: 2, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRightWidth: 2, borderRightColor: colors.card },
+  pieceText: { ...type.caption2, color: colors.white, fontWeight: '600', fontVariant: ['tabular-nums'] },
   waste: { flex: 1, overflow: 'hidden' },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 18 },
-  action: {
-    flex: 1,
-    height: 46,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.09)',
-    borderRadius: 12,
-  },
-  actionPressed: { backgroundColor: 'rgba(255,255,255,0.16)' },
-  actionText: { color: '#d9e3ff', fontFamily: fonts.bold, fontSize: 13 },
+  legend: { flexDirection: 'row', gap: 18, marginTop: 14 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendSwatch: { width: 14, height: 14, overflow: 'hidden', borderRadius: 3 },
+  legendText: { ...type.caption1, color: colors.secondaryLabel },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  action: { flex: 1 },
 });

@@ -1,17 +1,18 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { NavIcon, primaryNav } from '@/components/NavIcon';
-import { colors, fonts } from '@/theme';
+import { primaryNav } from '@/data/navigation';
+import { colors } from '@/theme';
 
 export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 10) }]} accessibilityRole="tablist">
+    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 6) }]} accessibilityRole="tablist">
       {state.routes.map((route, index) => {
         const item = primaryNav.find((nav) => nav.route === route.name);
         if (!item) return null;
         const focused = state.index === index;
-        const tint = focused ? colors.blue : '#93a1bd';
+        const tint = focused ? colors.tint : colors.secondaryLabel;
 
         const onPress = () => {
           const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
@@ -25,10 +26,11 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
             accessibilityRole="tab"
             accessibilityState={{ selected: focused }}
             accessibilityLabel={item.label}
-            style={({ pressed }) => [styles.item, focused && styles.itemActive, pressed && !focused && styles.itemPressed]}
+            style={({ pressed }) => [styles.item, pressed && styles.pressed]}
           >
-            <NavIcon name={item.key} size={21} color={tint} />
-            <Text style={[styles.label, { color: tint }]} numberOfLines={1}>
+            <Ionicons name={item.icon} size={24} color={tint} />
+            {/* Tab titles don't need to grow with the text size; the large content viewer covers that. */}
+            <Text style={[styles.label, { color: tint }]} numberOfLines={1} maxFontSizeMultiplier={1.15}>
               {item.label}
             </Text>
           </Pressable>
@@ -41,15 +43,13 @@ export function TabBar({ state, navigation, insets }: BottomTabBarProps) {
 const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
-    gap: 6,
-    paddingTop: 8,
-    paddingHorizontal: 10,
-    backgroundColor: colors.white,
+    paddingTop: 6,
+    paddingHorizontal: 4,
+    backgroundColor: 'rgba(249, 249, 249, 0.97)',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e1e8f7',
+    borderTopColor: colors.separator,
   },
-  item: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 14 },
-  itemActive: { backgroundColor: '#f1f5ff' },
-  itemPressed: { backgroundColor: colors.soft },
-  label: { fontFamily: fonts.semibold, fontSize: 11 },
+  item: { flex: 1, minHeight: 49, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  pressed: { opacity: 0.55 },
+  label: { fontSize: 11, lineHeight: 13, fontWeight: '500' },
 });

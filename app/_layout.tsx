@@ -1,7 +1,3 @@
-import { DMSans_400Regular } from '@expo-google-fonts/dm-sans/400Regular';
-import { DMSans_500Medium } from '@expo-google-fonts/dm-sans/500Medium';
-import { DMSans_600SemiBold } from '@expo-google-fonts/dm-sans/600SemiBold';
-import { DMSans_700Bold } from '@expo-google-fonts/dm-sans/700Bold';
 import { SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk/700Bold';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
@@ -21,13 +17,8 @@ SplashScreen.preventAutoHideAsync();
 ScreenOrientation.unlockAsync().catch(() => {});
 
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    DMSans_400Regular,
-    DMSans_500Medium,
-    DMSans_600SemiBold,
-    DMSans_700Bold,
-    SpaceGrotesk_700Bold,
-  });
+  // Interface text uses the system font; only the brand wordmark needs a bundled typeface.
+  const [fontsLoaded, fontError] = useFonts({ SpaceGrotesk_700Bold });
   const ready = fontsLoaded || Boolean(fontError);
 
   useEffect(() => {
@@ -38,22 +29,21 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      {/* Outside AppUIProvider so the menu drawer it renders can show the cart count. */}
       <CartProvider>
         <OrdersProvider>
-        <AppUIProvider>
-          <StatusBar style="dark" />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.white } }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="telescopic" />
-            <Stack.Screen name="synchronized" />
-            <Stack.Screen name="folding" />
-            <Stack.Screen name="glass-calculator" />
-            <Stack.Screen name="cart" />
-            <Stack.Screen name="product/[id]" />
-            <Stack.Screen name="order/[id]" />
-          </Stack>
-        </AppUIProvider>
+          <AppUIProvider>
+            <StatusBar style="dark" />
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="telescopic" />
+              <Stack.Screen name="synchronized" />
+              <Stack.Screen name="folding" />
+              <Stack.Screen name="glass-calculator" />
+              <Stack.Screen name="cart" />
+              <Stack.Screen name="product/[id]" />
+              <Stack.Screen name="order/[id]" />
+            </Stack>
+          </AppUIProvider>
         </OrdersProvider>
       </CartProvider>
     </SafeAreaProvider>

@@ -1,29 +1,12 @@
-import Feather from '@expo/vector-icons/Feather';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { View } from 'react-native';
+import type { IconName } from '@/components/Button';
 
 export type NavKey = 'home' | 'catalog' | 'bar' | 'cutlist' | 'orders';
 
-/** One icon per primary destination, shared by the tab bar and the drawer. */
-export function NavIcon({ name, size, color }: { name: NavKey; size: number; color: string }) {
-  // Fixed box so the slightly larger MaterialCommunityIcons glyph doesn't shift neighbouring labels.
-  return (
-    <View style={{ width: size + 2, height: size + 2, alignItems: 'center', justifyContent: 'center' }}>
-      {name === 'bar' ? (
-        <MaterialCommunityIcons name="ruler" size={size + 2} color={color} />
-      ) : (
-        <Feather name={featherNames[name]} size={size} color={color} />
-      )}
-    </View>
-  );
-}
-
-const featherNames = { home: 'home', catalog: 'book-open', cutlist: 'scissors', orders: 'package' } as const;
-
-export const primaryNav: { key: NavKey; route: string; href: '/' | '/catalog' | '/bar-optimizer' | '/cutlist' | '/orders'; label: string; drawerLabel: string }[] = [
-  { key: 'home', route: 'index', href: '/', label: 'Home', drawerLabel: 'Home' },
-  { key: 'catalog', route: 'catalog', href: '/catalog', label: 'Catalog', drawerLabel: 'Product catalog' },
-  { key: 'bar', route: 'bar-optimizer', href: '/bar-optimizer', label: 'Bar optimizer', drawerLabel: 'Bar optimizer' },
-  { key: 'cutlist', route: 'cutlist', href: '/cutlist', label: 'Cutlist', drawerLabel: 'Cutlist projects' },
-  { key: 'orders', route: 'orders', href: '/orders', label: 'Orders', drawerLabel: 'My orders' },
+/** Top-level destinations shown in the tab bar. Labels are single words; icons are filled, as on iOS. */
+export const primaryNav: { key: NavKey; route: string; href: '/' | '/catalog' | '/bar-optimizer' | '/cutlist' | '/orders'; label: string; icon: IconName }[] = [
+  { key: 'home', route: 'index', href: '/', label: 'Shop', icon: 'storefront' },
+  { key: 'catalog', route: 'catalog', href: '/catalog', label: 'Catalog', icon: 'book' },
+  { key: 'bar', route: 'bar-optimizer', href: '/bar-optimizer', label: 'Optimizer', icon: 'calculator' },
+  { key: 'cutlist', route: 'cutlist', href: '/cutlist', label: 'Cutlist', icon: 'cut' },
+  { key: 'orders', route: 'orders', href: '/orders', label: 'Orders', icon: 'receipt' },
 ];

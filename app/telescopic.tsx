@@ -4,10 +4,9 @@ import { telescopicConfigurations } from '@/data/cutlist';
 export default function TelescopicScreen() {
   return (
     <ConfigurationGridScreen
-      eyebrow="CUTLIST SYSTEM"
       title="Telescopic Sliding"
-      intro="Choose a sliding configuration to view its cutting setup."
-      backLabel="Back to cutlist"
+      intro="Choose a sliding configuration to see its glass cutting sizes."
+      backLabel="Cutlist"
       backRoute="/cutlist"
       ownRoute="/telescopic"
       configurations={telescopicConfigurations}

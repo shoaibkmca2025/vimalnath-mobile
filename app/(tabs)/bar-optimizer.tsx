@@ -1,16 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import { Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BarResultPanel } from '@/components/BarResultPanel';
+import { Button } from '@/components/Button';
 import { ExportSiteNameSheet } from '@/components/ExportSiteNameSheet';
-import { PrimaryButton } from '@/components/PrimaryButton';
+import { InsetGroup } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
-import { Pill, ScreenTitle } from '@/components/ScreenTitle';
 import { SectionPickerSheet } from '@/components/SectionPickerSheet';
 import { sections, type Section } from '@/data/sections';
 import { planBars, type BarPlan } from '@/lib/bar-optimizer';
@@ -18,7 +18,7 @@ import { buildBarPlanHtml } from '@/lib/bar-plan-pdf';
 import { withTimeout } from '@/lib/pdf-html';
 import { formatMm, pad2 } from '@/lib/format';
 import { useAppUI } from '@/providers/AppUIProvider';
-import { colors, fonts, type } from '@/theme';
+import { colors, type } from '@/theme';
 
 type PieceRow = { id: number; value: string; qty: string };
 type StoredRow = { value: string; qty: string };
@@ -70,7 +70,7 @@ export default function BarOptimizerScreen() {
   }, [plan]);
 
   // Restore the last calculated result (and the inputs that produced it) so it stays on screen
-  // until the next "Calculate bars" tap, even after the app is closed and reopened.
+  // until the next "Calculate" tap, even after the app is closed and reopened.
   useEffect(() => {
     (async () => {
       try {
@@ -162,134 +162,99 @@ export default function BarOptimizerScreen() {
     } catch (err) {
       console.error('PDF export failed:', err);
       const reason = err instanceof Error && err.message ? err.message : 'Unknown error';
-      showToast(`Could not create the PDF: ${reason}`);
+      showToast(`Couldn’t create the PDF: ${reason}`);
     } finally {
       setExporting(false);
     }
   };
 
   return (
-    <Screen scrollRef={scrollRef}>
-      <ScreenTitle
-        eyebrow="MATERIAL PLANNING"
-        title="Bar optimizer"
-        accessory={
-          <Pill tone="green" dot>
-            Offline ready
-          </Pill>
-        }
-      />
-
-      <View style={styles.field}>
-        <Text style={[type.label, styles.fieldLabel]}>Section / profile</Text>
+    <Screen title="Bar Optimizer" subtitle="Plan cuts from standard bars · works offline" grouped scrollRef={scrollRef}>
+      <InsetGroup header="Section">
         <Pressable
           onPress={() => setPickerOpen(true)}
           accessibilityRole="button"
-          accessibilityLabel={`Section ${section.code}, ${section.name}. Change section`}
-          style={({ pressed }) => [styles.select, pressed && { backgroundColor: colors.soft }]}
+          accessibilityLabel={`Section ${section.code}, ${section.name}`}
+          accessibilityHint="Choose a different profile"
+          style={({ pressed }) => [styles.select, pressed && styles.rowPressed]}
         >
           <LinearGradient colors={['#2e62ed', '#8baaff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.profileMini}>
             <View style={styles.profileMiniFrame} />
           </LinearGradient>
           <View style={{ flex: 1 }}>
-            <Text style={styles.selectCode}>{section.code}</Text>
+            <Text style={type.headline}>{section.code}</Text>
             <Text style={styles.selectName} numberOfLines={1}>
               {section.name} · {section.dimensions}
             </Text>
           </View>
-          <Feather name="chevron-down" size={20} color={colors.muted} />
+          <Ionicons name="chevron-expand" size={18} color={colors.tertiaryLabel} />
         </Pressable>
-      </View>
+      </InsetGroup>
 
-      <View style={styles.field}>
-        <View style={styles.piecesHeader}>
-          <Text style={type.label}>Standard bar lengths</Text>
-          <Pressable onPress={addBarLength} accessibilityRole="button" hitSlop={10} style={styles.addButton}>
-            <Feather name="plus" size={16} color={colors.blue} />
-            <Text style={styles.addButtonText}>Add bar</Text>
-          </Pressable>
+      <InsetGroup header="Standard bar lengths" footer="Leave quantity blank for unlimited stock.">
+        {barLengths.length > 0 && <ColumnHeader />}
+        {barLengths.map((row, index) => (
+          <RowInput
+            key={row.id}
+            index={index}
+            value={row.value}
+            qty={row.qty}
+            autoFocus={row.id === barFocusRowId}
+            placeholder="Bar length"
+            qtyPlaceholder="Any"
+            accessibilityLabel={`Standard bar ${index + 1} length in millimetres`}
+            qtyAccessibilityLabel={`Standard bar ${index + 1} quantity in stock, blank for unlimited`}
+            removeAccessibilityLabel={`Remove standard bar ${index + 1}`}
+            onChangeText={(text) => setBarLengths((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
+            onChangeQty={(text) => setBarLengths((rows) => rows.map((item) => (item.id === row.id ? { ...item, qty: digitsOnly(text) } : item)))}
+            onRemove={() => setBarLengths((rows) => rows.filter((item) => item.id !== row.id))}
+          />
+        ))}
+        <AddRow label="Add Bar Length" onPress={addBarLength} />
+      </InsetGroup>
+
+      <InsetGroup header="Cutting loss" footer="Material lost to the saw blade on each cut.">
+        <View style={styles.kerfRow}>
+          <Text style={type.body}>Per cut</Text>
+          <TextInput
+            value={kerf}
+            onChangeText={(text) => setKerf(decimalOnly(text))}
+            keyboardType="decimal-pad"
+            returnKeyType="done"
+            selectTextOnFocus
+            selectionColor={colors.tint}
+            accessibilityLabel="Cutting loss per cut in millimetres"
+            style={styles.kerfInput}
+          />
+          <Text style={styles.unit}>mm</Text>
         </View>
-        <Text style={styles.hint}>Leave quantity blank for unlimited stock.</Text>
+      </InsetGroup>
 
-        {barLengths.length > 0 && (
-          <View style={styles.columnHeader}>
-            <View style={styles.columnHeaderIndexSpacer} />
-            <Text style={styles.columnHeaderLength}>LENGTH</Text>
-            <View style={styles.columnHeaderUnitSpacer} />
-            <Text style={styles.columnHeaderQty}>QTY</Text>
-            <View style={styles.columnHeaderRemoveSpacer} />
-          </View>
-        )}
-        <View style={styles.pieces}>
-          {barLengths.map((row, index) => (
-            <RowInput
-              key={row.id}
-              index={index}
-              value={row.value}
-              qty={row.qty}
-              autoFocus={row.id === barFocusRowId}
-              placeholder="Bar length"
-              qtyPlaceholder="Any"
-              accessibilityLabel={`Standard bar ${index + 1} length in millimetres`}
-              qtyAccessibilityLabel={`Standard bar ${index + 1} quantity in stock, blank for unlimited`}
-              removeAccessibilityLabel={`Remove standard bar ${index + 1}`}
-              onChangeText={(text) => setBarLengths((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
-              onChangeQty={(text) => setBarLengths((rows) => rows.map((item) => (item.id === row.id ? { ...item, qty: digitsOnly(text) } : item)))}
-              onRemove={() => setBarLengths((rows) => rows.filter((item) => item.id !== row.id))}
-            />
-          ))}
-          {!barLengths.length && <Text style={styles.emptyPieces}>Add at least one standard bar length.</Text>}
-        </View>
-      </View>
+      <InsetGroup header="Required pieces">
+        {pieces.length > 0 && <ColumnHeader />}
+        {pieces.map((row, index) => (
+          <RowInput
+            key={row.id}
+            index={index}
+            value={row.value}
+            qty={row.qty}
+            autoFocus={row.id === focusRowId}
+            placeholder="Piece length"
+            qtyPlaceholder="2"
+            accessibilityLabel={`Piece ${index + 1} length in millimetres`}
+            qtyAccessibilityLabel={`Piece ${index + 1} quantity needed`}
+            removeAccessibilityLabel={`Remove piece ${index + 1}`}
+            onChangeText={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
+            onChangeQty={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, qty: digitsOnly(text) } : item)))}
+            onValueSubmit={index === pieces.length - 1 ? addPiece : undefined}
+            onQtySubmit={index === pieces.length - 1 ? addPiece : undefined}
+            onRemove={() => setPieces((rows) => rows.filter((item) => item.id !== row.id))}
+          />
+        ))}
+        <AddRow label="Add Piece" onPress={addPiece} />
+      </InsetGroup>
 
-      <View style={styles.field}>
-        <Text style={[type.label, styles.fieldLabel]}>Cutting loss</Text>
-        <UnitInput value={kerf} onChangeText={(text) => setKerf(decimalOnly(text))} keyboardType="decimal-pad" label="Cutting loss per cut in millimetres" />
-      </View>
-
-      <View style={styles.field}>
-        <View style={styles.piecesHeader}>
-          <Text style={type.label}>Required pieces</Text>
-          <Pressable onPress={addPiece} accessibilityRole="button" hitSlop={10} style={styles.addButton}>
-            <Feather name="plus" size={16} color={colors.blue} />
-            <Text style={styles.addButtonText}>Add piece</Text>
-          </Pressable>
-        </View>
-
-        {pieces.length > 0 && (
-          <View style={styles.columnHeader}>
-            <View style={styles.columnHeaderIndexSpacer} />
-            <Text style={styles.columnHeaderLength}>LENGTH</Text>
-            <View style={styles.columnHeaderUnitSpacer} />
-            <Text style={styles.columnHeaderQty}>QTY</Text>
-            <View style={styles.columnHeaderRemoveSpacer} />
-          </View>
-        )}
-        <View style={styles.pieces}>
-          {pieces.map((row, index) => (
-            <RowInput
-              key={row.id}
-              index={index}
-              value={row.value}
-              qty={row.qty}
-              autoFocus={row.id === focusRowId}
-              placeholder="Piece length"
-              qtyPlaceholder="2"
-              accessibilityLabel={`Piece ${index + 1} length in millimetres`}
-              qtyAccessibilityLabel={`Piece ${index + 1} quantity needed`}
-              removeAccessibilityLabel={`Remove piece ${index + 1}`}
-              onChangeText={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
-              onChangeQty={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, qty: digitsOnly(text) } : item)))}
-              onValueSubmit={index === pieces.length - 1 ? addPiece : undefined}
-              onQtySubmit={index === pieces.length - 1 ? addPiece : undefined}
-              onRemove={() => setPieces((rows) => rows.filter((item) => item.id !== row.id))}
-            />
-          ))}
-          {!pieces.length && <Text style={styles.emptyPieces}>No pieces yet — add the lengths you need to cut.</Text>}
-        </View>
-      </View>
-
-      <PrimaryButton label="Calculate bars" onPress={calculate} />
+      <Button label="Calculate" onPress={calculate} />
 
       {plan && (
         <View
@@ -318,23 +283,22 @@ export default function BarOptimizerScreen() {
   );
 }
 
-function UnitInput({ value, onChangeText, keyboardType, label }: { value: string; onChangeText: (text: string) => void; keyboardType: KeyboardTypeOptions; label: string }) {
-  const [focused, setFocused] = useState(false);
+function ColumnHeader() {
   return (
-    <View style={[styles.unitInput, focused && styles.inputFocused]}>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType}
-        returnKeyType="done"
-        selectTextOnFocus
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        accessibilityLabel={label}
-        style={styles.unitInputText}
-      />
-      <Text style={styles.unit}>mm</Text>
+    <View style={styles.columnHeader} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Text style={[styles.columnLabel, styles.columnLength]}>LENGTH (MM)</Text>
+      <Text style={[styles.columnLabel, styles.columnQty]}>QTY</Text>
+      <View style={styles.columnRemove} />
     </View>
+  );
+}
+
+function AddRow({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.addRow, pressed && styles.rowPressed]}>
+      <Ionicons name="add-circle" size={22} color={colors.tint} />
+      <Text style={styles.addRowText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -373,8 +337,6 @@ function RowInput({
   onQtySubmit,
   onRemove,
 }: RowInputProps) {
-  const [focused, setFocused] = useState(false);
-  const [qtyFocused, setQtyFocused] = useState(false);
   return (
     <View style={styles.pieceRow}>
       <Text style={styles.pieceIndex}>{pad2(index + 1)}</Text>
@@ -382,120 +344,55 @@ function RowInput({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.subtle}
+        placeholderTextColor={colors.tertiaryLabel}
+        selectionColor={colors.tint}
         keyboardType="number-pad"
         returnKeyType={onValueSubmit ? 'next' : 'done'}
         autoFocus={autoFocus}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
         onSubmitEditing={onValueSubmit}
         accessibilityLabel={accessibilityLabel}
-        style={[styles.pieceInput, focused && styles.inputFocused]}
+        style={[styles.fieldInput, styles.pieceInput]}
       />
-      <Text style={styles.unit}>mm</Text>
       <TextInput
         value={qty}
         onChangeText={onChangeQty}
         placeholder={qtyPlaceholder}
-        placeholderTextColor={colors.subtle}
+        placeholderTextColor={colors.tertiaryLabel}
+        selectionColor={colors.tint}
         keyboardType="number-pad"
         returnKeyType={onQtySubmit ? 'next' : 'done'}
         selectTextOnFocus
-        onFocus={() => setQtyFocused(true)}
-        onBlur={() => setQtyFocused(false)}
         onSubmitEditing={onQtySubmit}
         accessibilityLabel={qtyAccessibilityLabel}
-        style={[styles.qtyInput, qtyFocused && styles.inputFocused]}
+        style={[styles.fieldInput, styles.qtyInput]}
       />
-      <Pressable onPress={onRemove} accessibilityRole="button" accessibilityLabel={removeAccessibilityLabel} style={styles.removeButton}>
-        <Feather name="x" size={19} color="#a9b1bd" />
+      <Pressable onPress={onRemove} accessibilityRole="button" accessibilityLabel={removeAccessibilityLabel} style={({ pressed }) => [styles.removeButton, pressed && { opacity: 0.5 }]}>
+        <Ionicons name="remove-circle" size={22} color={colors.red} />
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  field: { marginBottom: 18 },
-  fieldLabel: { marginBottom: 8 },
-  select: {
-    minHeight: 64,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 12,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 15,
-  },
-  profileMini: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
-  profileMiniFrame: { width: 18, height: 24, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.85)', transform: [{ skewX: '-12deg' }] },
-  selectCode: { color: colors.ink, fontFamily: fonts.bold, fontSize: 15 },
-  selectName: { marginTop: 1, color: colors.muted, fontFamily: fonts.regular, fontSize: 12 },
-  unitInput: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 15,
-  },
-  unitInputText: { flex: 1, height: '100%', minWidth: 0, padding: 0, color: colors.ink, fontFamily: fonts.bold, fontSize: 17 },
-  inputFocused: { borderColor: '#a9bdf8', backgroundColor: '#fbfcff' },
-  unit: { color: colors.muted, fontFamily: fonts.medium, fontSize: 12 },
-  piecesHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  addButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
-  addButtonText: { color: colors.blue, fontFamily: fonts.bold, fontSize: 13 },
-  hint: { marginTop: -4, marginBottom: 10, color: colors.muted, fontFamily: fonts.regular, fontSize: 12 },
-  columnHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 12, paddingRight: 4, marginBottom: 6 },
-  columnHeaderIndexSpacer: { width: 22 },
-  columnHeaderLength: { flex: 1, color: colors.muted, fontFamily: fonts.bold, fontSize: 10, letterSpacing: 0.8 },
-  columnHeaderUnitSpacer: { width: 24 },
-  columnHeaderQty: { width: 56, color: colors.muted, fontFamily: fonts.bold, fontSize: 10, letterSpacing: 0.8, textAlign: 'center' },
-  columnHeaderRemoveSpacer: { width: 40 },
-  pieces: { gap: 8 },
-  pieceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 7,
-    paddingLeft: 12,
-    paddingRight: 4,
-    backgroundColor: colors.soft,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 15,
-  },
-  pieceIndex: { width: 22, color: colors.muted, fontFamily: fonts.bold, fontSize: 12 },
-  pieceInput: {
-    flex: 1,
-    height: 44,
-    minWidth: 0,
-    paddingHorizontal: 12,
-    paddingVertical: 0,
-    color: colors.ink,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 10,
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-  },
-  qtyInput: {
-    width: 56,
-    height: 44,
-    paddingHorizontal: 6,
-    color: colors.ink,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 10,
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    textAlign: 'center',
-  },
-  removeButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20 },
-  emptyPieces: { paddingVertical: 14, color: colors.muted, fontFamily: fonts.regular, fontSize: 13, textAlign: 'center' },
+  rowPressed: { backgroundColor: colors.fill },
+  select: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
+  profileMini: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  profileMiniFrame: { width: 17, height: 23, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.85)', transform: [{ skewX: '-12deg' }] },
+  selectName: { ...type.subheadline, marginTop: 1, color: colors.secondaryLabel },
+  kerfRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
+  kerfInput: { ...type.body, flex: 1, minHeight: 46, padding: 0, textAlign: 'right' },
+  unit: { ...type.body, color: colors.secondaryLabel },
+  columnHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 48, paddingRight: 4, paddingTop: 10, paddingBottom: 2 },
+  columnLabel: { ...type.caption1, color: colors.secondaryLabel },
+  columnLength: { flex: 1 },
+  columnQty: { width: 60, textAlign: 'center' },
+  columnRemove: { width: 44 },
+  pieceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingLeft: 16, paddingRight: 4 },
+  pieceIndex: { ...type.footnote, width: 24, color: colors.secondaryLabel, fontVariant: ['tabular-nums'] },
+  fieldInput: { ...type.body, height: 40, paddingVertical: 0, backgroundColor: colors.tertiaryFill, borderRadius: 8 },
+  pieceInput: { flex: 1, minWidth: 0, paddingHorizontal: 12 },
+  qtyInput: { width: 60, paddingHorizontal: 6, textAlign: 'center' },
+  removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  addRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14 },
+  addRowText: { ...type.body, color: colors.tint },
 });

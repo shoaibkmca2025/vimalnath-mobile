@@ -1,23 +1,22 @@
-import Feather from '@expo/vector-icons/Feather';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useLocalSearchParams, type Href } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { PrimaryButton } from '@/components/PrimaryButton';
+import { Button } from '@/components/Button';
+import { InsetGroup, ValueRow } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
 import { computeGlassPlan, parsePanelCount, type GlassPlanResult } from '@/lib/glass-calculator';
 import { buildGlassPlanHtml } from '@/lib/glass-plan-pdf';
 import { pdfFileName, savePdf, sharePdf } from '@/lib/pdf-export';
 import { useAppUI } from '@/providers/AppUIProvider';
-import { colors, fonts, type } from '@/theme';
+import { colors, type } from '@/theme';
 
 const digitsOnly = (text: string) => text.replace(/[^0-9]/g, '');
 
 export default function GlassCalculatorScreen() {
   const { showToast } = useAppUI();
-  const { name, eyebrow, fallbackRoute } = useLocalSearchParams<{ name?: string; eyebrow?: string; fallbackRoute?: string }>();
+  const { name, backLabel, fallbackRoute } = useLocalSearchParams<{ name?: string; backLabel?: string; fallbackRoute?: string }>();
   const systemName = name ?? 'Sliding System';
   const panelCount = parsePanelCount(systemName);
 
@@ -27,19 +26,10 @@ export default function GlassCalculatorScreen() {
   const [sizeError, setSizeError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'share' | 'save' | null>(null);
 
-  const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(fallbackRoute ?? '/cutlist');
-  };
+  const ready = Number(width) > 0 && Number(height) > 0;
 
   const calculate = () => {
-    const w = Number(width);
-    const h = Number(height);
-    if (!(w > 0) || !(h > 0)) {
-      showToast('Enter the width and height first.');
-      return;
-    }
-    const outcome = computeGlassPlan(systemName, w, h, panelCount);
+    const outcome = computeGlassPlan(systemName, Number(width), Number(height), panelCount);
     if ('error' in outcome) {
       setSizeError(outcome.error);
       setResult(null);
@@ -64,52 +54,22 @@ export default function GlassCalculatorScreen() {
     } catch (err) {
       console.error('PDF export failed:', err);
       const reason = err instanceof Error && err.message ? err.message : 'Unknown error';
-      showToast(`Could not create the PDF: ${reason}`);
+      showToast(`Couldn’t create the PDF: ${reason}`);
     } finally {
       setBusy(null);
     }
   };
 
   return (
-    <Screen>
-      <View style={styles.top}>
-        <Pressable
-          onPress={goBack}
-          accessibilityRole="button"
-          accessibilityLabel="Back to configurations"
-          style={({ pressed }) => [styles.back, pressed && { backgroundColor: colors.blueTint }]}
-        >
-          <Feather name="arrow-left" size={21} color={colors.ink} />
-        </Pressable>
-        <View style={{ flexShrink: 1 }}>
-          <Text style={type.eyebrow}>{eyebrow ?? 'CUTLIST SYSTEM'}</Text>
-          <Text style={[type.title, { fontSize: 24, lineHeight: 28 }]} numberOfLines={1} accessibilityRole="header">
-            {systemName}
-          </Text>
-        </View>
-      </View>
-
-      {sizeError && (
-        <View style={styles.errorBanner} accessibilityRole="alert">
-          <Feather name="alert-triangle" size={18} color={colors.red} />
-          <Text style={styles.errorBannerText}>{sizeError}</Text>
-        </View>
-      )}
-
-      <LinearGradient colors={['#2458e8', '#173e9e']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.heroTitle}>{systemName}</Text>
-          <Text style={styles.heroSubtitle}>Glass Cutting & Material Calculator</Text>
-        </View>
-        <View style={styles.heroIcon}>
-          <MaterialCommunityIcons name="door-sliding" size={30} color={colors.white} />
-        </View>
-      </LinearGradient>
-
-      <View style={styles.card}>
-        <DimensionField
-          icon="arrow-expand-horizontal"
-          label="Width (mm)"
+    <Screen
+      title={systemName}
+      subtitle="Glass cutting and material calculator"
+      back={{ fallback: (fallbackRoute ?? '/cutlist') as Href, label: backLabel ?? 'Cutlist' }}
+      grouped
+    >
+      <InsetGroup header="Opening size" style={sizeError ? styles.groupWithError : undefined}>
+        <DimensionRow
+          label="Width"
           value={width}
           onChangeText={(text) => {
             setWidth(digitsOnly(text));
@@ -117,9 +77,8 @@ export default function GlassCalculatorScreen() {
           }}
           accessibilityLabel="Opening width in millimetres"
         />
-        <DimensionField
-          icon="arrow-expand-vertical"
-          label="Height (mm)"
+        <DimensionRow
+          label="Height"
           value={height}
           onChangeText={(text) => {
             setHeight(digitsOnly(text));
@@ -127,58 +86,50 @@ export default function GlassCalculatorScreen() {
           }}
           accessibilityLabel="Opening height in millimetres"
         />
-        <PrimaryButton label="Calculate" onPress={calculate} />
-      </View>
+      </InsetGroup>
+
+      {sizeError && (
+        <View style={styles.error} accessibilityRole="alert">
+          <Ionicons name="alert-circle" size={16} color={colors.red} />
+          <Text style={styles.errorText}>{sizeError}</Text>
+        </View>
+      )}
+
+      <Button label="Calculate" onPress={calculate} disabled={!ready} accessibilityHint={ready ? undefined : 'Enter the width and height first'} />
 
       {result && (
         <View style={styles.results}>
-          <ResultCard
-            tone="blue"
-            icon="window-closed-variant"
-            title="Glass Size"
-            value={`${result.glassWidth} × ${result.glassHeight} mm`}
-            note={`Qty ${result.glassQuantity}`}
-          />
-          <ResultCard
-            tone="green"
-            icon="content-cut"
-            title="Cutting Size"
-            value={`${result.cuttingWidth} × ${result.cuttingHeight} mm`}
-            note="(Per Panel)"
-          />
+          <InsetGroup header="Glass">
+            <ValueRow label="Glass size" value={`${result.glassWidth} × ${result.glassHeight} mm`} />
+            <ValueRow label="Quantity" value={String(result.glassQuantity)} />
+            <ValueRow label="Cutting size" detail="Per panel" value={`${result.cuttingWidth} × ${result.cuttingHeight} mm`} />
+          </InsetGroup>
 
-          <View style={[styles.resultCard, styles.materialCard]}>
-            <View style={[styles.resultIcon, { backgroundColor: colors.purpleTint }]}>
-              <Feather name="list" size={19} color={colors.purple} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.resultTitle}>Material List</Text>
-              <View style={styles.materialRows}>
-                {result.materials.map((item) => (
-                  <MaterialRow key={item.label} label={item.label} value={item.value} note={item.note} />
-                ))}
-              </View>
-            </View>
-          </View>
+          <InsetGroup header="Material list">
+            {result.materials.map((item) => (
+              <ValueRow key={item.label} label={item.label} value={item.value} detail={item.note} />
+            ))}
+          </InsetGroup>
 
           <View style={styles.exportRow}>
-            <ExportButton
+            <Button
               label="Share PDF"
-              icon="share-2"
-              hint="WhatsApp, email and more"
-              tone="dark"
+              icon="share-outline"
+              accessibilityHint="Send the cutting plan by WhatsApp, email and more"
               loading={busy === 'share'}
-              disabled={busy !== null}
+              disabled={busy !== null && busy !== 'share'}
               onPress={() => exportPdf('share')}
+              style={styles.exportButton}
             />
-            <ExportButton
+            <Button
               label="Save PDF"
-              icon="download"
-              hint="Save to phone storage"
-              tone="blue"
+              icon="download-outline"
+              variant="gray"
+              accessibilityHint="Save the cutting plan to this phone"
               loading={busy === 'save'}
-              disabled={busy !== null}
+              disabled={busy !== null && busy !== 'save'}
               onPress={() => exportPdf('save')}
+              style={styles.exportButton}
             />
           </View>
         </View>
@@ -187,223 +138,42 @@ export default function GlassCalculatorScreen() {
   );
 }
 
-type DimensionFieldProps = {
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+type DimensionRowProps = {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
   accessibilityLabel: string;
 };
 
-function DimensionField({ icon, label, value, onChangeText, accessibilityLabel }: DimensionFieldProps) {
-  const [focused, setFocused] = useState(false);
+/** Form row with the label on the leading edge and the value entered on the trailing edge. */
+function DimensionRow({ label, value, onChangeText, accessibilityLabel }: DimensionRowProps) {
   return (
-    <View style={styles.field}>
-      <View style={styles.fieldIcon}>
-        <MaterialCommunityIcons name={icon} size={20} color={colors.blue} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.fieldLabel}>{label}</Text>
-        <View style={[styles.input, focused && styles.inputFocused]}>
-          <TextInput
-            value={value}
-            onChangeText={onChangeText}
-            placeholder="e.g. 1200"
-            placeholderTextColor={colors.subtle}
-            keyboardType="number-pad"
-            returnKeyType="done"
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            accessibilityLabel={accessibilityLabel}
-            style={styles.inputText}
-          />
-          <Text style={styles.inputUnit}>mm</Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-type ResultCardProps = {
-  tone: 'blue' | 'green';
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  title: string;
-  value: string;
-  note: string;
-};
-
-function ResultCard({ tone, icon, title, value, note }: ResultCardProps) {
-  const tint = tone === 'blue' ? colors.blueTint : colors.greenTint;
-  const accent = tone === 'blue' ? colors.blue : colors.green;
-  return (
-    <View style={styles.resultCard}>
-      <View style={[styles.resultIcon, { backgroundColor: tint }]}>
-        <MaterialCommunityIcons name={icon} size={19} color={accent} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.resultTitle}>{title}</Text>
-        <Text style={[styles.resultValue, { color: accent }]}>{value}</Text>
-        <Text style={styles.resultNote}>{note}</Text>
-      </View>
-    </View>
-  );
-}
-
-type ExportButtonProps = {
-  label: string;
-  icon: keyof typeof Feather.glyphMap;
-  hint: string;
-  tone: 'dark' | 'blue';
-  loading: boolean;
-  disabled: boolean;
-  onPress: () => void;
-};
-
-function ExportButton({ label, icon, hint, tone, loading, disabled, onPress }: ExportButtonProps) {
-  const base = tone === 'dark' ? colors.ink : colors.blue;
-  const pressedColor = tone === 'dark' ? '#000000' : colors.blueDark;
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint={hint}
-      style={({ pressed }) => [
-        styles.exportButton,
-        { backgroundColor: pressed && !disabled ? pressedColor : base },
-        disabled && !loading && styles.exportButtonDisabled,
-      ]}
-    >
-      {loading ? (
-        <ActivityIndicator color={colors.white} />
-      ) : (
-        <>
-          <Feather name={icon} size={17} color={colors.white} />
-          <Text style={styles.exportButtonText}>{label}</Text>
-        </>
-      )}
-    </Pressable>
-  );
-}
-
-function MaterialRow({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <View style={styles.materialRow}>
-      <View style={{ flexShrink: 1 }}>
-        <Text style={styles.materialLabel}>{label}</Text>
-        {note && <Text style={styles.materialNote}>{note}</Text>}
-      </View>
-      <Text style={styles.materialValue}>{value}</Text>
+    <View style={styles.fieldRow}>
+      <Text style={type.body}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder="e.g. 1200"
+        placeholderTextColor={colors.tertiaryLabel}
+        selectionColor={colors.tint}
+        keyboardType="number-pad"
+        returnKeyType="done"
+        accessibilityLabel={accessibilityLabel}
+        style={styles.fieldInput}
+      />
+      <Text style={styles.unit}>mm</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  top: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 18 },
-  back: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.soft,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 13,
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 14,
-    marginBottom: 18,
-    backgroundColor: colors.redTint,
-    borderWidth: 1,
-    borderColor: '#f6c6c3',
-    borderRadius: 14,
-  },
-  errorBannerText: { flex: 1, color: colors.red, fontFamily: fonts.semibold, fontSize: 13, lineHeight: 18 },
-  hero: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 20,
-    marginBottom: 18,
-    borderRadius: 20,
-    boxShadow: '0 10px 24px rgba(36, 88, 232, 0.28)',
-  },
-  heroTitle: { color: colors.white, fontFamily: fonts.display, fontSize: 22, letterSpacing: -0.5 },
-  heroSubtitle: { marginTop: 4, color: 'rgba(255,255,255,0.85)', fontFamily: fonts.medium, fontSize: 13 },
-  heroIcon: {
-    width: 56,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 16,
-  },
-  card: {
-    padding: 18,
-    marginBottom: 20,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 20,
-    boxShadow: '0 5px 15px rgba(20, 30, 50, 0.05)',
-    gap: 16,
-  },
-  field: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  fieldIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.blueTint, borderRadius: 12 },
-  fieldLabel: { marginBottom: 8, color: colors.ink, fontFamily: fonts.bold, fontSize: 13 },
-  input: {
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    backgroundColor: colors.soft,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 13,
-  },
-  inputFocused: { borderColor: '#a9bdf8', backgroundColor: colors.blueWash },
-  inputText: { flex: 1, height: '100%', minWidth: 0, padding: 0, color: colors.ink, fontFamily: fonts.bold, fontSize: 16 },
-  inputUnit: { color: colors.muted, fontFamily: fonts.medium, fontSize: 12 },
-  results: { gap: 12 },
-  resultCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    padding: 16,
-    backgroundColor: colors.blueTint,
-    borderRadius: 16,
-  },
-  materialCard: { backgroundColor: colors.purpleTint },
-  resultIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
-  resultTitle: { color: colors.ink, fontFamily: fonts.bold, fontSize: 14 },
-  resultValue: { marginTop: 4, fontFamily: fonts.display, fontSize: 19, letterSpacing: -0.3 },
-  resultNote: { marginTop: 2, color: colors.muted, fontFamily: fonts.regular, fontSize: 12 },
-  materialRows: { marginTop: 10, gap: 8 },
-  materialRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(16,24,39,0.1)',
-  },
-  materialLabel: { flexShrink: 1, color: colors.ink, fontFamily: fonts.medium, fontSize: 13 },
-  materialNote: { marginTop: 2, color: colors.muted, fontFamily: fonts.regular, fontSize: 11 },
-  materialValue: { color: colors.muted, fontFamily: fonts.semibold, fontSize: 13 },
-  exportRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  exportButton: {
-    flex: 1,
-    height: 54,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: 15,
-  },
-  exportButtonDisabled: { opacity: 0.6 },
-  exportButtonText: { color: colors.white, fontFamily: fonts.bold, fontSize: 15 },
+  groupWithError: { marginBottom: 8 },
+  fieldRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
+  fieldInput: { ...type.body, flex: 1, minHeight: 46, padding: 0, textAlign: 'right' },
+  unit: { ...type.body, color: colors.secondaryLabel },
+  error: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginHorizontal: 16, marginBottom: 22 },
+  errorText: { ...type.footnote, flex: 1, color: colors.red },
+  results: { marginTop: 32 },
+  exportRow: { flexDirection: 'row', gap: 12 },
+  exportButton: { flex: 1 },
 });

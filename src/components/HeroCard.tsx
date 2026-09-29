@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 
-import { colors, fonts } from '@/theme';
+import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { colors, radius, type } from '@/theme';
 
 const SLIDES = [
   { image: require('../../assets/images/hero/hero-slide-1.webp') },
@@ -12,21 +13,18 @@ const SLIDES = [
   { image: require('../../assets/images/hero/hero-slide-4.webp') },
 ];
 
-const AUTO_ADVANCE_MS = 4500;
+const AUTO_ADVANCE_MS = 5000;
 
 export function HeroCard() {
   const [cardWidth, setCardWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
+  // Auto-advance stops for good once someone swipes, and never runs with Reduce Motion on.
+  const [userControlled, setUserControlled] = useState(false);
+  const reduceMotion = useReduceMotion();
   const scrollRef = useRef<ScrollView>(null);
 
-  const goToSlide = (index: number) => {
-    setActiveIndex(index);
-    scrollRef.current?.scrollTo({ x: index * cardWidth, animated: true });
-  };
-
-  // Auto-advance to the next slide; always reads the latest index so a manual swipe isn't undone.
   useEffect(() => {
-    if (!cardWidth) return;
+    if (!cardWidth || reduceMotion || userControlled) return;
     const timer = setInterval(() => {
       setActiveIndex((current) => {
         const next = (current + 1) % SLIDES.length;
@@ -35,7 +33,7 @@ export function HeroCard() {
       });
     }, AUTO_ADVANCE_MS);
     return () => clearInterval(timer);
-  }, [cardWidth]);
+  }, [cardWidth, reduceMotion, userControlled]);
 
   const onMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!cardWidth) return;
@@ -51,48 +49,45 @@ export function HeroCard() {
           pagingEnabled
           decelerationRate="fast"
           showsHorizontalScrollIndicator={false}
+          onScrollBeginDrag={() => setUserControlled(true)}
           onMomentumScrollEnd={onMomentumScrollEnd}
           scrollEventThrottle={16}
         >
           {SLIDES.map((slide, index) => (
             <View key={index} style={{ width: cardWidth }}>
-              <Slide image={slide.image} />
+              <Slide image={slide.image} position={index + 1} />
             </View>
           ))}
         </ScrollView>
       )}
 
-      <View style={styles.dots}>
+      {/* Page indicator, as in iOS: swiping changes the page; the dots only show where you are. */}
+      <View style={styles.dots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {SLIDES.map((_, index) => (
-          <Pressable key={index} onPress={() => goToSlide(index)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Show slide ${index + 1}`}>
-            <View style={[styles.dot, index === activeIndex && styles.dotActive]} />
-          </Pressable>
+          <View key={index} style={[styles.dot, index === activeIndex && styles.dotActive]} />
         ))}
       </View>
     </View>
   );
 }
 
-function Slide({ image }: { image: number }) {
+function Slide({ image, position }: { image: number; position: number }) {
   return (
     <View
       style={styles.slide}
       accessible
-      accessibilityLabel="New collection 2026. Systems that move with you. Sliding, folding and slim partition solutions."
+      accessibilityLabel={`New collection 2026. Systems that move with you. Sliding, folding and slim partition solutions. Slide ${position} of ${SLIDES.length}.`}
     >
       <Image source={image} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
       <LinearGradient
-        colors={['rgba(9,16,36,0.05)', 'rgba(8,14,32,0.25)', 'rgba(7,12,28,0.65)']}
-        locations={[0, 0.5, 1]}
+        colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.62)']}
+        locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFill}
       />
 
       <View style={styles.copy}>
         <Text style={styles.kicker}>NEW COLLECTION · 2026</Text>
-        <Text style={styles.headline}>
-          Systems that{'\n'}
-          <Text style={{ color: '#98b7ff' }}>move with you.</Text>
-        </Text>
+        <Text style={styles.headline}>Systems that move with you.</Text>
         <Text style={styles.body}>Sliding, folding and slim partition solutions.</Text>
       </View>
     </View>
@@ -100,13 +95,13 @@ function Slide({ image }: { image: number }) {
 }
 
 const styles = StyleSheet.create({
-  card: { minHeight: 244, overflow: 'hidden', borderRadius: 24 },
-  slide: { minHeight: 244, paddingHorizontal: 22, paddingTop: 26, paddingBottom: 32, justifyContent: 'flex-end' },
-  copy: { width: '80%' },
-  kicker: { color: '#bcd1ff', fontFamily: fonts.bold, fontSize: 10, letterSpacing: 1.3 },
-  headline: { marginTop: 14, marginBottom: 10, color: colors.white, fontFamily: fonts.display, fontSize: 26, lineHeight: 28, letterSpacing: -1 },
-  body: { maxWidth: 220, color: '#d5e0ff', fontFamily: fonts.regular, fontSize: 13, lineHeight: 18 },
-  dots: { position: 'absolute', left: 22, bottom: 20, flexDirection: 'row', gap: 5 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)' },
-  dotActive: { width: 20, backgroundColor: colors.white },
+  card: { minHeight: 240, overflow: 'hidden', borderRadius: radius.lg, backgroundColor: colors.groupedBackground },
+  slide: { minHeight: 240, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 38, justifyContent: 'flex-end' },
+  copy: { maxWidth: 300 },
+  kicker: { ...type.caption1, color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
+  headline: { ...type.title1, marginTop: 6, color: colors.white },
+  body: { ...type.subheadline, marginTop: 4, color: 'rgba(255,255,255,0.88)' },
+  dots: { position: 'absolute', left: 0, right: 0, bottom: 14, flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: 'rgba(255,255,255,0.45)' },
+  dotActive: { backgroundColor: colors.white },
 });
