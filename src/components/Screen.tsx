@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BrandLockup } from '@/components/BrandLockup';
 import { CartButton } from '@/components/CartButton';
+import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, space, type } from '@/theme';
 
 const useNativeDriver = Platform.OS !== 'web';
@@ -31,6 +32,7 @@ type ScreenProps = {
  */
 export function Screen({ title, subtitle, back, titleDisplay = 'large', trailing, grouped = false, scrollRef, children }: ScreenProps) {
   const insets = useSafeAreaInsets();
+  const { openDrawer } = useAppUI();
   const scrollY = useRef(new Animated.Value(0)).current;
   const background = grouped ? colors.groupedBackground : colors.background;
   const large = titleDisplay === 'large';
@@ -63,7 +65,17 @@ export function Screen({ title, subtitle, back, titleDisplay = 'large', trailing
               </Text>
             </Pressable>
           ) : (
-            <BrandLockup />
+            <View style={styles.leading}>
+              <Pressable
+                onPress={openDrawer}
+                accessibilityRole="button"
+                accessibilityLabel="Open menu"
+                style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}
+              >
+                <Ionicons name="menu" size={27} color={colors.tint} />
+              </Pressable>
+              <BrandLockup />
+            </View>
           )}
           <View style={styles.trailing}>{trailing === undefined ? <CartButton /> : trailing}</View>
           {back && (
@@ -132,6 +144,9 @@ const styles = StyleSheet.create({
   backIcon: { marginRight: -2 },
   backLabel: { ...type.body, flexShrink: 1, color: colors.tint },
   pressed: { opacity: 0.5 },
+  leading: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 2 },
+  // Pulled into the margin so the glyph, not its 44 pt hit area, lines up with the page edge.
+  menuButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -9 },
   trailing: { minWidth: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
   inlineTitle: { ...type.headline, position: 'absolute', left: 110, right: 110, textAlign: 'center', pointerEvents: 'none' },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
