@@ -10,7 +10,7 @@ import { computeGlassPlan, parsePanelCount, type GlassPlanResult } from '@/lib/g
 import { buildGlassPlanHtml } from '@/lib/glass-plan-pdf';
 import { pdfFileName, savePdf, sharePdf } from '@/lib/pdf-export';
 import { useAppUI } from '@/providers/AppUIProvider';
-import { colors, type } from '@/theme';
+import { colors, radius, type } from '@/theme';
 
 const digitsOnly = (text: string) => text.replace(/[^0-9]/g, '');
 
@@ -99,13 +99,20 @@ export default function GlassCalculatorScreen() {
 
       {result && (
         <View style={styles.results}>
-          <InsetGroup header="Glass">
-            <ValueRow label="Glass size" value={`${result.glassWidth} × ${result.glassHeight} mm`} />
-            <ValueRow label="Quantity" value={String(result.glassQuantity)} />
-            <ValueRow label="Cutting size" detail="Per panel" value={`${result.cuttingWidth} × ${result.cuttingHeight} mm`} />
-          </InsetGroup>
+          <SizeCard
+            title="Glass size"
+            value={`${result.glassWidth} × ${result.glassHeight} mm`}
+            detail={`Qty: ${result.glassQuantity}`}
+            background={colors.tintFill}
+          />
+          <SizeCard
+            title="Cutting size"
+            value={`${result.cuttingWidth} × ${result.cuttingHeight} mm`}
+            detail="Per panel"
+            background={colors.redFill}
+          />
 
-          <InsetGroup header="Material list">
+          <InsetGroup header="Material list" style={styles.materials}>
             {result.materials.map((item) => (
               <ValueRow key={item.label} label={item.label} value={item.value} detail={item.note} />
             ))}
@@ -135,6 +142,17 @@ export default function GlassCalculatorScreen() {
         </View>
       )}
     </Screen>
+  );
+}
+
+/** Headline result on a tinted background; the title, not the color, says what the size is. */
+function SizeCard({ title, value, detail, background }: { title: string; value: string; detail: string; background: string }) {
+  return (
+    <View style={[styles.sizeCard, { backgroundColor: background }]} accessible accessibilityLabel={`${title}, ${value}, ${detail}`}>
+      <Text style={styles.sizeTitle}>{title}</Text>
+      <Text style={styles.sizeValue}>{value}</Text>
+      <Text style={type.subheadline}>{detail}</Text>
+    </View>
   );
 }
 
@@ -174,6 +192,10 @@ const styles = StyleSheet.create({
   error: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginHorizontal: 16, marginBottom: 22 },
   errorText: { ...type.footnote, flex: 1, color: colors.red },
   results: { marginTop: 32 },
+  sizeCard: { marginBottom: 12, paddingHorizontal: 16, paddingVertical: 14, borderRadius: radius.md },
+  sizeTitle: { ...type.subheadline, fontWeight: '600' },
+  sizeValue: { ...type.title2, marginVertical: 2, fontVariant: ['tabular-nums'] },
+  materials: { marginTop: 16 },
   exportRow: { flexDirection: 'row', gap: 12 },
   exportButton: { flex: 1 },
 });
