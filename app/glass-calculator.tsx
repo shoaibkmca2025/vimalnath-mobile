@@ -6,6 +6,7 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '@/components/Button';
 import { InsetGroup, ValueRow } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
+import { formatInchSize } from '@/lib/format';
 import { computeGlassPlan, parsePanelCount, type GlassPlanResult } from '@/lib/glass-calculator';
 import { buildGlassPlanHtml } from '@/lib/glass-plan-pdf';
 import { pdfFileName, savePdf, sharePdf } from '@/lib/pdf-export';
@@ -100,16 +101,18 @@ export default function GlassCalculatorScreen() {
       {result && (
         <View style={styles.results}>
           <SizeCard
-            title="Glass size"
-            value={`${result.glassWidth} × ${result.glassHeight} mm`}
-            detail={`Qty: ${result.glassQuantity}`}
-            background={colors.tintFill}
-          />
-          <SizeCard
             title="Cutting size"
             value={`${result.cuttingWidth} × ${result.cuttingHeight} mm`}
+            inches={formatInchSize(result.cuttingWidth, result.cuttingHeight)}
             detail="Per panel"
             background={colors.redFill}
+          />
+          <SizeCard
+            title="Glass size"
+            value={`${result.glassWidth} × ${result.glassHeight} mm`}
+            inches={formatInchSize(result.glassWidth, result.glassHeight)}
+            detail={`Qty: ${result.glassQuantity}`}
+            background={colors.tintFill}
           />
 
           <InsetGroup header="Material list" style={styles.materials}>
@@ -146,11 +149,12 @@ export default function GlassCalculatorScreen() {
 }
 
 /** Headline result on a tinted background; the title, not the color, says what the size is. */
-function SizeCard({ title, value, detail, background }: { title: string; value: string; detail: string; background: string }) {
+function SizeCard({ title, value, inches, detail, background }: { title: string; value: string; inches: string; detail: string; background: string }) {
   return (
-    <View style={[styles.sizeCard, { backgroundColor: background }]} accessible accessibilityLabel={`${title}, ${value}, ${detail}`}>
+    <View style={[styles.sizeCard, { backgroundColor: background }]} accessible accessibilityLabel={`${title}, ${value}, ${inches.replace(/″/g, ' inches')}, ${detail}`}>
       <Text style={styles.sizeTitle}>{title}</Text>
       <Text style={styles.sizeValue}>{value}</Text>
+      <Text style={styles.sizeInches}>{inches}</Text>
       <Text style={type.subheadline}>{detail}</Text>
     </View>
   );
@@ -194,7 +198,8 @@ const styles = StyleSheet.create({
   results: { marginTop: 32 },
   sizeCard: { marginBottom: 12, paddingHorizontal: 16, paddingVertical: 14, borderRadius: radius.md },
   sizeTitle: { ...type.subheadline, fontWeight: '600' },
-  sizeValue: { ...type.title2, marginVertical: 2, fontVariant: ['tabular-nums'] },
+  sizeValue: { ...type.title2, marginTop: 2, fontVariant: ['tabular-nums'] },
+  sizeInches: { ...type.headline, marginBottom: 2, color: colors.secondaryLabel, fontVariant: ['tabular-nums'] },
   materials: { marginTop: 16 },
   exportRow: { flexDirection: 'row', gap: 12 },
   exportButton: { flex: 1 },

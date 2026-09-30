@@ -1,3 +1,4 @@
+import { formatInchSize } from '@/lib/format';
 import { escapeHtml } from '@/lib/pdf-html';
 
 import type { GlassPlanResult } from './glass-calculator';
@@ -28,6 +29,7 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
           section { margin-bottom: 16px; padding: 16px 18px; border-radius: 14px; }
           section h2 { margin: 0 0 4px; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; }
           section .value { font-size: 23px; font-weight: 700; }
+          section .inches { margin-top: 2px; font-size: 15px; font-weight: 600; color: #5a6b8c; }
           section .note { margin-top: 4px; font-size: 12px; color: #5a6b8c; }
           .cutting { background: #e6eeff; }
           .cutting h2, .cutting .value { color: #0f3fb8; }
@@ -56,12 +58,14 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
         <section class="cutting">
           <h2>Cutting Size</h2>
           <div class="value">${result.cuttingWidth} × ${result.cuttingHeight} mm</div>
+          <div class="inches">${escapeHtml(formatInchSize(result.cuttingWidth, result.cuttingHeight))}</div>
           <div class="note">Per panel</div>
         </section>
 
         <section class="glass">
           <h2>Glass Size</h2>
           <div class="value">${result.glassWidth} × ${result.glassHeight} mm</div>
+          <div class="inches">${escapeHtml(formatInchSize(result.glassWidth, result.glassHeight))}</div>
           <div class="note">Qty ${result.glassQuantity}</div>
         </section>
 
