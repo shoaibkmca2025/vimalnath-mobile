@@ -1,6 +1,22 @@
 import type { ImageSourcePropType } from 'react-native';
 
-export type ShopCategoryId = 'hardware' | 'office' | 'folding' | 'telescopic' | 'synchro';
+/**
+ * Top shop categories, following the catalogue index. 'hardware' is only the extractor's raw bucket for
+ * the Master and Tavic catalogues; index.ts files each of those products under one of the finer ids.
+ */
+export type ShopCategoryId =
+  | 'hardware'
+  | 'glass'
+  | 'doorControl'
+  | 'shower'
+  | 'automatic'
+  | 'locks'
+  | 'wardrobe'
+  | 'doors'
+  | 'office'
+  | 'folding'
+  | 'telescopic'
+  | 'synchro';
 
 export type CatalogSource = 'master' | 'office' | 'tavic';
 

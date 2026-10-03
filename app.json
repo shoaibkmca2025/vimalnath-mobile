@@ -36,7 +36,8 @@
       ],
       "expo-web-browser",
       "expo-image",
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/with-app-font-weight"
     ]
   }
 }

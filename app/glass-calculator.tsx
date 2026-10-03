@@ -1,19 +1,44 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, type Href } from 'expo-router';
-import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { InsetGroup, ValueRow } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
-import { formatInchSize } from '@/lib/format';
-import { computeGlassPlan, parsePanelCount, type GlassPlanResult } from '@/lib/glass-calculator';
+import { SegmentedControl } from '@/components/SegmentedControl';
+import { Sheet } from '@/components/Sheet';
+import { formatFraction, formatInches, formatInchSize, formatMm, inchesToMm, mmToInchParts } from '@/lib/format';
+import { computeGlassPlan, getSystemRange, parsePanelCount, type GlassPlanResult } from '@/lib/glass-calculator';
 import { buildGlassPlanHtml } from '@/lib/glass-plan-pdf';
 import { pdfFileName, savePdf, sharePdf } from '@/lib/pdf-export';
 import { useAppUI } from '@/providers/AppUIProvider';
-import { colors, radius, type } from '@/theme';
+import { colors, radius, tabularNums, type } from '@/theme';
 
 const digitsOnly = (text: string) => text.replace(/[^0-9]/g, '');
+
+type Unit = 'mm' | 'in';
+/** An inch size as read off a tape: whole inches plus sixteenths. */
+type InchSize = { whole: string; sixteenths: number };
+type Dimension = 'width' | 'height';
+
+const UNIT_KEY = 'vimalnath:size-unit';
+const UNITS: { value: Unit; label: string }[] = [
+  { value: 'mm', label: 'Millimetres (mm)' },
+  { value: 'in', label: 'Inches (″)' },
+];
+const EMPTY_INCHES: InchSize = { whole: '', sixteenths: 0 };
+const SIXTEENTHS = Array.from({ length: 16 }, (_, index) => index);
+
+const toMm = (unit: Unit, mm: string, inches: InchSize) =>
+  unit === 'mm' ? Number(mm) : inches.whole || inches.sixteenths ? inchesToMm(Number(inches.whole) || 0, inches.sixteenths) : 0;
+
+const toInches = (mm: string): InchSize => {
+  if (!(Number(mm) > 0)) return EMPTY_INCHES;
+  const { whole, sixteenths } = mmToInchParts(Number(mm));
+  return { whole: String(whole), sixteenths };
+};
 
 export default function GlassCalculatorScreen() {
   const { showToast } = useAppUI();
@@ -21,18 +46,58 @@ export default function GlassCalculatorScreen() {
   const systemName = name ?? 'Sliding System';
   const panelCount = parsePanelCount(systemName);
 
+  const [unit, setUnit] = useState<Unit>('mm');
   const [width, setWidth] = useState('');
   const [height, setHeight] = useState('');
+  const [widthIn, setWidthIn] = useState<InchSize>(EMPTY_INCHES);
+  const [heightIn, setHeightIn] = useState<InchSize>(EMPTY_INCHES);
+  const [fractionFor, setFractionFor] = useState<Dimension | null>(null);
   const [result, setResult] = useState<GlassPlanResult | null>(null);
   const [sizeError, setSizeError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'share' | 'save' | null>(null);
 
-  const ready = Number(width) > 0 && Number(height) > 0;
+  // The last unit chosen is remembered for the next calculation.
+  useEffect(() => {
+    AsyncStorage.getItem(UNIT_KEY)
+      .then((saved) => saved === 'in' && setUnit('in'))
+      .catch(() => {});
+  }, []);
+
+  const widthMm = toMm(unit, width, widthIn);
+  const heightMm = toMm(unit, height, heightIn);
+  const ready = widthMm > 0 && heightMm > 0;
+
+  const changeUnit = (next: Unit) => {
+    if (next === unit) return;
+    // Carry over what was already typed, converted.
+    if (next === 'in') {
+      setWidthIn(toInches(width));
+      setHeightIn(toInches(height));
+    } else {
+      setWidth(widthMm > 0 ? String(widthMm) : '');
+      setHeight(heightMm > 0 ? String(heightMm) : '');
+    }
+    setUnit(next);
+    setSizeError(null);
+    AsyncStorage.setItem(UNIT_KEY, next).catch(() => {});
+  };
+
+  const setInches = (dimension: Dimension, change: Partial<InchSize>) => {
+    const update = (current: InchSize) => ({ ...current, ...change });
+    if (dimension === 'width') setWidthIn(update);
+    else setHeightIn(update);
+    setSizeError(null);
+  };
 
   const calculate = () => {
-    const outcome = computeGlassPlan(systemName, Number(width), Number(height), panelCount);
+    const outcome = computeGlassPlan(systemName, widthMm, heightMm, panelCount);
     if ('error' in outcome) {
-      setSizeError(outcome.error);
+      const range = getSystemRange(systemName);
+      setSizeError(
+        unit === 'in' && range
+          ? `Width must be ${formatInches(range.minWidth)} – ${formatInches(range.maxWidth)} and height ${formatInches(range.minHeight)} – ${formatInches(range.maxHeight)} for this system (${range.minWidth}–${range.maxWidth} × ${range.minHeight}–${range.maxHeight} mm).`
+          : outcome.error,
+      );
       setResult(null);
       return;
     }
@@ -68,25 +133,39 @@ export default function GlassCalculatorScreen() {
       back={{ fallback: (fallbackRoute ?? '/cutlist') as Href, label: backLabel ?? 'Cutlist' }}
       grouped
     >
-      <InsetGroup header="Opening size" style={sizeError ? styles.groupWithError : undefined}>
-        <DimensionRow
-          label="Width"
-          value={width}
-          onChangeText={(text) => {
-            setWidth(digitsOnly(text));
-            setSizeError(null);
-          }}
-          accessibilityLabel="Opening width in millimetres"
-        />
-        <DimensionRow
-          label="Height"
-          value={height}
-          onChangeText={(text) => {
-            setHeight(digitsOnly(text));
-            setSizeError(null);
-          }}
-          accessibilityLabel="Opening height in millimetres"
-        />
+      <SegmentedControl options={UNITS} value={unit} onChange={changeUnit} accessibilityLabel="Size unit" style={styles.units} />
+
+      <InsetGroup
+        header={unit === 'mm' ? 'Opening size in mm' : 'Opening size in inches'}
+        footer={ready ? (unit === 'mm' ? `= ${formatInchSize(widthMm, heightMm)}` : `= ${formatMm(widthMm)} × ${formatMm(heightMm)}`) : undefined}
+        style={sizeError ? styles.groupWithError : undefined}
+      >
+        {unit === 'mm' ? (
+          <DimensionRow
+            label="Width"
+            value={width}
+            onChangeText={(text) => {
+              setWidth(digitsOnly(text));
+              setSizeError(null);
+            }}
+            accessibilityLabel="Opening width in millimetres"
+          />
+        ) : (
+          <InchRow label="Width" value={widthIn} onChangeWhole={(whole) => setInches('width', { whole })} onPickFraction={() => setFractionFor('width')} />
+        )}
+        {unit === 'mm' ? (
+          <DimensionRow
+            label="Height"
+            value={height}
+            onChangeText={(text) => {
+              setHeight(digitsOnly(text));
+              setSizeError(null);
+            }}
+            accessibilityLabel="Opening height in millimetres"
+          />
+        ) : (
+          <InchRow label="Height" value={heightIn} onChangeWhole={(whole) => setInches('height', { whole })} onPickFraction={() => setFractionFor('height')} />
+        )}
       </InsetGroup>
 
       {sizeError && (
@@ -144,6 +223,16 @@ export default function GlassCalculatorScreen() {
           </View>
         </View>
       )}
+
+      <FractionSheet
+        dimension={fractionFor}
+        value={fractionFor === 'height' ? heightIn.sixteenths : widthIn.sixteenths}
+        onPick={(sixteenths) => {
+          if (fractionFor) setInches(fractionFor, { sixteenths });
+          setFractionFor(null);
+        }}
+        onClose={() => setFractionFor(null)}
+      />
     </Screen>
   );
 }
@@ -157,6 +246,65 @@ function SizeCard({ title, value, inches, detail, background }: { title: string;
       <Text style={styles.sizeInches}>{inches}</Text>
       <Text style={type.subheadline}>{detail}</Text>
     </View>
+  );
+}
+
+/** Inch entry as read off a tape: whole inches typed, the fraction picked in sixteenths. */
+function InchRow({ label, value, onChangeWhole, onPickFraction }: { label: string; value: InchSize; onChangeWhole: (whole: string) => void; onPickFraction: () => void }) {
+  const fraction = formatFraction(value.sixteenths);
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={type.body}>{label}</Text>
+      <TextInput
+        value={value.whole}
+        onChangeText={(text) => onChangeWhole(digitsOnly(text))}
+        placeholder={label === 'Height' ? 'e.g. 96' : 'e.g. 47'}
+        placeholderTextColor={colors.tertiaryLabel}
+        selectionColor={colors.tint}
+        keyboardType="number-pad"
+        returnKeyType="done"
+        accessibilityLabel={`Opening ${label.toLowerCase()}, whole inches`}
+        style={styles.fieldInput}
+      />
+      <Pressable
+        onPress={onPickFraction}
+        accessibilityRole="button"
+        accessibilityLabel={`${label} fraction, ${fraction ? `${fraction} inch` : 'none'}`}
+        accessibilityHint="Choose the fraction of an inch"
+        hitSlop={{ top: 6, bottom: 6 }}
+        style={({ pressed }) => [styles.fraction, pressed && styles.fractionPressed]}
+      >
+        <Text style={[styles.fractionText, !fraction && { color: colors.secondaryLabel }]}>{fraction || '0/16'}</Text>
+        <Ionicons name="chevron-down" size={14} color={colors.tint} />
+      </Pressable>
+      <Text style={styles.unit}>in</Text>
+    </View>
+  );
+}
+
+/** Tape-measure fractions, 0 to 15/16, in a 4 × 4 grid. */
+function FractionSheet({ dimension, value, onPick, onClose }: { dimension: Dimension | null; value: number; onPick: (sixteenths: number) => void; onClose: () => void }) {
+  return (
+    <Sheet visible={dimension !== null} title={dimension === 'height' ? 'Height fraction' : 'Width fraction'} onClose={onClose}>
+      <View style={styles.fractionGrid}>
+        {SIXTEENTHS.map((sixteenths) => {
+          const selected = sixteenths === value;
+          const label = formatFraction(sixteenths) || '0';
+          return (
+            <Pressable
+              key={sixteenths}
+              onPress={() => onPick(sixteenths)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={sixteenths ? `${label} inch` : 'No fraction'}
+              style={({ pressed }) => [styles.fractionCell, selected && styles.fractionCellSelected, pressed && styles.fractionPressed]}
+            >
+              <Text style={[styles.fractionCellText, selected && { color: colors.white }]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </Sheet>
   );
 }
 
@@ -189,17 +337,25 @@ function DimensionRow({ label, value, onChangeText, accessibilityLabel }: Dimens
 }
 
 const styles = StyleSheet.create({
+  units: { marginBottom: 20 },
   groupWithError: { marginBottom: 8 },
   fieldRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
   fieldInput: { ...type.body, flex: 1, minHeight: 46, padding: 0, textAlign: 'right' },
   unit: { ...type.body, color: colors.secondaryLabel },
+  fraction: { minWidth: 72, height: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingHorizontal: 10, backgroundColor: colors.tintFill, borderRadius: 17 },
+  fractionPressed: { opacity: 0.6 },
+  fractionText: { ...type.subheadline, fontWeight: '600', color: colors.tint },
+  fractionGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12 },
+  fractionCell: { width: '23%', height: 52, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderRadius: radius.md },
+  fractionCellSelected: { backgroundColor: colors.tint },
+  fractionCellText: { ...type.headline },
   error: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginHorizontal: 16, marginBottom: 22 },
   errorText: { ...type.footnote, flex: 1, color: colors.red },
   results: { marginTop: 32 },
   sizeCard: { marginBottom: 12, paddingHorizontal: 16, paddingVertical: 14, borderRadius: radius.md },
   sizeTitle: { ...type.subheadline, fontWeight: '600' },
-  sizeValue: { ...type.title2, marginTop: 2, fontVariant: ['tabular-nums'] },
-  sizeInches: { ...type.headline, marginBottom: 2, color: colors.secondaryLabel, fontVariant: ['tabular-nums'] },
+  sizeValue: { ...type.title2, marginTop: 2, ...tabularNums },
+  sizeInches: { ...type.headline, marginBottom: 2, color: colors.secondaryLabel, ...tabularNums },
   materials: { marginTop: 16 },
   exportRow: { flexDirection: 'row', gap: 12 },
   exportButton: { flex: 1 },

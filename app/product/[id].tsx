@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
@@ -14,7 +14,10 @@ import { TextField } from '@/components/TextField';
 import { catalogPages, findShopProduct, formatINR, productTitle } from '@/data/shop';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { useCart } from '@/providers/CartProvider';
-import { colors, radius, type } from '@/theme';
+import { colors, radius, tabularNums, type } from '@/theme';
+
+/** Option rows drawn in the first frame; the rest are below the fold and follow a frame later. */
+const FIRST_OPTIONS = 8;
 
 const SOURCE_NAMES = { master: 'Master Catalogue', office: 'Office Partition Price List', tavic: 'Tavic Wardrobe & Sliding Price List' };
 
@@ -27,6 +30,13 @@ export default function ProductScreen() {
   const [note, setNote] = useState('');
   const [qty, setQty] = useState(1);
   const [pageOpen, setPageOpen] = useState(false);
+  // A light first render lets the push animation start sooner; long option lists, specs and the
+  // catalogue page are added on the next frame.
+  const [complete, setComplete] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setComplete(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   if (!product) {
     return (
@@ -75,7 +85,7 @@ export default function ProductScreen() {
 
       {product.options && (
         <InsetGroup header="Option" style={styles.block}>
-          {product.options.map((item, index) => {
+          {(complete ? product.options : product.options.slice(0, FIRST_OPTIONS)).map((item, index) => {
             const selected = index === optionIndex;
             return (
               <Pressable
@@ -115,7 +125,7 @@ export default function ProductScreen() {
       </View>
       <Button label="View Cart" variant="plain" size="medium" onPress={() => router.push('/cart')} style={styles.viewCart} />
 
-      {product.specs && (
+      {complete && product.specs && (
         <InsetGroup header="Specifications" style={styles.block}>
           {product.specs.map((spec) => (
             <ValueRow key={spec.label} label={spec.label} value={spec.value} />
@@ -123,7 +133,7 @@ export default function ProductScreen() {
         </InsetGroup>
       )}
 
-      {pageImage && (
+      {complete && pageImage && (
         <InsetGroup header="Catalogue page" style={styles.block}>
           <Pressable
             onPress={() => setPageOpen(true)}
@@ -160,7 +170,7 @@ const styles = StyleSheet.create({
   section: { ...type.subheadline, marginTop: 16, color: colors.secondaryLabel },
   title: { ...type.title2, marginTop: 2 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8, marginTop: 8 },
-  price: { ...type.title2, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  price: { ...type.title2, fontWeight: '600', ...tabularNums },
   priceNote: { ...type.footnote, color: colors.secondaryLabel },
   infoBox: { flexDirection: 'row', gap: 8, marginTop: 12, padding: 12, backgroundColor: colors.card, borderRadius: radius.md },
   infoText: { ...type.footnote, flex: 1, color: colors.secondaryLabel },
@@ -168,7 +178,7 @@ const styles = StyleSheet.create({
   option: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingLeft: 16, paddingRight: 12 },
   rowPressed: { backgroundColor: colors.fill },
   optionCode: { ...type.footnote, marginTop: 1, color: colors.secondaryLabel },
-  optionPrice: { ...type.body, color: colors.secondaryLabel, fontVariant: ['tabular-nums'] },
+  optionPrice: { ...type.body, flexShrink: 0, color: colors.secondaryLabel, ...tabularNums },
   check: { width: 22, alignItems: 'center' },
   buyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 24 },
   addButton: { flex: 1 },

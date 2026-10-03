@@ -4,7 +4,7 @@ import { Button } from '@/components/Button';
 import { WasteStripes } from '@/components/WasteStripes';
 import type { BarPlan } from '@/lib/bar-optimizer';
 import { formatMm, formatNumber, pad2 } from '@/lib/format';
-import { colors, radius, type } from '@/theme';
+import { colors, radius, tabularNums, type } from '@/theme';
 
 type Props = {
   plan: BarPlan;
@@ -105,19 +105,19 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 },
   headerMeta: { ...type.footnote, marginTop: 2, color: colors.secondaryLabel },
   headline: { alignItems: 'flex-end' },
-  headlineNumber: { ...type.largeTitle, fontVariant: ['tabular-nums'] },
+  headlineNumber: { ...type.largeTitle, ...tabularNums },
   headlineLabel: { ...type.caption1, color: colors.secondaryLabel },
   stats: { flexDirection: 'row', gap: 8, marginBottom: 20 },
   // space-between keeps values on one baseline when a label wraps to two lines.
   stat: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 10, backgroundColor: colors.groupedBackground, borderRadius: radius.sm + 2 },
   statLabel: { ...type.caption1, marginBottom: 4, color: colors.secondaryLabel },
-  statValue: { ...type.headline, fontVariant: ['tabular-nums'] },
+  statValue: { ...type.headline, ...tabularNums },
   bars: { gap: 14 },
   barLabel: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  barLabelText: { ...type.caption1, color: colors.secondaryLabel, fontVariant: ['tabular-nums'] },
+  barLabelText: { ...type.caption1, color: colors.secondaryLabel, ...tabularNums },
   track: { flexDirection: 'row', height: 28, overflow: 'hidden', backgroundColor: colors.groupedBackground, borderRadius: 6 },
   piece: { minWidth: 2, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRightWidth: 2, borderRightColor: colors.card },
-  pieceText: { ...type.caption2, color: colors.white, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  pieceText: { ...type.caption2, color: colors.white, fontWeight: '600', ...tabularNums },
   waste: { flex: 1, overflow: 'hidden' },
   legend: { flexDirection: 'row', gap: 18, marginTop: 14 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },

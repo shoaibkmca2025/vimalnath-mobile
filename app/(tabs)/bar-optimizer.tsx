@@ -18,7 +18,7 @@ import { buildBarPlanHtml } from '@/lib/bar-plan-pdf';
 import { withTimeout } from '@/lib/pdf-html';
 import { formatMm, pad2 } from '@/lib/format';
 import { useAppUI } from '@/providers/AppUIProvider';
-import { colors, type } from '@/theme';
+import { colors, tabularNums, type } from '@/theme';
 
 type PieceRow = { id: number; value: string; qty: string };
 type StoredRow = { value: string; qty: string };
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
   columnQty: { width: 60, textAlign: 'center' },
   columnRemove: { width: 44 },
   pieceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingLeft: 16, paddingRight: 4 },
-  pieceIndex: { ...type.footnote, width: 24, color: colors.secondaryLabel, fontVariant: ['tabular-nums'] },
+  pieceIndex: { ...type.footnote, width: 24, color: colors.secondaryLabel, ...tabularNums },
   fieldInput: { ...type.body, height: 40, paddingVertical: 0, backgroundColor: colors.tertiaryFill, borderRadius: 8 },
   pieceInput: { flex: 1, minWidth: 0, paddingHorizontal: 12 },
   qtyInput: { width: 60, paddingHorizontal: 6, textAlign: 'center' },

@@ -8,7 +8,7 @@ import { Screen } from '@/components/Screen';
 import { formatINR } from '@/data/shop';
 import { formatOrderDate } from '@/lib/format';
 import { useOrders } from '@/providers/OrdersProvider';
-import { colors, type } from '@/theme';
+import { colors, tabularNums, type } from '@/theme';
 
 export default function OrdersScreen() {
   const { orders } = useOrders();
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: 1 },
   titleLine: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },
   shrink: { flexShrink: 1 },
-  total: { ...type.subheadline, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  total: { ...type.subheadline, fontWeight: '600', ...tabularNums },
   customer: { ...type.subheadline },
   meta: { ...type.footnote, color: colors.secondaryLabel },
 });

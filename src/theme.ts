@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet, type TextStyle } from 'react-native';
 
 /**
  * Semantic colors modeled on the iOS light palette (labels, fills, grouped backgrounds), with the
@@ -58,6 +58,13 @@ export const type = StyleSheet.create({
   caption1: { color: colors.label, fontSize: 12, lineHeight: 16 },
   caption2: { color: colors.label, fontSize: 11, lineHeight: 13 },
 });
+
+/**
+ * Equal-width digits for numbers that change or line up. iOS only: Android's Roboto digits are already
+ * equal width, and on Android the setting makes text draw wider than it measures, clipping the last
+ * digit (₹78,100 showed as ₹78,10).
+ */
+export const tabularNums: TextStyle = Platform.OS === 'ios' ? { fontVariant: ['tabular-nums'] } : {};
 
 export const space = {
   /** iPhone layout margin. */

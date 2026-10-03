@@ -52,6 +52,7 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
           <div class="meta">
             <div><b>Generated</b> ${escapeHtml(generatedOn)}</div>
             <div><b>Opening</b> ${result.openingWidth} × ${result.openingHeight} mm</div>
+            <div>${escapeHtml(formatInchSize(result.openingWidth, result.openingHeight))}</div>
           </div>
         </div>
 

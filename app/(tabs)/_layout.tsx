@@ -8,7 +8,7 @@ export default function TabsLayout() {
   return (
     <Tabs
       tabBar={(props) => <TabBar {...props} />}
-      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.background } }}
+      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.background }, freezeOnBlur: true }}
     >
       {primaryNav.map((item) => (
         <Tabs.Screen key={item.route} name={item.route} options={{ title: item.label }} />

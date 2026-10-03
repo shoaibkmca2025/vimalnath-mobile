@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
+import { useIsFocused } from 'expo-router';
+import { memo, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 
 import { useReduceMotion } from '@/hooks/useReduceMotion';
@@ -15,16 +16,19 @@ const SLIDES = [
 
 const AUTO_ADVANCE_MS = 5000;
 
-export function HeroCard() {
+/** Memoized: it has no props, so typing or picking a category on the shop never re-renders it. */
+export const HeroCard = memo(function HeroCard() {
   const [cardWidth, setCardWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   // Auto-advance stops for good once someone swipes, and never runs with Reduce Motion on.
   const [userControlled, setUserControlled] = useState(false);
   const reduceMotion = useReduceMotion();
+  // No auto-advance while another tab or screen is showing.
+  const focused = useIsFocused();
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
-    if (!cardWidth || reduceMotion || userControlled) return;
+    if (!cardWidth || reduceMotion || userControlled || !focused) return;
     const timer = setInterval(() => {
       setActiveIndex((current) => {
         const next = (current + 1) % SLIDES.length;
@@ -33,7 +37,7 @@ export function HeroCard() {
       });
     }, AUTO_ADVANCE_MS);
     return () => clearInterval(timer);
-  }, [cardWidth, reduceMotion, userControlled]);
+  }, [cardWidth, reduceMotion, userControlled, focused]);
 
   const onMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!cardWidth) return;
@@ -69,7 +73,7 @@ export function HeroCard() {
       </View>
     </View>
   );
-}
+});
 
 function Slide({ image, position }: { image: number; position: number }) {
   return (
