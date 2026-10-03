@@ -45,7 +45,7 @@ export function CatalogPageViewer({ visible, source, title, onClose }: Props) {
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 16 }} maximumZoomScale={4} minimumZoomScale={1}>
           <ScrollView horizontal scrollEnabled={zoomed} showsHorizontalScrollIndicator={zoomed}>
             <Pressable onPress={() => setZoomed((value) => !value)} accessibilityLabel="Catalogue page" accessibilityHint={zoomed ? 'Tap to zoom out' : 'Tap to zoom in'}>
-              {source && <Image source={source} style={{ width: pageWidth, height: pageWidth * PAGE_RATIO }} contentFit="contain" />}
+              {source && <Image cachePolicy="memory" source={source} style={{ width: pageWidth, height: pageWidth * PAGE_RATIO }} contentFit="contain" />}
             </Pressable>
           </ScrollView>
         </ScrollView>

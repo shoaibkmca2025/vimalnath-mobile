@@ -1,6 +1,6 @@
 """Drawn tiles for the Telescopic Sliding and Synchronized System configurations.
 
-Writes assets/images/telescopic/tile-01..08.jpg and assets/images/synchronized/tile-01..06.jpg.
+Writes assets/images/telescopic/config-01..08.jpg and assets/images/synchronized/config-01..06.jpg; run scripts/arrange_tiles.py after it.
 Flat illustration: navy frame, light blue glass with a diagonal glare, handles and an F on each
 fixed panel. One panel per sliding or fixed leaf, so "2+1" draws 3 panels. Proportions are measured
 from the approved reference art (a 410 x 290 px frame) and scaled to fill the square tile.
@@ -117,6 +117,6 @@ def draw_tile(panels, fixed_panels, handles):
 for system, configurations in SYSTEMS.items():
     for number, configuration in enumerate(configurations, start=1):
         panels, fixed_panels, handles = layout(system, configuration)
-        path = os.path.join(ROOT, 'assets', 'images', system, f'tile-{number:02d}.jpg')
+        path = os.path.join(ROOT, 'assets', 'images', system, f'config-{number:02d}.jpg')
         draw_tile(panels, fixed_panels, handles).save(path, quality=92, optimize=True)
         print('ok', system, os.path.basename(path), configuration, panels, 'panels')

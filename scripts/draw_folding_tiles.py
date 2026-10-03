@@ -95,6 +95,6 @@ def draw_tile(doors):
 
 if __name__ == "__main__":
     for doors in range(2, 11):
-        path = f"assets/images/folding/tile-{doors:02d}.jpg"
+        path = f"assets/images/folding/config-{doors:02d}.jpg"
         draw_tile(doors).save(path, quality=92, subsampling=0)
         print(path)

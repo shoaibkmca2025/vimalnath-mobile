@@ -34,7 +34,7 @@ export function ConfigurationGridScreen({ title, intro, backLabel, backRoute, ow
             accessibilityLabel={`${configuration.name}, configuration ${index + 1}`}
             style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
           >
-            <Image source={configuration.image} style={styles.tileImage} contentFit="cover" transition={120} />
+            <Image cachePolicy="memory" source={configuration.image} style={styles.tileImage} contentFit="cover" transition={120} />
             <View style={styles.tileCopy}>
               <Text style={styles.tileName} numberOfLines={2}>
                 {configuration.name}

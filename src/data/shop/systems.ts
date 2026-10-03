@@ -33,22 +33,22 @@ const systemSpecs = (type: string, weight: string) => [
 const NORMAL_HD_WEIGHT = '60 kg (Normal), 80 kg (HD)';
 
 const telescopicImages = [
-  require('../../../assets/images/telescopic/tile-01.jpg'),
-  require('../../../assets/images/telescopic/tile-02.jpg'),
-  require('../../../assets/images/telescopic/tile-03.jpg'),
-  require('../../../assets/images/telescopic/tile-04.jpg'),
-  require('../../../assets/images/telescopic/tile-05.jpg'),
-  require('../../../assets/images/telescopic/tile-06.jpg'),
-  require('../../../assets/images/telescopic/tile-07.jpg'),
-  require('../../../assets/images/telescopic/tile-08.jpg'),
+  require('../../../assets/images/telescopic/config-01.jpg'),
+  require('../../../assets/images/telescopic/config-02.jpg'),
+  require('../../../assets/images/telescopic/config-03.jpg'),
+  require('../../../assets/images/telescopic/config-04.jpg'),
+  require('../../../assets/images/telescopic/config-05.jpg'),
+  require('../../../assets/images/telescopic/config-06.jpg'),
+  require('../../../assets/images/telescopic/config-07.jpg'),
+  require('../../../assets/images/telescopic/config-08.jpg'),
 ];
 const synchroImages = [
-  require('../../../assets/images/synchronized/tile-01.jpg'),
-  require('../../../assets/images/synchronized/tile-02.jpg'),
-  require('../../../assets/images/synchronized/tile-03.jpg'),
-  require('../../../assets/images/synchronized/tile-04.jpg'),
-  require('../../../assets/images/synchronized/tile-05.jpg'),
-  require('../../../assets/images/synchronized/tile-06.jpg'),
+  require('../../../assets/images/synchronized/config-01.jpg'),
+  require('../../../assets/images/synchronized/config-02.jpg'),
+  require('../../../assets/images/synchronized/config-03.jpg'),
+  require('../../../assets/images/synchronized/config-04.jpg'),
+  require('../../../assets/images/synchronized/config-05.jpg'),
+  require('../../../assets/images/synchronized/config-06.jpg'),
 ];
 
 const telescopic = (

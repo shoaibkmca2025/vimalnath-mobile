@@ -93,7 +93,7 @@ function CartLineRow({ line, onChange }: { line: CartLine; onChange: (qty: numbe
         style={({ pressed }) => [styles.lineMedia, pressed && { opacity: 0.7 }]}
       >
         {product.image ? (
-          <Image source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" />
+          <Image cachePolicy="memory" source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" />
         ) : (
           <Ionicons name="cube-outline" size={24} color={colors.tertiaryLabel} />
         )}

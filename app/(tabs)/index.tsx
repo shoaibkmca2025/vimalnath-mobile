@@ -107,7 +107,7 @@ export default function ShopScreen() {
                   style={({ pressed }) => [styles.categoryTile, pressed && styles.pressed]}
                 >
                   <View style={[styles.categoryImageFrame, selected && styles.categoryImageSelected]}>
-                    <Image source={item.image} style={[styles.categoryImage, item.fit === 'contain' && styles.categoryImageProduct]} contentFit={item.fit} />
+                    <Image cachePolicy="memory" source={item.image} style={[styles.categoryImage, item.fit === 'contain' && styles.categoryImageProduct]} contentFit={item.fit} />
                   </View>
                   <Text style={[styles.categoryName, selected && { color: colors.tint }]} numberOfLines={2}>
                     {item.label}

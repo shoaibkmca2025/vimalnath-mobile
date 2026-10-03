@@ -1,8 +1,13 @@
+import type { LengthUnit } from '@/lib/length-units';
+
+/** Lengths are whole millimetres, or whole sixteenths of an inch when the plan's unit is inches. */
 export type Piece = { length: number; qty: number };
 export type BarStock = { length: number; qty?: number };
 export type Bar = { length: number; used: number; pieces: number[] };
 
 export type BarPlan = {
+  /** Missing on plans saved before inches were supported, which are all millimetres. */
+  unit?: LengthUnit;
   bars: Bar[];
   kerf: number;
   totalMaterial: number;
@@ -130,10 +135,11 @@ function packInto(lengths: number[], index: number, bars: Bar[], kerf: number): 
   return false;
 }
 
-export function summarizePlan(bars: Bar[], kerf: number): BarPlan {
+export function summarizePlan(bars: Bar[], kerf: number, unit: LengthUnit = 'mm'): BarPlan {
   const totalMaterial = bars.reduce((sum, bar) => sum + bar.length, 0);
   const used = bars.reduce((sum, bar) => sum + bar.used, 0);
   return {
+    unit,
     bars,
     kerf,
     totalMaterial,
@@ -143,9 +149,9 @@ export function summarizePlan(bars: Bar[], kerf: number): BarPlan {
   };
 }
 
-export type PlanRequest = { pieces: Piece[]; stock: BarStock[]; kerf: number };
+export type PlanRequest = { pieces: Piece[]; stock: BarStock[]; kerf: number; unit?: LengthUnit };
 
-export function planBars({ pieces, stock, kerf }: PlanRequest): { plan: BarPlan } | { error: string } {
+export function planBars({ pieces, stock, kerf, unit = 'mm' }: PlanRequest): { plan: BarPlan } | { error: string } {
   const validPieces = pieces.filter((piece) => piece.length > 0 && piece.qty > 0);
   const validStock = stock.filter((entry) => entry.length > 0 && (entry.qty === undefined || entry.qty > 0));
   if (!validPieces.length) return { error: 'Add at least one piece length first.' };
@@ -154,7 +160,7 @@ export function planBars({ pieces, stock, kerf }: PlanRequest): { plan: BarPlan 
   if (validPieces.some((piece) => piece.length > longestStock)) return { error: 'A piece cannot be longer than the longest standard bar.' };
   try {
     const bars = calculateBars(validPieces, validStock, kerf);
-    return { plan: summarizePlan(bars, kerf) };
+    return { plan: summarizePlan(bars, kerf, unit) };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Could not fit the pieces into the available stock.' };
   }

@@ -56,7 +56,7 @@ def arrange(path):
 
 if __name__ == "__main__":
     for folder in ("telescopic", "synchronized", "folding"):
-        for path in sorted(glob.glob(f"assets/images/{folder}/tile-*.jpg")):
+        for path in sorted(glob.glob(f"assets/images/{folder}/config-*.jpg")):
             if Image.open(path).size != (SIZE, SIZE):
                 continue  # unused photo tiles
             print(path, arrange(path))

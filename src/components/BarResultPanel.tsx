@@ -3,7 +3,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Button';
 import { WasteStripes } from '@/components/WasteStripes';
 import type { BarPlan } from '@/lib/bar-optimizer';
-import { formatMm, formatNumber, pad2 } from '@/lib/format';
+import { pad2 } from '@/lib/format';
+import { formatLength, formatLengthValue, unitWord } from '@/lib/length-units';
 import { colors, radius, tabularNums, type } from '@/theme';
 
 type Props = {
@@ -16,9 +17,10 @@ type Props = {
 const PIECE_COLORS = [colors.tint, '#1a3fa8'];
 
 export function BarResultPanel({ plan, onShare, onExport }: Props) {
+  const length = (value: number) => formatLength(value, plan.unit);
   const stats = [
-    { label: 'Total material', value: formatMm(plan.totalMaterial) },
-    { label: 'Waste', value: formatMm(plan.waste) },
+    { label: 'Total material', value: length(plan.totalMaterial) },
+    { label: 'Waste', value: length(plan.waste) },
     { label: 'Utilization', value: `${plan.utilization.toFixed(1)}%` },
   ];
 
@@ -30,7 +32,7 @@ export function BarResultPanel({ plan, onShare, onExport }: Props) {
             Bar Plan
           </Text>
           <Text style={styles.headerMeta}>
-            {plan.cuts} cuts · {plan.kerf} mm loss per cut
+            {plan.cuts} cuts · {length(plan.kerf)} loss per cut
           </Text>
         </View>
         <View style={styles.headline} accessible accessibilityLabel={`${plan.bars.length} ${plan.bars.length === 1 ? 'bar' : 'bars'} required`}>
@@ -52,11 +54,11 @@ export function BarResultPanel({ plan, onShare, onExport }: Props) {
 
       <View style={styles.bars}>
         {plan.bars.map((bar, barIndex) => (
-          <View key={barIndex} accessible accessibilityLabel={`Bar ${barIndex + 1}: pieces ${bar.pieces.join(', ')} millimetres, ${formatMm(bar.used)} used of ${formatMm(bar.length)}`}>
+          <View key={barIndex} accessible accessibilityLabel={`Bar ${barIndex + 1}: pieces ${bar.pieces.map((piece) => formatLengthValue(piece, plan.unit)).join(', ')} ${unitWord(plan.unit)}, ${length(bar.used)} used of ${length(bar.length)}`}>
             <View style={styles.barLabel}>
               <Text style={styles.barLabelText}>Bar {pad2(barIndex + 1)}</Text>
               <Text style={styles.barLabelText}>
-                {formatNumber(bar.used)} / {formatMm(bar.length)}
+                {formatLengthValue(bar.used, plan.unit)} / {length(bar.length)}
               </Text>
             </View>
             <View style={styles.track}>
@@ -66,7 +68,7 @@ export function BarResultPanel({ plan, onShare, onExport }: Props) {
                   style={[styles.piece, { width: `${(piece / bar.length) * 100}%`, backgroundColor: PIECE_COLORS[pieceIndex % 2] }]}
                 >
                   <Text style={styles.pieceText} numberOfLines={1} maxFontSizeMultiplier={1}>
-                    {piece}
+                    {formatLengthValue(piece, plan.unit)}
                   </Text>
                 </View>
               ))}

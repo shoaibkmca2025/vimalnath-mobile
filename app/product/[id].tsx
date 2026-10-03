@@ -60,7 +60,7 @@ export default function ProductScreen() {
     <Screen title={product.code} titleDisplay="inline" back={{ fallback: '/' }} grouped>
       <View style={styles.media}>
         {product.image ? (
-          <Image source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" transition={150} />
+          <Image cachePolicy="memory" source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" transition={150} />
         ) : (
           <Ionicons name="cube-outline" size={56} color={colors.tertiaryLabel} />
         )}
@@ -141,7 +141,7 @@ export default function ProductScreen() {
             accessibilityLabel={`Open ${pageTitle}`}
             style={({ pressed }) => [styles.pageRow, pressed && styles.rowPressed]}
           >
-            <Image source={pageImage} style={styles.pageThumb} contentFit="cover" contentPosition="top" />
+            <Image cachePolicy="memory" source={pageImage} style={styles.pageThumb} contentFit="cover" contentPosition="top" />
             <View style={{ flex: 1 }}>
               <Text style={type.subheadline}>{pageTitle}</Text>
               <Text style={styles.pageHint}>All sizes, finishes and MRP</Text>

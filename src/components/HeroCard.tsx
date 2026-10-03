@@ -82,7 +82,7 @@ function Slide({ image, position }: { image: number; position: number }) {
       accessible
       accessibilityLabel={`New collection 2026. Systems that move with you. Sliding, folding and slim partition solutions. Slide ${position} of ${SLIDES.length}.`}
     >
-      <Image source={image} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+      <Image cachePolicy="memory" source={image} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
       <LinearGradient
         colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.62)']}
         locations={[0, 0.45, 1]}

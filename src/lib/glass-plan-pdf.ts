@@ -18,7 +18,7 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
       <head>
         <meta charset="utf-8" />
         <style>
-          @page { margin: 28px; }
+          @page { size: A4; margin: 28px; }
           * { box-sizing: border-box; }
           body { margin: 0; font-family: -apple-system, Helvetica, Arial, sans-serif; color: #0b1f4d; }
           .header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 2px solid #0b1f4d; padding-bottom: 14px; margin-bottom: 22px; }

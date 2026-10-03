@@ -9,20 +9,27 @@ import { Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, Tex
 import { BarResultPanel } from '@/components/BarResultPanel';
 import { Button } from '@/components/Button';
 import { ExportSiteNameSheet } from '@/components/ExportSiteNameSheet';
+import { FractionButton, FractionSheet } from '@/components/FractionPicker';
 import { InsetGroup } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
 import { SectionPickerSheet } from '@/components/SectionPickerSheet';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { sections, type Section } from '@/data/sections';
 import { planBars, type BarPlan } from '@/lib/bar-optimizer';
 import { buildBarPlanHtml } from '@/lib/bar-plan-pdf';
 import { withTimeout } from '@/lib/pdf-html';
-import { formatMm, pad2 } from '@/lib/format';
+import { inchesToMm, mmToInchParts, pad2 } from '@/lib/format';
+import { formatLength, formatLengthValue, SIZE_UNIT_KEY, UNIT_OPTIONS, type LengthUnit } from '@/lib/length-units';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, tabularNums, type } from '@/theme';
 
-type PieceRow = { id: number; value: string; qty: string };
-type StoredRow = { value: string; qty: string };
-type StoredResult = { sectionCode: string; barLengths: StoredRow[]; kerf: string; pieces: StoredRow[]; plan: BarPlan };
+/** `value` is millimetres, or whole inches with `frac` sixteenths on top in inch mode. */
+type PieceRow = { id: number; value: string; frac: number; qty: string };
+type StoredRow = { value: string; frac?: number; qty: string };
+/** Cutting loss: decimal millimetres in `mm`, sixteenths of an inch in `frac`. */
+type Kerf = { mm: string; frac: number };
+type StoredResult = { sectionCode: string; unit?: LengthUnit; barLengths: StoredRow[]; kerf: string; kerfFrac?: number; pieces: StoredRow[]; plan: BarPlan };
+type FractionTarget = { list: 'bar' | 'piece'; id: number } | { list: 'kerf' };
 
 const DEFAULT_PIECES: { length: number | ''; qty: number }[] = [
   { length: 2450, qty: 2 },
@@ -40,17 +47,39 @@ const LAST_RESULT_KEY = 'vimalnath:bar-optimizer:last-result';
 const digitsOnly = (text: string) => text.replace(/[^0-9]/g, '');
 const decimalOnly = (text: string) => text.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
 
+/** A row's length in the plan's unit: millimetres, or sixteenths of an inch. */
+const rowLength = (row: PieceRow, unit: LengthUnit) => (unit === 'in' ? (Number(row.value) || 0) * 16 + row.frac : Number(row.value));
+const kerfLength = (kerf: Kerf, unit: LengthUnit) => (unit === 'in' ? kerf.frac : Number(kerf.mm) || 0);
+
+/** Re-expresses what was typed in the other unit, so switching never loses an entry. */
+function convertRow<T extends PieceRow>(row: T, to: LengthUnit): T {
+  if (to === 'in') {
+    if (!(Number(row.value) > 0)) return { ...row, value: '', frac: 0 };
+    const { whole, sixteenths } = mmToInchParts(Number(row.value));
+    return { ...row, value: whole ? String(whole) : '', frac: sixteenths };
+  }
+  const mm = inchesToMm(Number(row.value) || 0, row.frac);
+  return { ...row, value: mm > 0 ? String(mm) : '', frac: 0 };
+}
+
+function convertKerf(kerf: Kerf, to: LengthUnit): Kerf {
+  if (to === 'in') return { mm: kerf.mm, frac: Math.min(15, Math.round(((Number(kerf.mm) || 0) / 25.4) * 16)) };
+  return { mm: String(Math.round((kerf.frac / 16) * 25.4 * 10) / 10), frac: 0 };
+}
+
 export default function BarOptimizerScreen() {
   const { showToast } = useAppUI();
   const scrollRef = useRef<ScrollView>(null);
   const nextId = useRef(0);
-  const makeRow = (value = '', qty = ''): PieceRow => ({ id: nextId.current++, value, qty });
+  const makeRow = (value = '', qty = '', frac = 0): PieceRow => ({ id: nextId.current++, value, frac, qty });
 
+  const [unit, setUnit] = useState<LengthUnit>('mm');
   const [section, setSection] = useState<Section>(sections[0]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [barLengths, setBarLengths] = useState<PieceRow[]>(() => [makeRow(String(sections[0].bar))]);
   const [barFocusRowId, setBarFocusRowId] = useState<number | null>(null);
-  const [kerf, setKerf] = useState('0');
+  const [kerf, setKerf] = useState<Kerf>({ mm: '0', frac: 0 });
+  const [fractionFor, setFractionFor] = useState<FractionTarget | null>(null);
   const [pieces, setPieces] = useState<PieceRow[]>(() => DEFAULT_PIECES.map((piece) => makeRow(piece.length === '' ? '' : String(piece.length), String(piece.qty))));
   const [focusRowId, setFocusRowId] = useState<number | null>(null);
   const [plan, setPlan] = useState<BarPlan | null>(null);
@@ -71,23 +100,64 @@ export default function BarOptimizerScreen() {
 
   // Restore the last calculated result (and the inputs that produced it) so it stays on screen
   // until the next "Calculate" tap, even after the app is closed and reopened.
+  // The inputs come back in the unit they were typed in, then switch to the unit last chosen anywhere
+  // in the app (the result keeps its own unit).
   useEffect(() => {
     (async () => {
+      let inputsUnit: LengthUnit = 'mm';
       try {
         const raw = await AsyncStorage.getItem(LAST_RESULT_KEY);
-        if (!raw) return;
-        const saved: StoredResult = JSON.parse(raw);
-        const savedSection = sections.find((item) => item.code === saved.sectionCode);
-        if (savedSection) setSection(savedSection);
-        if (saved.barLengths?.length) setBarLengths(saved.barLengths.map((row) => makeRow(row.value, row.qty)));
-        if (saved.kerf !== undefined) setKerf(saved.kerf);
-        if (saved.pieces?.length) setPieces(saved.pieces.map((row) => makeRow(row.value, row.qty)));
-        if (saved.plan) setPlan(saved.plan);
+        if (raw) {
+          const saved: StoredResult = JSON.parse(raw);
+          inputsUnit = saved.unit ?? 'mm';
+          const savedSection = sections.find((item) => item.code === saved.sectionCode);
+          if (savedSection) setSection(savedSection);
+          if (saved.barLengths?.length) setBarLengths(saved.barLengths.map((row) => makeRow(row.value, row.qty, row.frac)));
+          if (saved.kerf !== undefined) setKerf({ mm: saved.kerf, frac: saved.kerfFrac ?? 0 });
+          if (saved.pieces?.length) setPieces(saved.pieces.map((row) => makeRow(row.value, row.qty, row.frac)));
+          if (saved.plan) setPlan(saved.plan);
+        }
       } catch {
         // Corrupt or missing cache — keep the defaults.
       }
+      const preferred = await AsyncStorage.getItem(SIZE_UNIT_KEY).catch(() => null);
+      const target: LengthUnit = preferred === 'in' || preferred === 'mm' ? preferred : inputsUnit;
+      setUnit(target);
+      if (target !== inputsUnit) convertInputs(target);
     })();
   }, []);
+
+  const convertInputs = (to: LengthUnit) => {
+    setBarLengths((rows) => rows.map((row) => convertRow(row, to)));
+    setPieces((rows) => rows.map((row) => convertRow(row, to)));
+    setKerf((current) => convertKerf(current, to));
+  };
+
+  const changeUnit = (next: LengthUnit) => {
+    if (next === unit) return;
+    convertInputs(next);
+    setUnit(next);
+    AsyncStorage.setItem(SIZE_UNIT_KEY, next).catch(() => {});
+  };
+
+  const updateRow = (list: 'bar' | 'piece', id: number, change: Partial<PieceRow>) => {
+    const update = (rows: PieceRow[]) => rows.map((item) => (item.id === id ? { ...item, ...change } : item));
+    if (list === 'bar') setBarLengths(update);
+    else setPieces(update);
+  };
+
+  const pickedFraction = (() => {
+    if (!fractionFor) return 0;
+    if (fractionFor.list === 'kerf') return kerf.frac;
+    const rows = fractionFor.list === 'bar' ? barLengths : pieces;
+    return rows.find((row) => row.id === fractionFor.id)?.frac ?? 0;
+  })();
+
+  const pickFraction = (sixteenths: number) => {
+    if (fractionFor?.list === 'kerf') setKerf((current) => ({ ...current, frac: sixteenths }));
+    else if (fractionFor) updateRow(fractionFor.list, fractionFor.id, { frac: sixteenths });
+    setFractionFor(null);
+  };
 
   const addPiece = () => {
     const row = makeRow('', '2');
@@ -104,9 +174,10 @@ export default function BarOptimizerScreen() {
   const calculate = () => {
     Keyboard.dismiss();
     const result = planBars({
-      pieces: pieces.map((row) => ({ length: Number(row.value), qty: row.qty ? Number(row.qty) : 2 })),
-      stock: barLengths.map((row) => ({ length: Number(row.value), qty: row.qty ? Number(row.qty) : undefined })),
-      kerf: Number(kerf) || 0,
+      pieces: pieces.map((row) => ({ length: rowLength(row, unit), qty: row.qty ? Number(row.qty) : 2 })),
+      stock: barLengths.map((row) => ({ length: rowLength(row, unit), qty: row.qty ? Number(row.qty) : undefined })),
+      kerf: kerfLength(kerf, unit),
+      unit,
     });
     if ('error' in result) {
       showToast(result.error);
@@ -117,9 +188,11 @@ export default function BarOptimizerScreen() {
 
     const snapshot: StoredResult = {
       sectionCode: section.code,
-      barLengths: barLengths.map((row) => ({ value: row.value, qty: row.qty })),
-      kerf,
-      pieces: pieces.map((row) => ({ value: row.value, qty: row.qty })),
+      unit,
+      barLengths: barLengths.map((row) => ({ value: row.value, frac: row.frac, qty: row.qty })),
+      kerf: kerf.mm,
+      kerfFrac: kerf.frac,
+      pieces: pieces.map((row) => ({ value: row.value, frac: row.frac, qty: row.qty })),
       plan: result.plan,
     };
     AsyncStorage.setItem(LAST_RESULT_KEY, JSON.stringify(snapshot)).catch(() => {});
@@ -128,12 +201,16 @@ export default function BarOptimizerScreen() {
   const sharePlan = async () => {
     if (!plan) return;
     const stockLengths = Array.from(new Set(plan.bars.map((bar) => bar.length))).sort((a, b) => b - a);
+    const length = (value: number) => formatLength(value, plan.unit);
     const message = [
       `Vimalnath bar plan · ${section.code} ${section.name}`,
-      `Standard bar${stockLengths.length > 1 ? 's' : ''} ${stockLengths.map(formatMm).join(', ')} · ${plan.kerf} mm cutting loss`,
-      `${plan.bars.length} bars required · ${formatMm(plan.waste)} waste · ${plan.utilization.toFixed(1)}% utilization`,
+      `Standard bar${stockLengths.length > 1 ? 's' : ''} ${stockLengths.map(length).join(', ')} · ${length(plan.kerf)} cutting loss`,
+      `${plan.bars.length} bars required · ${length(plan.waste)} waste · ${plan.utilization.toFixed(1)}% utilization`,
       '',
-      ...plan.bars.map((bar, index) => `Bar ${pad2(index + 1)}: ${bar.pieces.join(' + ')} (${formatMm(bar.used)} used of ${formatMm(bar.length)})`),
+      ...plan.bars.map(
+        (bar, index) =>
+          `Bar ${pad2(index + 1)}: ${bar.pieces.map((piece) => formatLengthValue(piece, plan.unit)).join(' + ')} (${length(bar.used)} used of ${length(bar.length)})`,
+      ),
     ].join('\n');
     try {
       await Share.share({ title: 'Bar plan', message });
@@ -170,6 +247,8 @@ export default function BarOptimizerScreen() {
 
   return (
     <Screen title="Bar Optimizer" subtitle="Plan cuts from standard bars · works offline" grouped scrollRef={scrollRef}>
+      <SegmentedControl options={UNIT_OPTIONS} value={unit} onChange={changeUnit} accessibilityLabel="Length unit" style={styles.units} />
+
       <InsetGroup header="Section">
         <Pressable
           onPress={() => setPickerOpen(true)}
@@ -192,21 +271,24 @@ export default function BarOptimizerScreen() {
       </InsetGroup>
 
       <InsetGroup header="Standard bar lengths" footer="Leave quantity blank for unlimited stock.">
-        {barLengths.length > 0 && <ColumnHeader />}
+        {barLengths.length > 0 && <ColumnHeader unit={unit} />}
         {barLengths.map((row, index) => (
           <RowInput
             key={row.id}
             index={index}
+            unit={unit}
             value={row.value}
+            frac={row.frac}
             qty={row.qty}
             autoFocus={row.id === barFocusRowId}
-            placeholder="Bar length"
+            placeholder={unit === 'in' ? 'Inches' : 'Bar length'}
             qtyPlaceholder="Any"
-            accessibilityLabel={`Standard bar ${index + 1} length in millimetres`}
+            accessibilityLabel={`Standard bar ${index + 1} length in ${unit === 'in' ? 'whole inches' : 'millimetres'}`}
             qtyAccessibilityLabel={`Standard bar ${index + 1} quantity in stock, blank for unlimited`}
             removeAccessibilityLabel={`Remove standard bar ${index + 1}`}
-            onChangeText={(text) => setBarLengths((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
-            onChangeQty={(text) => setBarLengths((rows) => rows.map((item) => (item.id === row.id ? { ...item, qty: digitsOnly(text) } : item)))}
+            onChangeText={(text) => updateRow('bar', row.id, { value: digitsOnly(text) })}
+            onPickFraction={() => setFractionFor({ list: 'bar', id: row.id })}
+            onChangeQty={(text) => updateRow('bar', row.id, { qty: digitsOnly(text) })}
             onRemove={() => setBarLengths((rows) => rows.filter((item) => item.id !== row.id))}
           />
         ))}
@@ -216,36 +298,45 @@ export default function BarOptimizerScreen() {
       <InsetGroup header="Cutting loss" footer="Material lost to the saw blade on each cut.">
         <View style={styles.kerfRow}>
           <Text style={type.body}>Per cut</Text>
-          <TextInput
-            value={kerf}
-            onChangeText={(text) => setKerf(decimalOnly(text))}
-            keyboardType="decimal-pad"
-            returnKeyType="done"
-            selectTextOnFocus
-            selectionColor={colors.tint}
-            accessibilityLabel="Cutting loss per cut in millimetres"
-            style={styles.kerfInput}
-          />
-          <Text style={styles.unit}>mm</Text>
+          {unit === 'mm' ? (
+            <TextInput
+              value={kerf.mm}
+              onChangeText={(text) => setKerf((current) => ({ ...current, mm: decimalOnly(text) }))}
+              keyboardType="decimal-pad"
+              returnKeyType="done"
+              selectTextOnFocus
+              selectionColor={colors.tint}
+              accessibilityLabel="Cutting loss per cut in millimetres"
+              style={styles.kerfInput}
+            />
+          ) : (
+            <View style={styles.kerfFraction}>
+              <FractionButton sixteenths={kerf.frac} onPress={() => setFractionFor({ list: 'kerf' })} accessibilityLabel="Cutting loss per cut" />
+            </View>
+          )}
+          <Text style={styles.unit}>{unit === 'in' ? 'in' : 'mm'}</Text>
         </View>
       </InsetGroup>
 
       <InsetGroup header="Required pieces">
-        {pieces.length > 0 && <ColumnHeader />}
+        {pieces.length > 0 && <ColumnHeader unit={unit} />}
         {pieces.map((row, index) => (
           <RowInput
             key={row.id}
             index={index}
+            unit={unit}
             value={row.value}
+            frac={row.frac}
             qty={row.qty}
             autoFocus={row.id === focusRowId}
-            placeholder="Piece length"
+            placeholder={unit === 'in' ? 'Inches' : 'Piece length'}
             qtyPlaceholder="2"
-            accessibilityLabel={`Piece ${index + 1} length in millimetres`}
+            accessibilityLabel={`Piece ${index + 1} length in ${unit === 'in' ? 'whole inches' : 'millimetres'}`}
             qtyAccessibilityLabel={`Piece ${index + 1} quantity needed`}
             removeAccessibilityLabel={`Remove piece ${index + 1}`}
-            onChangeText={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, value: digitsOnly(text) } : item)))}
-            onChangeQty={(text) => setPieces((rows) => rows.map((item) => (item.id === row.id ? { ...item, qty: digitsOnly(text) } : item)))}
+            onChangeText={(text) => updateRow('piece', row.id, { value: digitsOnly(text) })}
+            onPickFraction={() => setFractionFor({ list: 'piece', id: row.id })}
+            onChangeQty={(text) => updateRow('piece', row.id, { qty: digitsOnly(text) })}
             onValueSubmit={index === pieces.length - 1 ? addPiece : undefined}
             onQtySubmit={index === pieces.length - 1 ? addPiece : undefined}
             onRemove={() => setPieces((rows) => rows.filter((item) => item.id !== row.id))}
@@ -273,9 +364,17 @@ export default function BarOptimizerScreen() {
         onClose={() => setPickerOpen(false)}
         onSelect={(next) => {
           setSection(next);
-          setBarLengths([makeRow(String(next.bar))]);
+          setBarLengths([convertRow(makeRow(String(next.bar)), unit)]);
           setPickerOpen(false);
         }}
+      />
+
+      <FractionSheet
+        visible={fractionFor !== null}
+        title={fractionFor?.list === 'kerf' ? 'Cutting loss' : fractionFor?.list === 'bar' ? 'Bar length fraction' : 'Piece length fraction'}
+        sixteenths={pickedFraction}
+        onPick={pickFraction}
+        onClose={() => setFractionFor(null)}
       />
 
       <ExportSiteNameSheet visible={exportOpen} busy={exporting} onClose={() => setExportOpen(false)} onSubmit={exportPdf} />
@@ -283,10 +382,10 @@ export default function BarOptimizerScreen() {
   );
 }
 
-function ColumnHeader() {
+function ColumnHeader({ unit }: { unit: LengthUnit }) {
   return (
     <View style={styles.columnHeader} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Text style={[styles.columnLabel, styles.columnLength]}>LENGTH (MM)</Text>
+      <Text style={[styles.columnLabel, styles.columnLength]}>{unit === 'in' ? 'LENGTH (INCHES)' : 'LENGTH (MM)'}</Text>
       <Text style={[styles.columnLabel, styles.columnQty]}>QTY</Text>
       <View style={styles.columnRemove} />
     </View>
@@ -304,7 +403,10 @@ function AddRow({ label, onPress }: { label: string; onPress: () => void }) {
 
 type RowInputProps = {
   index: number;
+  unit: LengthUnit;
   value: string;
+  /** Sixteenths of an inch, shown as a fraction button in inch mode. */
+  frac: number;
   qty: string;
   autoFocus: boolean;
   placeholder: string;
@@ -313,6 +415,7 @@ type RowInputProps = {
   qtyAccessibilityLabel: string;
   removeAccessibilityLabel: string;
   onChangeText: (text: string) => void;
+  onPickFraction: () => void;
   onChangeQty: (text: string) => void;
   /** When set, submitting the length field (e.g. the last row) adds another row. */
   onValueSubmit?: () => void;
@@ -323,7 +426,9 @@ type RowInputProps = {
 
 function RowInput({
   index,
+  unit,
   value,
+  frac,
   qty,
   autoFocus,
   placeholder,
@@ -332,6 +437,7 @@ function RowInput({
   qtyAccessibilityLabel,
   removeAccessibilityLabel,
   onChangeText,
+  onPickFraction,
   onChangeQty,
   onValueSubmit,
   onQtySubmit,
@@ -353,6 +459,7 @@ function RowInput({
         accessibilityLabel={accessibilityLabel}
         style={[styles.fieldInput, styles.pieceInput]}
       />
+      {unit === 'in' && <FractionButton sixteenths={frac} onPress={onPickFraction} accessibilityLabel={`${accessibilityLabel.replace(/ in whole inches$/, '')} fraction`} />}
       <TextInput
         value={qty}
         onChangeText={onChangeQty}
@@ -374,6 +481,7 @@ function RowInput({
 }
 
 const styles = StyleSheet.create({
+  units: { marginBottom: 20 },
   rowPressed: { backgroundColor: colors.fill },
   select: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
   profileMini: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
@@ -381,6 +489,7 @@ const styles = StyleSheet.create({
   selectName: { ...type.subheadline, marginTop: 1, color: colors.secondaryLabel },
   kerfRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
   kerfInput: { ...type.body, flex: 1, minHeight: 46, padding: 0, textAlign: 'right' },
+  kerfFraction: { flex: 1, minHeight: 46, alignItems: 'flex-end', justifyContent: 'center' },
   unit: { ...type.body, color: colors.secondaryLabel },
   columnHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 48, paddingRight: 4, paddingTop: 10, paddingBottom: 2 },
   columnLabel: { ...type.caption1, color: colors.secondaryLabel },

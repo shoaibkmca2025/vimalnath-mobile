@@ -21,7 +21,9 @@ export const ProductCard = memo(function ProductCard({ product }: { product: Sho
     >
       <View style={styles.media}>
         {product.image ? (
-          <Image source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" transition={120} />
+          // Every image is bundled with the app, so nothing is cached to disk: a disk cache kept serving
+          // the previous picture after images were replaced in an update.
+          <Image cachePolicy="memory" source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" transition={120} />
         ) : (
           <Ionicons name="cube-outline" size={32} color={colors.tertiaryLabel} />
         )}
