@@ -6,9 +6,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BrandLockup } from '@/components/BrandLockup';
 import { CartButton } from '@/components/CartButton';
+import { MenuButton } from '@/components/MenuDrawer';
 import { colors, space, type } from '@/theme';
 
 const useNativeDriver = Platform.OS !== 'web';
+/** Longer back titles become "Back", as on iOS, so they never run into the screen title. */
+const MAX_BACK_LABEL = 12;
 
 type ScreenProps = {
   title: string;
@@ -26,7 +29,7 @@ type ScreenProps = {
 };
 
 /**
- * Screen with an iOS-style navigation bar: brand + cart on tab roots, back button on pushed screens,
+ * Screen with an iOS-style navigation bar: menu + brand + cart on tab roots, back button on pushed screens,
  * a large title that scrolls with the content, and a bar separator that appears once content scrolls under it.
  */
 export function Screen({ title, subtitle, back, titleDisplay = 'large', trailing, grouped = false, scrollRef, children }: ScreenProps) {
@@ -59,11 +62,14 @@ export function Screen({ title, subtitle, back, titleDisplay = 'large', trailing
             >
               <Ionicons name="chevron-back" size={27} color={colors.tint} style={styles.backIcon} />
               <Text style={styles.backLabel} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-                {back.label ?? 'Back'}
+                {back.label && back.label.length <= MAX_BACK_LABEL ? back.label : 'Back'}
               </Text>
             </Pressable>
           ) : (
-            <BrandLockup />
+            <View style={styles.leading}>
+              <MenuButton />
+              <BrandLockup />
+            </View>
           )}
           <View style={styles.trailing}>{trailing === undefined ? <CartButton /> : trailing}</View>
           {back && (
@@ -128,9 +134,11 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   bar: { height: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: space.gutter, paddingRight: 8 },
-  back: { maxWidth: '40%', minHeight: 44, flexDirection: 'row', alignItems: 'center', marginLeft: -10, paddingRight: 8 },
+  // A fixed share of the bar (not the label's measured width), so Bold text can't squeeze "Back" to "Ba…".
+  back: { width: '40%', minHeight: 44, flexDirection: 'row', alignItems: 'center', marginLeft: -10, paddingRight: 8 },
+  leading: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   backIcon: { marginRight: -2 },
-  backLabel: { ...type.body, flexShrink: 1, color: colors.tint },
+  backLabel: { ...type.body, flex: 1, color: colors.tint },
   pressed: { opacity: 0.5 },
   trailing: { minWidth: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
   inlineTitle: { ...type.headline, position: 'absolute', left: 110, right: 110, textAlign: 'center', pointerEvents: 'none' },

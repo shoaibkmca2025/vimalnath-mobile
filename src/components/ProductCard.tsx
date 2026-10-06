@@ -31,7 +31,7 @@ export const ProductCard = memo(function ProductCard({ product }: { product: Sho
       <Text style={styles.code} numberOfLines={1}>
         {product.code}
       </Text>
-      <Text style={styles.title} numberOfLines={2}>
+      <Text style={styles.title}>
         {productTitle(product)}
       </Text>
       {price !== undefined ? (

@@ -55,7 +55,9 @@ const styles = StyleSheet.create({
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.separator },
   footer: { ...type.footnote, marginTop: 7, marginHorizontal: 16, color: colors.secondaryLabel },
   valueRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16, paddingVertical: 11 },
-  valueLabelBox: { flexShrink: 1 },
+  // Both columns take a share of the row instead of their measured text width: with Android's Bold text
+  // on, text draws wider than it measures and a tight box cut the ends off ("Vertic", "Gaske").
+  valueLabelBox: { flex: 1 },
   detail: { ...type.footnote, marginTop: 2, color: colors.secondaryLabel },
   value: { flex: 1, textAlign: 'right' },
 });

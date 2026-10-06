@@ -81,19 +81,19 @@ const HORIZONTALS_PER_PANEL = 2;
 
 /**
  * The Horizontal row: 'bars' is one 2.5 m bar per panel; 'optimized' cuts the horizontals from the
- * stock lengths with the bar optimizer, e.g. "3 (2.5 m)" for six 1016 mm pieces.
+ * stock lengths with the bar optimizer, e.g. "3 nos (2.5 m)" for six 1016 mm pieces.
  */
 type HorizontalRule = 'bars' | 'optimized';
 
 function horizontalItem(rule: HorizontalRule, panels: number, cuttingWidth: number): MaterialItem {
-  if (rule === 'bars') return { label: 'Horizontal', value: `${panels} (2.5 m)` };
+  if (rule === 'bars') return { label: 'Horizontal', value: `${panels} nos (2.5 m)` };
   const pieces = HORIZONTALS_PER_PANEL * panels;
   const bars = calculateBars([{ length: cuttingWidth, qty: pieces }], HORIZONTAL_STOCK.map((stock) => ({ length: stock.mm })), 0);
   const counts = new Map<number, number>();
   for (const bar of bars) counts.set(bar.length, (counts.get(bar.length) ?? 0) + 1);
   const value = [...counts.entries()]
     .sort(([a], [b]) => b - a)
-    .map(([length, count]) => `${count} (${HORIZONTAL_STOCK.find((stock) => stock.mm === length)?.name ?? `${length} mm`})`)
+    .map(([length, count]) => `${count} nos (${HORIZONTAL_STOCK.find((stock) => stock.mm === length)?.name ?? `${length} mm`})`)
     .join(' + ');
   return { label: 'Horizontal', value, note: `${pieces} pcs × ${cuttingWidth} mm (top and bottom of each glass)` };
 }
@@ -102,7 +102,7 @@ function horizontalItem(rule: HorizontalRule, panels: number, cuttingWidth: numb
 const TRACK_PARKING_EXTRA_MM = 200;
 
 /**
- * How the Track row is worked out:
+ * How the Top Track row is worked out:
  * - 'panels': one 2.5 m track per panel;
  * - 'opening': one track as long as the opening width (systems with a fixed panel, e.g. 2+1);
  * - 'parking': the opening width + one cutting width + 200 mm, so the panels can slide clear of the
@@ -111,9 +111,9 @@ const TRACK_PARKING_EXTRA_MM = 200;
 type TrackRule = 'panels' | 'opening' | 'parking';
 
 function trackItem(rule: TrackRule, panels: number, openingWidth: number, cuttingWidth: number): MaterialItem {
-  if (rule === 'panels') return { label: 'Track', value: `${panels} (2.5 m)` };
+  if (rule === 'panels') return { label: 'Top Track', value: `${panels} nos (2.5 m)` };
   const length = rule === 'opening' ? openingWidth : openingWidth + cuttingWidth + TRACK_PARKING_EXTRA_MM;
-  return { label: 'Track', value: formatFeetRoundedUp(length) };
+  return { label: 'Top Track', value: formatFeetRoundedUp(length) };
 }
 
 /**
@@ -121,13 +121,13 @@ function trackItem(rule: TrackRule, panels: number, openingWidth: number, cuttin
  * Vimalnath for 1+0, 1+1, 2+0 and 2+1 and extended to 3+0, 3+1, 4+0 and 4+1:
  * - each sliding panel adds a 16 mm overlap, and the width is shared between all the glass panels;
  *   the cutting height is the opening height − 92 mm; glass is the cutting size − 21 mm;
- * - 3 gaskets and 4 connectors per panel, 2 verticals and 2 caps, the horizontals by `horizontal`,
- *   the track by `track`, and the system's own kit (`kit` names it when it isn't named after the system).
+ * - 3 gaskets and 4 connectors per panel, 2 verticals and 2 track caps, the horizontals by `horizontal`,
+ *   the top track by `track`, and the system's sliding kit (`kit` names it when it isn't named after the system).
  */
 function telescopicFormula(
   system: string,
   maxWidth: number,
-  { kit = `${system} Kit`, track = 'panels', horizontal = 'bars' }: { kit?: string; track?: TrackRule; horizontal?: HorizontalRule } = {},
+  { kit = `${system} Sliding Kit`, track = 'panels', horizontal = 'bars' }: { kit?: string; track?: TrackRule; horizontal?: HorizontalRule } = {},
 ): SystemFormula {
   const [sliding, fixed] = system.split('+').map(Number);
   const panels = sliding + fixed;
@@ -148,13 +148,13 @@ function telescopicFormula(
         minHeight: MIN_HEIGHT_MM - HEIGHT_DEDUCTION_MM,
         maxHeight: MAX_HEIGHT_MM - HEIGHT_DEDUCTION_MM,
         materials: (finishedWidth, cuttingHeight, openingWidth) => [
-          { label: 'Vertical', value: cuttingHeight <= SHORT_VERTICAL_MAX_MM ? '2 (2.5 m)' : '2 (3 m)' },
+          { label: 'Vertical', value: cuttingHeight <= SHORT_VERTICAL_MAX_MM ? '2 nos (2.5 m)' : '2 nos (3 m)' },
           horizontalItem(horizontal, panels, finishedWidth),
           trackItem(track, panels, openingWidth, finishedWidth),
-          { label: 'Cap', value: '2 (2.5 m)' },
+          { label: 'Track Cap', value: '2 nos (2.5 m)' },
           { label: 'Sliding Handle / Latch Handle', value: '1+1' },
-          { label: kit, value: '1' },
-          { label: 'Gasket', value: `${3 * panels} (8mm)` },
+          { label: kit, value: '1 nos' },
+          { label: 'Gasket', value: `${3 * panels} nos (8mm)` },
           { label: 'Connector', value: `${4 * panels} nos` },
           { label: 'Middle', value: 'According to design' },
           { label: 'D. Connector', value: 'According to design' },
@@ -167,7 +167,7 @@ function telescopicFormula(
 // Formulas keyed by system ("1+0", "2+0", …), with the widest opening each allows. Any system not
 // listed here falls back to the CUTTING_ALLOWANCE_MM placeholder below until its formula is confirmed.
 const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
-  '1+0': telescopicFormula('1+0', 1200, { kit: '0+1 Kit' }),
+  '1+0': telescopicFormula('1+0', 1200, { kit: '0+1 Sliding Kit' }),
   '1+1': telescopicFormula('1+1', 2438),
   '2+0': telescopicFormula('2+0', 2438, { track: 'parking', horizontal: 'optimized' }),
   '2+1': telescopicFormula('2+1', 3657, { track: 'opening', horizontal: 'optimized' }),

@@ -66,7 +66,7 @@ export function FractionSheet({
 const styles = StyleSheet.create({
   button: { minWidth: 72, height: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingHorizontal: 10, backgroundColor: colors.tintFill, borderRadius: 17 },
   pressed: { opacity: 0.6 },
-  buttonText: { ...type.subheadline, fontWeight: '600', color: colors.tint },
+  buttonText: { ...type.subheadline, minWidth: 40, fontWeight: '600', color: colors.tint, textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12 },
   cell: { width: '23%', height: 52, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderRadius: radius.md },
   cellSelected: { backgroundColor: colors.tint },

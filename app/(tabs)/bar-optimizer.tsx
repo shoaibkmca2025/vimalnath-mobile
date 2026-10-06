@@ -17,6 +17,7 @@ import { SegmentedControl } from '@/components/SegmentedControl';
 import { sections, type Section } from '@/data/sections';
 import { planBars, type BarPlan } from '@/lib/bar-optimizer';
 import { buildBarPlanHtml } from '@/lib/bar-plan-pdf';
+import { confirmDestructive } from '@/lib/confirm';
 import { withTimeout } from '@/lib/pdf-html';
 import { inchesToMm, mmToInchParts, pad2 } from '@/lib/format';
 import { formatLength, formatLengthValue, SIZE_UNIT_KEY, UNIT_OPTIONS, type LengthUnit } from '@/lib/length-units';
@@ -80,7 +81,8 @@ export default function BarOptimizerScreen() {
   const [barFocusRowId, setBarFocusRowId] = useState<number | null>(null);
   const [kerf, setKerf] = useState<Kerf>({ mm: '0', frac: 0 });
   const [fractionFor, setFractionFor] = useState<FractionTarget | null>(null);
-  const [pieces, setPieces] = useState<PieceRow[]>(() => DEFAULT_PIECES.map((piece) => makeRow(piece.length === '' ? '' : String(piece.length), String(piece.qty))));
+  const defaultPieces = () => DEFAULT_PIECES.map((piece) => makeRow(piece.length === '' ? '' : String(piece.length), String(piece.qty)));
+  const [pieces, setPieces] = useState<PieceRow[]>(defaultPieces);
   const [focusRowId, setFocusRowId] = useState<number | null>(null);
   const [plan, setPlan] = useState<BarPlan | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -170,6 +172,25 @@ export default function BarOptimizerScreen() {
     setBarLengths((rows) => [...rows, row]);
     setBarFocusRowId(row.id);
   };
+
+  // Back to a fresh start in the current unit: the first section, its bar length, no cutting loss, the
+  // default pieces, and no result (the saved one is cleared too, so it doesn't come back on reopen).
+  const reset = () =>
+    confirmDestructive('Reset the optimizer?', 'All bar lengths, pieces and the bar plan will be cleared.', 'Reset', () => {
+      Keyboard.dismiss();
+      setSection(sections[0]);
+      // Defaults are millimetres; in inch mode they're converted like a unit switch would.
+      const inUnit = (row: PieceRow) => (unit === 'in' ? convertRow(row, 'in') : row);
+      setBarLengths([inUnit(makeRow(String(sections[0].bar)))]);
+      setKerf({ mm: '0', frac: 0 });
+      setPieces(defaultPieces().map(inUnit));
+      setBarFocusRowId(null);
+      setFocusRowId(null);
+      setPlan(null);
+      AsyncStorage.removeItem(LAST_RESULT_KEY).catch(() => {});
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      showToast('Optimizer reset.');
+    });
 
   const calculate = () => {
     Keyboard.dismiss();
@@ -297,7 +318,7 @@ export default function BarOptimizerScreen() {
 
       <InsetGroup header="Cutting loss" footer="Material lost to the saw blade on each cut.">
         <View style={styles.kerfRow}>
-          <Text style={type.body}>Per cut</Text>
+          <Text style={styles.kerfLabel}>Per cut</Text>
           {unit === 'mm' ? (
             <TextInput
               value={kerf.mm}
@@ -345,7 +366,10 @@ export default function BarOptimizerScreen() {
         <AddRow label="Add Piece" onPress={addPiece} />
       </InsetGroup>
 
-      <Button label="Calculate" onPress={calculate} />
+      <View style={styles.actions}>
+        <Button label="Reset" icon="refresh" variant="gray" onPress={reset} accessibilityHint="Clears all bar lengths, pieces and the bar plan" style={styles.resetButton} />
+        <Button label="Calculate" onPress={calculate} style={styles.calculateButton} />
+      </View>
 
       {plan && (
         <View
@@ -364,7 +388,8 @@ export default function BarOptimizerScreen() {
         onClose={() => setPickerOpen(false)}
         onSelect={(next) => {
           setSection(next);
-          setBarLengths([convertRow(makeRow(String(next.bar)), unit)]);
+          const row = makeRow(String(next.bar));
+          setBarLengths([unit === 'in' ? convertRow(row, 'in') : row]);
           setPickerOpen(false);
         }}
       />
@@ -482,6 +507,9 @@ function RowInput({
 
 const styles = StyleSheet.create({
   units: { marginBottom: 20 },
+  actions: { flexDirection: 'row', gap: 12 },
+  resetButton: { flex: 1 },
+  calculateButton: { flex: 2 },
   rowPressed: { backgroundColor: colors.fill },
   select: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
   profileMini: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
@@ -490,7 +518,9 @@ const styles = StyleSheet.create({
   kerfRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
   kerfInput: { ...type.body, flex: 1, minHeight: 46, padding: 0, textAlign: 'right' },
   kerfFraction: { flex: 1, minHeight: 46, alignItems: 'flex-end', justifyContent: 'center' },
-  unit: { ...type.body, color: colors.secondaryLabel },
+  // Extra room beyond the measured width, so Bold text (and Expo Go) can't clip the last letter.
+  kerfLabel: { ...type.body, minWidth: 80 },
+  unit: { ...type.body, minWidth: 36, color: colors.secondaryLabel },
   columnHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 48, paddingRight: 4, paddingTop: 10, paddingBottom: 2 },
   columnLabel: { ...type.caption1, color: colors.secondaryLabel },
   columnLength: { flex: 1 },

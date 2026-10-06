@@ -37,6 +37,7 @@ type Orders = {
   orders: Order[];
   placeOrder: (lines: CartLine[], details: OrderDetails) => Order;
   removeOrder: (id: string) => void;
+  clearOrders: () => void;
 };
 
 const STORAGE_KEY = 'vimalnath:orders';
@@ -111,8 +112,9 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   );
 
   const removeOrder = useCallback((id: string) => setOrders((current) => current.filter((order) => order.id !== id)), []);
+  const clearOrders = useCallback(() => setOrders([]), []);
 
-  const value = useMemo(() => ({ orders, placeOrder, removeOrder }), [orders, placeOrder, removeOrder]);
+  const value = useMemo(() => ({ orders, placeOrder, removeOrder, clearOrders }), [orders, placeOrder, removeOrder, clearOrders]);
   return <OrdersContext.Provider value={value}>{children}</OrdersContext.Provider>;
 }
 

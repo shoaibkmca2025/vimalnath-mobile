@@ -26,7 +26,9 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
           .title { font-size: 24px; font-weight: 700; margin-top: 4px; }
           .meta { text-align: right; font-size: 12px; color: #5a6b8c; }
           .meta b { color: #0b1f4d; }
-          section { margin-bottom: 16px; padding: 16px 18px; border-radius: 14px; }
+          section { margin-bottom: 12px; padding: 12px 16px; border-radius: 14px; }
+          .sizes { display: flex; gap: 12px; }
+          .sizes section { flex: 1; }
           section h2 { margin: 0 0 4px; font-size: 12px; letter-spacing: 0.6px; text-transform: uppercase; }
           section .value { font-size: 23px; font-weight: 700; }
           section .inches { margin-top: 2px; font-size: 15px; font-weight: 600; color: #5a6b8c; }
@@ -56,6 +58,7 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
           </div>
         </div>
 
+        <div class="sizes">
         <section class="cutting">
           <h2>Cutting Size</h2>
           <div class="value">${result.cuttingWidth} × ${result.cuttingHeight} mm</div>
@@ -69,6 +72,7 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
           <div class="inches">${escapeHtml(formatInchSize(result.glassWidth, result.glassHeight))}</div>
           <div class="note">Qty ${result.glassQuantity}</div>
         </section>
+        </div>
 
         <section class="material">
           <h2>Material List</h2>

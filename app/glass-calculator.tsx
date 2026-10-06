@@ -40,6 +40,8 @@ export default function GlassCalculatorScreen() {
   const { name, backLabel, fallbackRoute } = useLocalSearchParams<{ name?: string; backLabel?: string; fallbackRoute?: string }>();
   const systemName = name ?? 'Sliding System';
   const panelCount = parsePanelCount(systemName);
+  // Telescopic sliding systems ("2+1 Sliding System") call the opening's width its length.
+  const widthLabel = /synchro|folding/i.test(systemName) ? 'Width' : 'Length';
 
   const [unit, setUnit] = useState<Unit>('mm');
   const [width, setWidth] = useState('');
@@ -90,8 +92,8 @@ export default function GlassCalculatorScreen() {
       const range = getSystemRange(systemName);
       setSizeError(
         unit === 'in' && range
-          ? `Width must be ${formatInches(range.minWidth)} – ${formatInches(range.maxWidth)} and height ${formatInches(range.minHeight)} – ${formatInches(range.maxHeight)} for this system (${range.minWidth}–${range.maxWidth} × ${range.minHeight}–${range.maxHeight} mm).`
-          : outcome.error,
+          ? `${widthLabel} must be ${formatInches(range.minWidth)} – ${formatInches(range.maxWidth)} and height ${formatInches(range.minHeight)} – ${formatInches(range.maxHeight)} for this system (${range.minWidth}–${range.maxWidth} × ${range.minHeight}–${range.maxHeight} mm).`
+          : outcome.error.replace(/^Width/, widthLabel),
       );
       setResult(null);
       return;
@@ -137,16 +139,16 @@ export default function GlassCalculatorScreen() {
       >
         {unit === 'mm' ? (
           <DimensionRow
-            label="Width"
+            label={widthLabel}
             value={width}
             onChangeText={(text) => {
               setWidth(digitsOnly(text));
               setSizeError(null);
             }}
-            accessibilityLabel="Opening width in millimetres"
+            accessibilityLabel={`Opening ${widthLabel.toLowerCase()} in millimetres`}
           />
         ) : (
-          <InchRow label="Width" value={widthIn} onChangeWhole={(whole) => setInches('width', { whole })} onPickFraction={() => setFractionFor('width')} />
+          <InchRow label={widthLabel} value={widthIn} onChangeWhole={(whole) => setInches('width', { whole })} onPickFraction={() => setFractionFor('width')} />
         )}
         {unit === 'mm' ? (
           <DimensionRow
@@ -170,7 +172,7 @@ export default function GlassCalculatorScreen() {
         </View>
       )}
 
-      <Button label="Calculate" onPress={calculate} disabled={!ready} accessibilityHint={ready ? undefined : 'Enter the width and height first'} />
+      <Button label="Calculate" onPress={calculate} disabled={!ready} accessibilityHint={ready ? undefined : `Enter the ${widthLabel.toLowerCase()} and height first`} />
 
       {result && (
         <View style={styles.results}>
@@ -221,7 +223,7 @@ export default function GlassCalculatorScreen() {
 
       <FractionSheet
         visible={fractionFor !== null}
-        title={fractionFor === 'height' ? 'Height fraction' : 'Width fraction'}
+        title={fractionFor === 'height' ? 'Height fraction' : `${widthLabel} fraction`}
         sixteenths={fractionFor === 'height' ? heightIn.sixteenths : widthIn.sixteenths}
         onPick={(sixteenths) => {
           if (fractionFor) setInches(fractionFor, { sixteenths });
@@ -249,7 +251,7 @@ function SizeCard({ title, value, inches, detail, background }: { title: string;
 function InchRow({ label, value, onChangeWhole, onPickFraction }: { label: string; value: InchSize; onChangeWhole: (whole: string) => void; onPickFraction: () => void }) {
   return (
     <View style={styles.fieldRow}>
-      <Text style={type.body}>{label}</Text>
+      <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         value={value.whole}
         onChangeText={(text) => onChangeWhole(digitsOnly(text))}
@@ -278,7 +280,7 @@ type DimensionRowProps = {
 function DimensionRow({ label, value, onChangeText, accessibilityLabel }: DimensionRowProps) {
   return (
     <View style={styles.fieldRow}>
-      <Text style={type.body}>{label}</Text>
+      <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -299,8 +301,11 @@ const styles = StyleSheet.create({
   units: { marginBottom: 20 },
   groupWithError: { marginBottom: 8 },
   fieldRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
-  fieldInput: { ...type.body, flex: 1, minHeight: 46, padding: 0, textAlign: 'right' },
-  unit: { ...type.body, color: colors.secondaryLabel },
+  // Labels and units get more room than their measured width: with Android's Bold text on (and in Expo Go,
+  // where the app's native fix can't load) text draws wider than it measures and lost its last letter.
+  fieldLabel: { ...type.body, flex: 1 },
+  fieldInput: { ...type.body, flex: 1.4, minWidth: 0, minHeight: 46, padding: 0, textAlign: 'right' },
+  unit: { ...type.body, minWidth: 36, color: colors.secondaryLabel },
   error: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginHorizontal: 16, marginBottom: 22 },
   errorText: { ...type.footnote, flex: 1, color: colors.red },
   results: { marginTop: 32 },
