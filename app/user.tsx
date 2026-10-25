@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
+import { enqueueAdminProfile } from '@/lib/admin-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, type } from '@/theme';
 
@@ -13,7 +14,7 @@ const PROFILE_KEY = 'vimalnath:profile';
 type Profile = { name: string; business: string; phone: string; email: string; city: string };
 const EMPTY: Profile = { name: '', business: '', phone: '', email: '', city: '' };
 
-/** The person using the app; kept on this phone only. */
+/** The person using the app; shared with the shop only after connecting in Settings. */
 export default function UserScreen() {
   const { showToast } = useAppUI();
   const [profile, setProfile] = useState<Profile>(EMPTY);
@@ -29,6 +30,7 @@ export default function UserScreen() {
   const save = async () => {
     try {
       await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+      void enqueueAdminProfile(profile);
       showToast('Your details are saved.');
     } catch {
       showToast('Couldn’t save your details. Try again.');
@@ -38,7 +40,7 @@ export default function UserScreen() {
   const initials = profile.name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join('');
 
   return (
-    <Screen title="User" subtitle="Your details, kept on this phone" back={{ fallback: '/', label: 'Back' }} grouped>
+    <Screen title="User" subtitle="Saved on this phone; shared when shop connection is enabled" back={{ fallback: '/', label: 'Back' }} grouped>
       <View style={styles.avatarRow}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials || '?'}</Text>

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { findShopProduct, productTitle } from '@/data/shop';
+import { enqueueAdminOrder } from '@/lib/admin-sync';
 import { unitPrice, type CartLine } from '@/providers/CartProvider';
 
 /** A snapshot of the product at order time, so later catalogue updates don't rewrite past orders. */
@@ -106,6 +107,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         total: lines.reduce((sum, line) => sum + (orderLineTotal(line) ?? 0), 0),
       };
       setOrders((current) => [order, ...current]);
+      // Optional delivery is independent of the original local order/PDF flow.
+      void enqueueAdminOrder(order);
       return order;
     },
     [orders],

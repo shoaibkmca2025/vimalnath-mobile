@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { startAdminSync } from '@/lib/admin-sync';
 import { AppUIProvider } from '@/providers/AppUIProvider';
 import { CartProvider } from '@/providers/CartProvider';
 import { OrdersProvider } from '@/providers/OrdersProvider';
@@ -20,6 +21,8 @@ export default function RootLayout() {
   // Interface text uses the system font; only the brand wordmark needs a bundled typeface.
   const [fontsLoaded, fontError] = useFonts({ SpaceGrotesk_700Bold });
   const ready = fontsLoaded || Boolean(fontError);
+
+  useEffect(() => startAdminSync(), []);
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync();
