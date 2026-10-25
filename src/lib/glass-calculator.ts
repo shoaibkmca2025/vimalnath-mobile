@@ -104,8 +104,8 @@ const TRACK_PARKING_EXTRA_MM = 200;
 /**
  * How the Top Track row is worked out:
  * - 'panels': one 2.5 m track per panel;
- * - 'opening': one track as long as the opening width (systems with a fixed panel, e.g. 2+1);
- * - 'parking': the opening width + one cutting width + 200 mm, so the panels can slide clear of the
+ * - 'opening': one track per panel, each as long as the opening width (systems with a fixed panel, e.g. 2+1);
+ * - 'parking': one track per panel, each the opening width + one cutting width + 200 mm, so the panels can slide clear of the
  *   opening (systems where every panel slides, e.g. 2+0).
  */
 type TrackRule = 'panels' | 'opening' | 'parking';
@@ -113,7 +113,7 @@ type TrackRule = 'panels' | 'opening' | 'parking';
 function trackItem(rule: TrackRule, panels: number, openingWidth: number, cuttingWidth: number): MaterialItem {
   if (rule === 'panels') return { label: 'Top Track', value: `${panels} nos (2.5 m)` };
   const length = rule === 'opening' ? openingWidth : openingWidth + cuttingWidth + TRACK_PARKING_EXTRA_MM;
-  return { label: 'Top Track', value: formatFeetRoundedUp(length) };
+  return { label: 'Top Track', value: `${panels} nos (${formatFeetRoundedUp(length)})` };
 }
 
 /**
