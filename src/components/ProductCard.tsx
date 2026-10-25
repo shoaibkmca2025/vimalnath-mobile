@@ -1,12 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatINR, lowestPrice, productTitle, type ShopProduct } from '@/data/shop';
 import { colors, radius, type } from '@/theme';
 
-export function ProductCard({ product }: { product: ShopProduct }) {
+/** Memoized: products are static, so a card only renders when it first appears. */
+export const ProductCard = memo(function ProductCard({ product }: { product: ShopProduct }) {
   const price = lowestPrice(product);
   const several = (product.options?.length ?? 0) > 1 && new Set(product.options?.map((option) => option.mrp)).size > 1;
 
@@ -19,7 +21,9 @@ export function ProductCard({ product }: { product: ShopProduct }) {
     >
       <View style={styles.media}>
         {product.image ? (
-          <Image source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" transition={120} />
+          // Every image is bundled with the app, so nothing is cached to disk: a disk cache kept serving
+          // the previous picture after images were replaced in an update.
+          <Image cachePolicy="memory" source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" transition={120} />
         ) : (
           <Ionicons name="cube-outline" size={32} color={colors.tertiaryLabel} />
         )}
@@ -27,7 +31,7 @@ export function ProductCard({ product }: { product: ShopProduct }) {
       <Text style={styles.code} numberOfLines={1}>
         {product.code}
       </Text>
-      <Text style={styles.title} numberOfLines={2}>
+      <Text style={styles.title}>
         {productTitle(product)}
       </Text>
       {price !== undefined ? (
@@ -40,7 +44,7 @@ export function ProductCard({ product }: { product: ShopProduct }) {
       )}
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: { width: '48%' },

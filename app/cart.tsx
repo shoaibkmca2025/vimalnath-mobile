@@ -93,18 +93,18 @@ function CartLineRow({ line, onChange }: { line: CartLine; onChange: (qty: numbe
         style={({ pressed }) => [styles.lineMedia, pressed && { opacity: 0.7 }]}
       >
         {product.image ? (
-          <Image source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" />
+          <Image cachePolicy="memory" source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" />
         ) : (
           <Ionicons name="cube-outline" size={24} color={colors.tertiaryLabel} />
         )}
       </Pressable>
       <View style={styles.lineCopy}>
         <Text style={styles.lineCode}>{product.code}</Text>
-        <Text style={type.subheadline} numberOfLines={2}>
+        <Text style={type.subheadline}>
           {productTitle(product)}
         </Text>
         {(option || line.note) && (
-          <Text style={styles.lineDetail} numberOfLines={2}>
+          <Text style={styles.lineDetail}>
             {option?.label ?? line.note}
           </Text>
         )}

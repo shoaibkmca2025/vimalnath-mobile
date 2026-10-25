@@ -1,7 +1,6 @@
-"""Drawn tiles for the Telescopic Sliding, Synchronized System and Sliding Folding configurations.
+"""Drawn tiles for the Telescopic Sliding and Synchronized System configurations.
 
-Writes assets/images/telescopic/tile-01..08.jpg, assets/images/synchronized/tile-01..06.jpg and
-assets/images/folding/tile-02..10.jpg (folding tiles are numbered by door count).
+Writes assets/images/telescopic/config-01..08.jpg and assets/images/synchronized/config-01..06.jpg; run scripts/arrange_tiles.py after it.
 Flat illustration: navy frame, light blue glass with a diagonal glare, handles and an F on each
 fixed panel. One panel per sliding or fixed leaf, so "2+1" draws 3 panels. Proportions are measured
 from the approved reference art (a 410 x 290 px frame) and scaled to fill the square tile.
@@ -9,8 +8,6 @@ from the approved reference art (a 410 x 290 px frame) and scaled to fill the sq
   Telescopic:   fixed panels on the left, one handle on the last panel.
   Synchronized: opens from the centre, so a pair of handles meets in the middle and the fixed
                 panels are split between the two ends.
-  Folding:      one handle on the last panel, and a zigzag fold line under the frame with a hinge
-                dot on each stile and mullion. The frame ends higher to leave room for it.
 """
 import os
 
@@ -19,11 +16,10 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 FONT = os.path.join(ROOT, 'node_modules', '@expo-google-fonts', 'dm-sans', '700Bold', 'DMSans_700Bold.ttf')
 
-# Same order as the configuration lists in src/data/cutlist.ts. Folding entries are door counts.
+# Same order as the configuration lists in src/data/cutlist.ts.
 SYSTEMS = {
     'telescopic': ['1+0', '1+1', '2+0', '2+1', '3+0', '3+1', '4+0', '4+1'],
     'synchronized': ['2+0', '2+2', '4+0', '4+2', '6+0', '6+2'],
-    'folding': ['2', '3', '4', '5', '6', '7', '8', '9', '10'],
 }
 
 SIZE = 900
@@ -54,18 +50,10 @@ MARGIN_X = 72
 FRAME_TOP = 54
 FLOOR_TOP = 840
 
-# Fold line, measured from the earlier folding art: blue zigzag with navy hinge dots.
-FOLD_FLOOR_TOP = 740
-FOLD_LINE = (36, 88, 232)
-FOLD_LINE_WIDTH = 11
-FOLD_DOT_DIAMETER = 23
-FOLD_HEIGHT = 46
-
 
 def layout(system, configuration):
     """Panel count, indexes of the fixed panels, and handles as (panel index, edge)."""
-    parts = [int(part) for part in configuration.split('+')]
-    sliding, fixed = parts[0], (parts[1] if len(parts) > 1 else 0)
+    sliding, fixed = (int(part) for part in configuration.split('+'))
     panels = sliding + fixed
     if system == 'synchronized':
         middle = panels // 2
@@ -74,19 +62,18 @@ def layout(system, configuration):
     return panels, set(range(fixed)), [(panels - 1, 'right')]
 
 
-def draw_tile(panels, fixed_panels, handles, fold=False):
+def draw_tile(panels, fixed_panels, handles):
     s = SUPERSAMPLE
     size = SIZE * s
-    floor_top = (FOLD_FLOOR_TOP if fold else FLOOR_TOP) * s
     image = Image.new('RGB', (size, size), FLOOR)
     draw = ImageDraw.Draw(image)
 
-    for y in range(floor_top):
-        t = y / (floor_top - 1)
+    for y in range(FLOOR_TOP * s):
+        t = y / (FLOOR_TOP * s - 1)
         draw.line([(0, y), (size, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(SKY_TOP, SKY_BOTTOM)))
 
     left, right = MARGIN_X * s, (SIZE - MARGIN_X) * s
-    top, bottom = FRAME_TOP * s, floor_top
+    top, bottom = FRAME_TOP * s, FLOOR_TOP * s
     k = (right - left) / REF_FRAME_WIDTH
     stile, top_rail, bottom_rail, mullion = (round(v * k) for v in (REF_STILE, REF_TOP_RAIL, REF_BOTTOM_RAIL, REF_MULLION))
 
@@ -124,23 +111,12 @@ def draw_tile(panels, fixed_panels, handles, fold=False):
             fill=FRAME,
         )
 
-    if fold:
-        # One hinge per stile and mullion, alternating low/high, centred in the floor band.
-        center = (floor_top + size) / 2
-        hinges = [left + stile / 2] + [pane_left(index) - mullion / 2 for index in range(1, panels)] + [right - stile / 2]
-        points = [(x, center + (FOLD_HEIGHT / 2 if index % 2 == 0 else -FOLD_HEIGHT / 2) * s) for index, x in enumerate(hinges)]
-        draw.line(points, fill=FOLD_LINE, width=FOLD_LINE_WIDTH * s, joint='curve')
-        radius = FOLD_DOT_DIAMETER * s / 2
-        for x, y in points:
-            draw.ellipse([x - radius, y - radius, x + radius, y + radius], fill=FRAME)
-
     return image.resize((SIZE, SIZE), Image.LANCZOS)
 
 
 for system, configurations in SYSTEMS.items():
-    for index, configuration in enumerate(configurations, start=1):
+    for number, configuration in enumerate(configurations, start=1):
         panels, fixed_panels, handles = layout(system, configuration)
-        number = panels if system == 'folding' else index
-        path = os.path.join(ROOT, 'assets', 'images', system, f'tile-{number:02d}.jpg')
-        draw_tile(panels, fixed_panels, handles, fold=system == 'folding').save(path, quality=92, optimize=True)
+        path = os.path.join(ROOT, 'assets', 'images', system, f'config-{number:02d}.jpg')
+        draw_tile(panels, fixed_panels, handles).save(path, quality=92, optimize=True)
         print('ok', system, os.path.basename(path), configuration, panels, 'panels')

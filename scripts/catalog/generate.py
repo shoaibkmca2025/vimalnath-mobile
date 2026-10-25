@@ -69,7 +69,8 @@ def main():
                 desc = re.sub(r'\s+', ' ', desc).strip(' -:,')
                 if len(desc) < 4 or desc[0].islower() or re.match(r'^[\d₹J(]', desc):
                     desc = ''
-                desc = desc[:70]
+                # Keep the whole name (the app wraps it); drop a spec-list bullet the name may start with.
+                desc = re.sub(r'^[•·]\s*', '', desc)
                 thumb_pix = None
                 for r, xref, smask in sorted(images, key=lambda item: rect_distance(item[0], rect))[:3]:
                     thumb_pix = img_util.product_image(doc, xref, smask)

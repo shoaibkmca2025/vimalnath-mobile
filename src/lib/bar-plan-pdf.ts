@@ -1,5 +1,6 @@
 import type { Section } from '@/data/sections';
-import { formatMm, formatNumber, pad2 } from '@/lib/format';
+import { pad2 } from '@/lib/format';
+import { formatLength, formatLengthValue } from '@/lib/length-units';
 import { escapeHtml } from '@/lib/pdf-html';
 
 import type { BarPlan } from './bar-optimizer';
@@ -16,8 +17,8 @@ export function buildBarPlanHtml({ siteName, section, plan }: BarPlanPdfInput): 
 
   const stats = [
     { label: 'Bars required', value: String(plan.bars.length) },
-    { label: 'Total material', value: formatMm(plan.totalMaterial) },
-    { label: 'Estimated waste', value: formatMm(plan.waste) },
+    { label: 'Total material', value: formatLength(plan.totalMaterial, plan.unit) },
+    { label: 'Estimated waste', value: formatLength(plan.waste, plan.unit) },
     { label: 'Utilization', value: `${plan.utilization.toFixed(1)}%` },
   ];
 
@@ -27,7 +28,7 @@ export function buildBarPlanHtml({ siteName, section, plan }: BarPlanPdfInput): 
         .map(
           (piece, pieceIndex) => `
             <div class="piece" style="width:${(piece / bar.length) * 100}%">
-              <span>${formatNumber(piece)}</span>
+              <span>${escapeHtml(formatLengthValue(piece, plan.unit))}</span>
             </div>`,
         )
         .join('');
@@ -36,7 +37,7 @@ export function buildBarPlanHtml({ siteName, section, plan }: BarPlanPdfInput): 
         <div class="bar">
           <div class="bar-label">
             <span>BAR ${pad2(barIndex + 1)}</span>
-            <span>${formatNumber(bar.used)} / ${formatMm(bar.length)}</span>
+            <span>${escapeHtml(formatLengthValue(bar.used, plan.unit))} / ${escapeHtml(formatLength(bar.length, plan.unit))}</span>
           </div>
           <div class="track">
             ${segments}
@@ -92,7 +93,7 @@ export function buildBarPlanHtml({ siteName, section, plan }: BarPlanPdfInput): 
           </div>
           <div class="meta">
             <div><b>Generated</b> ${escapeHtml(generatedOn)}</div>
-            <div><b>Cutting loss</b> ${plan.kerf} mm per cut</div>
+            <div><b>Cutting loss</b> ${escapeHtml(formatLength(plan.kerf, plan.unit))} per cut</div>
             <div><b>Cuts</b> ${plan.cuts}</div>
           </div>
         </div>

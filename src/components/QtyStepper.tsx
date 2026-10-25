@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { colors, type } from '@/theme';
+import { colors, tabularNums, type } from '@/theme';
 
 type Props = {
   value: number;
@@ -60,5 +60,5 @@ const styles = StyleSheet.create({
   stepper: { flexShrink: 0, height: 44, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.tertiaryFill, borderRadius: 22 },
   button: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
   pressed: { backgroundColor: colors.fill },
-  value: { ...type.headline, width: 40, height: 44, padding: 0, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  value: { ...type.headline, width: 40, height: 44, padding: 0, textAlign: 'center', ...tabularNums },
 });

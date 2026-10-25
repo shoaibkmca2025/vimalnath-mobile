@@ -33,7 +33,16 @@ export default function RootLayout() {
         <OrdersProvider>
           <AppUIProvider>
             <StatusBar style="dark" />
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: colors.background },
+                // The quick iOS-style slide; Android's default fade-and-grow takes about twice as long.
+                animation: 'ios_from_right',
+                // Screens underneath don't re-render while another screen is on top.
+                freezeOnBlur: true,
+              }}
+            >
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="telescopic" />
               <Stack.Screen name="synchronized" />
@@ -42,7 +51,11 @@ export default function RootLayout() {
               <Stack.Screen name="cart" />
               <Stack.Screen name="product/[id]" />
               <Stack.Screen name="order/[id]" />
+              <Stack.Screen name="user" />
+              <Stack.Screen name="settings" />
+              <Stack.Screen name="more-apps" />
               <Stack.Screen name="about" />
+              <Stack.Screen name="videos" />
             </Stack>
           </AppUIProvider>
         </OrdersProvider>

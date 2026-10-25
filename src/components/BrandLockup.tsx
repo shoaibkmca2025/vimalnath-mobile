@@ -7,7 +7,7 @@ export function BrandLockup() {
   return (
     <View style={styles.lockup} accessible accessibilityRole="header" accessibilityLabel="Vimalnath Sales Corporation">
       <View style={styles.mark}>
-        <Image source={require('../../assets/images/logo-mark.png')} style={styles.markImage} contentFit="cover" />
+        <Image cachePolicy="memory" source={require('../../assets/images/logo-mark.png')} style={styles.markImage} contentFit="cover" />
       </View>
       <View>
         <Text style={styles.name} maxFontSizeMultiplier={1.2}>

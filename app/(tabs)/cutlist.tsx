@@ -28,7 +28,7 @@ export default function CutlistScreen() {
           >
             <View style={styles.media}>
               {system.photo ? (
-                <Image source={system.photo} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+                <Image cachePolicy="memory" source={system.photo} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
               ) : (
                 <FoldingIllustration />
               )}

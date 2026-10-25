@@ -13,7 +13,7 @@ import { pdfFileName, sharePdf } from '@/lib/pdf-export';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { useCart } from '@/providers/CartProvider';
 import { orderLineTotal, useOrders } from '@/providers/OrdersProvider';
-import { colors, type } from '@/theme';
+import { colors, tabularNums, type } from '@/theme';
 
 export default function OrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -119,6 +119,6 @@ const styles = StyleSheet.create({
   line: { flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 16 },
   lineCode: { ...type.caption1, color: colors.secondaryLabel, fontWeight: '500' },
   lineDetail: { ...type.footnote, marginTop: 2, color: colors.secondaryLabel },
-  lineTotal: { ...type.subheadline, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  lineTotal: { ...type.subheadline, fontWeight: '600', ...tabularNums },
   actions: { gap: 12 },
 });
