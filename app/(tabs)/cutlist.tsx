@@ -51,7 +51,8 @@ const styles = StyleSheet.create({
   list: { gap: 16 },
   card: { overflow: 'hidden', backgroundColor: colors.card, borderRadius: radius.lg },
   cardPressed: { opacity: 0.8 },
-  media: { aspectRatio: 16 / 9, overflow: 'hidden', backgroundColor: colors.groupedBackground },
+  // The system photos are 4:3 and framed alike, so each card shows its whole door system uncropped.
+  media: { aspectRatio: 4 / 3, overflow: 'hidden', backgroundColor: colors.groupedBackground },
   copy: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
   subtitle: { ...type.subheadline, marginTop: 2, color: colors.secondaryLabel },
 });
