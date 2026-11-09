@@ -43,6 +43,7 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
           .material-row:last-child { border-bottom: none; }
           .material-row small { display: block; margin-top: 2px; font-size: 10px; color: #5a6b8c; }
           .footer { margin-top: 10px; padding-top: 10px; border-top: 1px solid #e1e8f7; font-size: 10px; color: #93a1bd; }
+          .warning { margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; background: #fdecee; color: #a30010; font-size: 13px; font-weight: 600; }
         </style>
       </head>
       <body>
@@ -57,6 +58,8 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
             <div>${escapeHtml(formatInchSize(result.openingWidth, result.openingHeight))}</div>
           </div>
         </div>
+
+        ${result.warning ? `<div class="warning">${escapeHtml(result.warning)}</div>` : ''}
 
         <div class="sizes">
         <section class="cutting">

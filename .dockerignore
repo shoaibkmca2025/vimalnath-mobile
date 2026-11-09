@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+.git
+.expo
+.claude
+.vscode
+.code-review-graph
+docs
+server
+admin/public/data
+admin/public/media
+admin/src/generated

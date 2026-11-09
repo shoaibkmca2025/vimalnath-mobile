@@ -41,7 +41,11 @@ type Orders = {
 };
 
 const STORAGE_KEY = 'vimalnath:orders';
+/** The last number given out, kept apart from the list so a deleted order's number is never reused. */
+const LAST_NUMBER_KEY = 'vimalnath:orders:last-number';
 const OrdersContext = createContext<Orders | null>(null);
+
+const numberOf = (order: Order) => Number(order.number.replace(/\D/g, '')) || 0;
 
 export function orderLineTotal(line: Pick<OrderLine, 'qty' | 'mrp'>): number | undefined {
   return line.mrp === undefined ? undefined : line.mrp * line.qty;
@@ -50,25 +54,33 @@ export function orderLineTotal(line: Pick<OrderLine, 'qty' | 'mrp'>): number | u
 export function OrdersProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const restored = useRef(false);
+  const lastNumber = useRef(0);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((raw) => {
-        if (!raw) return;
-        const saved = JSON.parse(raw) as Order[];
-        // Keep any order placed before the saved list finished loading.
+    AsyncStorage.multiGet([STORAGE_KEY, LAST_NUMBER_KEY])
+      .then(async ([[, raw], [, last]]) => {
+        let saved: Order[] = [];
+        try {
+          if (raw) saved = JSON.parse(raw) as Order[];
+        } catch {
+          // Unreadable, but maybe recoverable by hand: keep a copy before the list below replaces it.
+          await AsyncStorage.setItem(`${STORAGE_KEY}:damaged`, raw!);
+        }
+        lastNumber.current = Math.max(lastNumber.current, Number(last) || 0, ...saved.map(numberOf));
+        // Keep any order placed before the saved list finished loading. This also saves the merged list.
         setOrders((current) => [...current, ...saved.filter((order) => !current.some((placed) => placed.id === order.id))]);
-      })
-      .catch(() => {})
-      .finally(() => {
         restored.current = true;
-        setOrders((current) => [...current]); // save the merged list
-      });
+      })
+      // A failed read leaves `restored` false, so nothing saves over the orders still on the phone.
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
     if (!restored.current) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(orders)).catch(() => {});
+    AsyncStorage.multiSet([
+      [STORAGE_KEY, JSON.stringify(orders)],
+      [LAST_NUMBER_KEY, String(lastNumber.current)],
+    ]).catch(() => {});
   }, [orders]);
 
   const placeOrder = useCallback(
@@ -92,8 +104,8 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         ];
       });
       const now = new Date();
-      // Sequential per device: VSC-0001, VSC-0002, …
-      const next = orders.reduce((max, order) => Math.max(max, Number(order.number.replace(/\D/g, '')) || 0), 0) + 1;
+      // Sequential per device: VSC-0001, VSC-0002, … and never reused, even after an order is deleted.
+      const next = ++lastNumber.current;
       const order: Order = {
         id: `${now.getTime()}`,
         number: `VSC-${String(next).padStart(4, '0')}`,
@@ -108,7 +120,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       setOrders((current) => [order, ...current]);
       return order;
     },
-    [orders],
+    [],
   );
 
   const removeOrder = useCallback((id: string) => setOrders((current) => current.filter((order) => order.id !== id)), []);

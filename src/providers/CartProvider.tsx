@@ -24,6 +24,9 @@ type Cart = {
 const STORAGE_KEY = 'vimalnath:cart:v2';
 const CartContext = createContext<Cart | null>(null);
 
+/** Saved with the option's name, because its position can change when the catalogue is updated. */
+type SavedLine = CartLine & { option?: string };
+
 const sameLine = (a: LineKey, b: LineKey) => a.productId === b.productId && a.optionIndex === b.optionIndex && (a.note ?? '') === (b.note ?? '');
 
 export function unitPrice(line: Pick<CartLine, 'productId' | 'optionIndex'>): number | undefined {
@@ -42,9 +45,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((raw) => {
         if (!raw || changed.current) return;
-        const saved = JSON.parse(raw) as CartLine[];
-        // Drop lines for products that are no longer in the shop.
-        setLines(saved.filter((line) => findShopProduct(line.productId) && line.qty > 0));
+        const saved = JSON.parse(raw) as SavedLine[];
+        // Drop lines for products and options that are no longer in the shop.
+        setLines(
+          saved.flatMap(({ option, ...line }) => {
+            const product = findShopProduct(line.productId);
+            if (!product || line.qty <= 0) return [];
+            if (option === undefined) return [line];
+            const optionIndex = product.options?.findIndex((item) => item.label === option) ?? -1;
+            return optionIndex === -1 ? [] : [{ ...line, optionIndex }];
+          }),
+        );
       })
       .catch(() => {})
       .finally(() => {
@@ -54,7 +65,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!restored.current && !changed.current) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(lines)).catch(() => {});
+    const saved: SavedLine[] = lines.map((line) => ({
+      ...line,
+      option: line.optionIndex === undefined ? undefined : findShopProduct(line.productId)?.options?.[line.optionIndex]?.label,
+    }));
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(saved)).catch(() => {});
   }, [lines]);
 
   const add = useCallback((key: LineKey, qty = 1) => {

@@ -4,7 +4,9 @@ import { orderLineTotal, type Order } from '@/providers/OrdersProvider';
 
 /** Builds the printable HTML for an order — handed to expo-print to render as an A4 PDF. */
 export function buildOrderHtml(order: Order): string {
-  const placedOn = new Date(order.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const dateStyle = { year: 'numeric', month: 'long', day: 'numeric' } as const;
+  const placedOn = new Date(order.createdAt).toLocaleDateString(undefined, dateStyle);
+  const generatedOn = new Date().toLocaleDateString(undefined, dateStyle);
   const unpriced = order.lines.filter((line) => line.mrp === undefined).length;
   const rows = order.lines
     .map((line, index) => {
@@ -80,7 +82,7 @@ export function buildOrderHtml(order: Order): string {
         ${unpriced ? `<div class="note">${unpriced} item${unpriced > 1 ? 's are' : ' is'} priced as per the Taiton catalogue and not included in the total.</div>` : ''}
         <div class="note">Prices are MRP as per the Taiton price list, Feb-2026.</div>
 
-        <div class="footer">Vimalnath Sales Corporation · ${escapeHtml(order.number)} · Generated on ${escapeHtml(placedOn)}</div>
+        <div class="footer">Vimalnath Sales Corporation · ${escapeHtml(order.number)} · Generated on ${escapeHtml(generatedOn)}</div>
       </body>
     </html>
   `;

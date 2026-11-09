@@ -47,11 +47,20 @@ export default function OrderScreen() {
   const reorder = () => {
     let added = 0;
     for (const line of order.lines) {
-      if (!findShopProduct(line.productId)) continue;
-      add({ productId: line.productId, optionIndex: line.optionIndex, note: line.note }, line.qty);
+      const product = findShopProduct(line.productId);
+      if (!product) continue;
+      // By name, not position: a catalogue update can add or move options.
+      const optionIndex = line.optionIndex === undefined ? undefined : (product.options?.findIndex((option) => option.label === line.option) ?? -1);
+      if (optionIndex === -1) continue;
+      add({ productId: line.productId, optionIndex, note: line.note }, line.qty);
       added += 1;
     }
-    showToast(added ? `Added ${added} product${added === 1 ? '' : 's'} to your cart.` : 'These products are no longer in the catalogue.');
+    const missing = order.lines.length - added;
+    showToast(
+      added
+        ? `Added ${added} product${added === 1 ? '' : 's'} to your cart.${missing ? ` ${missing} no longer in the catalogue.` : ''}`
+        : 'These products are no longer in the catalogue.',
+    );
     if (added) router.push('/cart');
   };
 

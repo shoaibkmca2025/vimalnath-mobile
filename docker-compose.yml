@@ -1,0 +1,55 @@
+# Runs everything on this computer: docker compose up -d --build
+#   Admin panel:            http://localhost:8090
+#   Mobile app, web version: http://localhost:8091
+# The API starts behind the admin panel and applies database migrations itself.
+# This is plain http for local use. On a real host, remove NODE_ENV below (the image defaults to production) and put HTTPS in front.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: vimalnath
+      POSTGRES_PASSWORD: local-only
+      POSTGRES_DB: vimalnath
+    ports:
+      - '127.0.0.1:5433:5432'
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready -U vimalnath -d vimalnath
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./server
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://vimalnath:local-only@db:5432/vimalnath
+      ADMIN_ORIGIN: http://localhost:8090
+      TRUST_PROXY: 'true'
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: wget -qO- http://127.0.0.1:3000/v1/health
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  admin:
+    build:
+      context: .
+      dockerfile: admin/Dockerfile
+    ports:
+      - '127.0.0.1:8090:80'
+    depends_on:
+      api:
+        condition: service_healthy
+
+  app:
+    build: .
+    ports:
+      - '127.0.0.1:8091:80'
+
+volumes:
+  db:

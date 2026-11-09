@@ -27,6 +27,8 @@ export default function CartScreen() {
   const onRequest = lines.length - priced.length;
 
   const confirm = (details: OrderDetails) => {
+    // The sheet can still be tapped while it closes, and by then the cart is empty.
+    if (!lines.length) return;
     const order = placeOrder(lines, details);
     clear();
     setCheckoutOpen(false);

@@ -13,12 +13,16 @@ export type GlassPlanResult = {
   glassHeight: number;
   glassQuantity: number;
   materials: MaterialItem[];
+  /** Shown on screen and in the PDF when the sizes need checking before anything is cut. */
+  warning?: string;
 };
 
 export type SizeRange = { minWidth: number; maxWidth: number; minHeight: number; maxHeight: number };
 
 // Placeholder shop-floor defaults for systems without a confirmed formula below.
 const CUTTING_ALLOWANCE_MM = 20;
+/** The widest panel printed for the telescopic kits (systemSpecs in src/data/shop/systems.ts). */
+const MAX_PANEL_WIDTH_MM = 950;
 
 /** "2+1 Sliding System" → 3 panels. Falls back to 1 if the name doesn't carry a count. */
 export function parsePanelCount(name: string): number {
@@ -182,19 +186,18 @@ export function getSystemRange(systemName: string): SizeRange | null {
 }
 
 function fallbackPlan(width: number, height: number, panelCount: number): GlassPlanResult {
-  const glassWidth = Math.max(0, width - CUTTING_ALLOWANCE_MM);
-  const glassHeight = Math.max(0, height - CUTTING_ALLOWANCE_MM);
-  const cuttingWidth = Math.round(glassWidth / panelCount);
-  const cuttingHeight = glassHeight;
+  const cuttingWidth = Math.round(Math.max(0, width - CUTTING_ALLOWANCE_MM) / panelCount);
+  const cuttingHeight = Math.max(0, height - CUTTING_ALLOWANCE_MM);
   const aluminiumProfileM = ((cuttingWidth + cuttingHeight) * 2 * panelCount) / 1000;
   return {
     openingWidth: width,
     openingHeight: height,
     cuttingWidth,
     cuttingHeight,
-    glassWidth,
-    glassHeight,
+    glassWidth: cuttingWidth,
+    glassHeight: cuttingHeight,
     glassQuantity: panelCount,
+    warning: 'No confirmed formula for this system yet. Check these sizes before cutting.',
     materials: [
       { label: 'Toughened Glass (10 mm)', value: `${panelCount} pc${panelCount > 1 ? 's' : ''}` },
       { label: 'Aluminium Profile', value: `${aluminiumProfileM.toFixed(1)} m` },
@@ -244,6 +247,10 @@ export function computeGlassPlan(
       glassHeight,
       glassQuantity: formula.glassQuantity,
       materials: bracket.materials(cuttingWidth, cuttingHeight, width),
+      warning:
+        cuttingWidth > MAX_PANEL_WIDTH_MM
+          ? `Panel width ${cuttingWidth} mm is over the ${MAX_PANEL_WIDTH_MM} mm printed for this system. Check with Vimalnath before ordering.`
+          : undefined,
     },
   };
 }

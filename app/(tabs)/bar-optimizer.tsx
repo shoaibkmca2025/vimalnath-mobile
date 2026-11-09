@@ -1,10 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BarResultPanel } from '@/components/BarResultPanel';
 import { Button } from '@/components/Button';
@@ -18,9 +16,9 @@ import { sections, type Section } from '@/data/sections';
 import { planBars, type BarPlan } from '@/lib/bar-optimizer';
 import { buildBarPlanHtml } from '@/lib/bar-plan-pdf';
 import { confirmDestructive } from '@/lib/confirm';
-import { withTimeout } from '@/lib/pdf-html';
 import { inchesToMm, mmToInchParts, pad2 } from '@/lib/format';
 import { formatLength, formatLengthValue, SIZE_UNIT_KEY, UNIT_OPTIONS, type LengthUnit } from '@/lib/length-units';
+import { pdfFileName, sharePdf } from '@/lib/pdf-export';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, tabularNums, type } from '@/theme';
 
@@ -244,18 +242,7 @@ export default function BarOptimizerScreen() {
     if (!plan) return;
     setExporting(true);
     try {
-      const html = buildBarPlanHtml({ siteName, section, plan });
-      // Guarded with a timeout so a stuck native call can't leave the button spinning forever
-      // (the share sheet itself waits on the user, so it isn't timed).
-      if (Platform.OS === 'web') {
-        // On web this just opens the browser's print dialog — it doesn't return a usable file uri to share.
-        await withTimeout(Print.printToFileAsync({ html }), 20000, 'Generating PDF');
-      } else {
-        const { uri } = await withTimeout(Print.printToFileAsync({ html }), 20000, 'Generating PDF');
-        if (await withTimeout(Sharing.isAvailableAsync(), 5000, 'Checking sharing availability')) {
-          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Save or share bar plan', UTI: 'com.adobe.pdf' });
-        }
-      }
+      await sharePdf(buildBarPlanHtml({ siteName, section, plan }), pdfFileName(`Bar plan ${siteName || section.code}`), 'Save or share bar plan');
       setExportOpen(false);
     } catch (err) {
       console.error('PDF export failed:', err);
@@ -388,6 +375,7 @@ export default function BarOptimizerScreen() {
         onClose={() => setPickerOpen(false)}
         onSelect={(next) => {
           setSection(next);
+          setPlan(null);
           const row = makeRow(String(next.bar));
           setBarLengths([unit === 'in' ? convertRow(row, 'in') : row]);
           setPickerOpen(false);

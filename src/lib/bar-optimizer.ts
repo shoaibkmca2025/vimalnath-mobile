@@ -63,7 +63,7 @@ export function calculateBars(pieces: Piece[], stock: BarStock[], kerf: number):
       continue;
     }
     const chosen = sortedStock.find((candidate) => length <= candidate && remaining.get(candidate) !== 0);
-    if (chosen === undefined) throw new Error(`Not enough standard bar stock left for a ${length} mm piece.`);
+    if (chosen === undefined) throw new Error('Not enough standard bar stock for these pieces.');
     const left = remaining.get(chosen)!;
     if (left !== null) remaining.set(chosen, left - 1);
     bars.push({ length: chosen, used: length, pieces: [length] });
@@ -149,6 +149,9 @@ export function summarizePlan(bars: Bar[], kerf: number, unit: LengthUnit = 'mm'
   };
 }
 
+/** Stops a mistyped quantity freezing the phone; a plan this big still takes a moment at most. */
+const MAX_PIECES = 10000;
+
 export type PlanRequest = { pieces: Piece[]; stock: BarStock[]; kerf: number; unit?: LengthUnit };
 
 export function planBars({ pieces, stock, kerf, unit = 'mm' }: PlanRequest): { plan: BarPlan } | { error: string } {
@@ -156,6 +159,7 @@ export function planBars({ pieces, stock, kerf, unit = 'mm' }: PlanRequest): { p
   const validStock = stock.filter((entry) => entry.length > 0 && (entry.qty === undefined || entry.qty > 0));
   if (!validPieces.length) return { error: 'Add at least one piece length first.' };
   if (!validStock.length) return { error: 'Add at least one standard bar length.' };
+  if (validPieces.reduce((sum, piece) => sum + piece.qty, 0) > MAX_PIECES) return { error: `A plan can have up to ${MAX_PIECES} pieces. Check the quantities.` };
   const longestStock = Math.max(...validStock.map((entry) => entry.length));
   if (validPieces.some((piece) => piece.length > longestStock)) return { error: 'A piece cannot be longer than the longest standard bar.' };
   try {

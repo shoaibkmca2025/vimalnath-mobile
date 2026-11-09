@@ -79,11 +79,17 @@ export default function GlassCalculatorScreen() {
     AsyncStorage.setItem(SIZE_UNIT_KEY, next).catch(() => {});
   };
 
+  // A result on screen must always match the size above it.
+  const clearOutcome = () => {
+    setSizeError(null);
+    setResult(null);
+  };
+
   const setInches = (dimension: Dimension, change: Partial<InchSize>) => {
     const update = (current: InchSize) => ({ ...current, ...change });
     if (dimension === 'width') setWidthIn(update);
     else setHeightIn(update);
-    setSizeError(null);
+    clearOutcome();
   };
 
   const calculate = () => {
@@ -143,7 +149,7 @@ export default function GlassCalculatorScreen() {
             value={width}
             onChangeText={(text) => {
               setWidth(digitsOnly(text));
-              setSizeError(null);
+              clearOutcome();
             }}
             accessibilityLabel={`Opening ${widthLabel.toLowerCase()} in millimetres`}
           />
@@ -156,7 +162,7 @@ export default function GlassCalculatorScreen() {
             value={height}
             onChangeText={(text) => {
               setHeight(digitsOnly(text));
-              setSizeError(null);
+              clearOutcome();
             }}
             accessibilityLabel="Opening height in millimetres"
           />
@@ -176,6 +182,12 @@ export default function GlassCalculatorScreen() {
 
       {result && (
         <View style={styles.results}>
+          {result.warning && (
+            <View style={styles.warning} accessibilityRole="alert">
+              <Ionicons name="alert-circle" size={16} color={colors.red} />
+              <Text style={styles.errorText}>{result.warning}</Text>
+            </View>
+          )}
           <SizeCard
             title="Cutting size"
             value={`${result.cuttingWidth} × ${result.cuttingHeight} mm`}
@@ -309,6 +321,7 @@ const styles = StyleSheet.create({
   error: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginHorizontal: 16, marginBottom: 22 },
   errorText: { ...type.footnote, flex: 1, color: colors.red },
   results: { marginTop: 32 },
+  warning: { flexDirection: 'row', gap: 6, marginBottom: 12, marginHorizontal: 4 },
   sizeCard: { marginBottom: 12, paddingHorizontal: 16, paddingVertical: 14, borderRadius: radius.md },
   sizeTitle: { ...type.subheadline, fontWeight: '600' },
   sizeValue: { ...type.title2, marginTop: 2, ...tabularNums },

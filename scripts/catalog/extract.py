@@ -49,7 +49,7 @@ def section_for(sections, printed):
 
 
 def clean(text):
-    return re.sub(r'\s+', ' ', text.replace('ﬁ', 'fi').replace('ﬂ', 'fl')).strip()
+    return re.sub(r'\s+', ' ', text.replace('ﬁ', 'fi').replace('ﬂ', 'fl').replace('\ue009', 'tt')).strip()
 
 
 def parse_price(text):
