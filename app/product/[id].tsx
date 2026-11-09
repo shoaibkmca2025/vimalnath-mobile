@@ -12,6 +12,7 @@ import { QtyStepper } from '@/components/QtyStepper';
 import { Screen } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
 import { catalogPages, findShopProduct, formatINR, productTitle } from '@/data/shop';
+import { trackAdminActivity } from '@/lib/admin-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { useCart } from '@/providers/CartProvider';
 import { colors, radius, tabularNums, type } from '@/theme';
@@ -37,6 +38,13 @@ export default function ProductScreen() {
     const frame = requestAnimationFrame(() => setComplete(true));
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  // Effects run once per visible product/option change, never as a render side effect.
+  const viewedOption = product?.options?.[optionIndex];
+  useEffect(() => {
+    if (!product || !viewedOption || !Number.isFinite(viewedOption.mrp)) return;
+    void trackAdminActivity({ type: 'price_view', productId: product.id, productName: productTitle(product), optionIndex, optionLabel: viewedOption.label, price: viewedOption.mrp });
+  }, [product?.id, optionIndex, viewedOption?.label, viewedOption?.mrp]);
 
   if (!product) {
     return (
@@ -136,7 +144,10 @@ export default function ProductScreen() {
       {complete && pageImage && (
         <InsetGroup header="Catalogue page" style={styles.block}>
           <Pressable
-            onPress={() => setPageOpen(true)}
+            onPress={() => {
+              setPageOpen(true);
+              void trackAdminActivity({ type: 'catalogue_view', productId: product.id, productName: productTitle(product) });
+            }}
             accessibilityRole="button"
             accessibilityLabel={`Open ${pageTitle}`}
             style={({ pressed }) => [styles.pageRow, pressed && styles.rowPressed]}
