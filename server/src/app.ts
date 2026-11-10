@@ -62,6 +62,8 @@ export function createApp({ adminOrigin, production, trustProxy, checkDatabase, 
     }),
   );
   app.use('/v1/admin/*', cors({ origin: adminOrigin, credentials: true }));
+  // The app sends a token, not a cookie, so any address may call it (its web version runs on its own).
+  app.use('/v1/app/*', cors());
   app.use('/v1/admin/*', limit);
   app.use('/v1/app/*', limit);
 

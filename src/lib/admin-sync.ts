@@ -106,7 +106,7 @@ async function request<T>(config: AdminConnection, path: string, body?: Record<s
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
-    const response = await fetch(`${config.baseUrl}/api/mobile/${path}`, {
+    const response = await fetch(`${config.baseUrl}/v1/app/${path}`, {
       method: body ? 'POST' : 'GET',
       headers: { Authorization: `Bearer ${config.deviceToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -117,8 +117,8 @@ async function request<T>(config: AdminConnection, path: string, body?: Record<s
       if (response.status === 429) throw new Error('The shop server is busy. Retry sync in a moment.');
       let detail = '';
       try {
-        const failure = await response.json() as { error?: unknown };
-        if (typeof failure.error === 'string') detail = failure.error.slice(0, 300);
+        const failure = await response.json() as { error?: { message?: unknown } };
+        if (typeof failure.error?.message === 'string') detail = failure.error.message.slice(0, 300);
       } catch { /* A proxy may return an HTML error page instead of JSON. */ }
       throw new Error(`Shop server returned ${response.status}. ${detail || 'Pending items remain saved for retry.'}`);
     }

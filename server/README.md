@@ -35,6 +35,7 @@ src/
   server.ts    Starts the API and shuts it down cleanly
   app.ts       Routes, security, request limits and the one error format
   staff.ts     Staff sign-in, roles and everything under /v1/admin
+  app-users.ts The app's shop connection (/v1/app) and the admin's App Users (/v1/admin/app-users)
   validate.ts  Checks input; a route uses jsonBody(schema)
   config.ts    Reads and checks the settings at startup
   migrate.ts   Applies new migrations
@@ -43,9 +44,20 @@ src/
 
 Every error looks like `{ "error": { "message": "...", "field": "name" } }`. `field` appears only when one input is at fault.
 
+**The app's shop connection.** Staff add a customer under App Users and send them the token. The customer enters it in the app under Settings → Shop connection. The app then sends `Authorization: Bearer <token>` to:
+
+| Route | What it does |
+|---|---|
+| `GET /v1/app/orders` | `{ customerId, orders }`. The app checks this around every sync. |
+| `POST /v1/app/orders` | `{ eventId, order }`, kept as received. Module 6 turns these into real orders. |
+| `POST /v1/app/profile` | `{ eventId, profile }`, the User screen's details. |
+| `POST /v1/app/activity` | A product view, sent only if the customer turned on activity sharing. |
+
+The app sends these one at a time, in order, and stops at the first one refused. So the server accepts a resend without storing it twice and shortens over-long text instead of refusing it. Only a malformed order is refused.
+
 ## Changing the database
 
-Add a new file such as `migrations/003_orders.sql`, then run `npm run migrate`. Never edit a file that has already been applied. The Docker image applies new migrations each time it starts.
+Add a new file such as `migrations/005_orders.sql`, then run `npm run migrate`. Never edit a file that has already been applied. The Docker image applies new migrations each time it starts.
 
 ## Before going live
 

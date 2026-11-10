@@ -49,7 +49,7 @@ scripts/                 One-off tools: catalogue extraction from the Taiton PDF
 assets/                  Photos, catalogue pages and product thumbnails
 ```
 
-Orders, the cart, the profile and the size unit are saved on the phone with AsyncStorage. The phone app doesn't talk to the server yet.
+Orders, the cart, the profile and the size unit are saved on the phone with AsyncStorage. With a token from the shop (Settings → Shop connection), the app also sends the profile, orders and, if the customer allows it, product views to the server.
 
 ## Before production
 

@@ -3,6 +3,7 @@ import {
   CalculatorIcon,
   CaretRightIcon,
   ClockCounterClockwiseIcon,
+  DeviceMobileIcon,
   GearSixIcon,
   ImagesIcon,
   InfoIcon,
@@ -57,6 +58,7 @@ export function AppShell() {
       items: [
         { to: '/orders', label: 'Orders', icon: ReceiptIcon, count: newOrders },
         { to: '/customers', label: 'Customers', icon: UsersThreeIcon },
+        ...(session?.role === 'catalogue' ? [] : [{ to: '/app-users', label: 'App Users', icon: DeviceMobileIcon }]),
       ],
     },
     {

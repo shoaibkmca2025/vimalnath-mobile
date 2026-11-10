@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 
 import { createApp } from './app.ts';
+import { appRoutes, appUserAdminRoutes } from './app-users.ts';
 import { loadConfig } from './config.ts';
 import { connect } from './db.ts';
 import { adminRoutes } from './staff.ts';
@@ -14,7 +15,10 @@ const app = createApp({
   trustProxy: config.TRUST_PROXY,
   checkDatabase: () => sql`select 1`,
 });
-app.route('/v1/admin', adminRoutes(sql, { adminOrigin: config.ADMIN_ORIGIN, production, trustProxy: config.TRUST_PROXY }));
+const admin = adminRoutes(sql, { adminOrigin: config.ADMIN_ORIGIN, production, trustProxy: config.TRUST_PROXY });
+admin.route('/app-users', appUserAdminRoutes(sql));
+app.route('/v1/admin', admin);
+app.route('/v1/app', appRoutes(sql));
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => console.log(`API listening on port ${port}`));
 

@@ -14,7 +14,7 @@ import { jsonBody, parse } from './validate.ts';
 const ROLES = ['owner', 'sales', 'catalogue'] as const;
 type Role = (typeof ROLES)[number];
 type Staff = { id: number; name: string; email: string; role: Role };
-type Env = { Variables: { staff: Staff; sessionHash: string } };
+export type Env = { Variables: { staff: Staff; sessionHash: string } };
 
 const COOKIE = 'vimalnath_session';
 const EMAIL_USED = 'Someone already uses that email.';
@@ -43,8 +43,14 @@ async function passwordMatches(password: string, stored: string) {
 }
 
 const dummyHash = hashPassword(randomBytes(16).toString('hex'));
-const newToken = () => randomBytes(32).toString('base64url');
-const sha256 = (token: string) => createHash('sha256').update(token).digest('hex');
+export const newToken = () => randomBytes(32).toString('base64url');
+export const sha256 = (token: string) => createHash('sha256').update(token).digest('hex');
+
+/** Route middleware for signed-in routes: only these roles get through. */
+export const only = (...roles: Role[]): MiddlewareHandler<Env> => async (c, next) => {
+  if (!roles.includes(c.get('staff').role)) throw new HTTPException(403, { message: 'You do not have access to this.' });
+  await next();
+};
 
 /** A one-time link to set a password, valid for 3 days. Replaces any earlier link for that person. */
 export async function issuePasswordLink(sql: Sql, staffId: number, adminOrigin: string) {
@@ -122,11 +128,6 @@ export function adminRoutes(sql: Sql, { adminOrigin, production, trustProxy }: {
     c.set('sessionHash', hash);
     await next();
   });
-
-  const only = (...roles: Role[]): MiddlewareHandler<Env> => async (c, next) => {
-    if (!roles.includes(c.get('staff').role)) throw new HTTPException(403, { message: 'You do not have access to this.' });
-    await next();
-  };
 
   admin.get('/me', (c) => c.json(c.get('staff')));
 
