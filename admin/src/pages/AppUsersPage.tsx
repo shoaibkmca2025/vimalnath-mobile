@@ -87,7 +87,7 @@ export default function AppUsersPage() {
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params);
-    if (value && value !== 'all') next.set(key, value);
+    if (value && !(key === 'status' && value === 'all')) next.set(key, value);
     else next.delete(key);
     setParams(next, { replace: true });
   };
@@ -310,7 +310,7 @@ export default function AppUsersPage() {
 
       <ConfirmDialog
         open={confirmToken}
-        title={`Replace ${editing?.label ?? 'this'} token?`}
+        title={`Replace the token for ${editing?.label ?? 'this customer'}?`}
         body="Their current token stops working straight away. Their app keeps its orders and connects again once they enter the new token."
         confirmLabel="Replace Token"
         destructive

@@ -80,6 +80,7 @@ export function appUserAdminRoutes(sql: Sql) {
   const admin = new Hono<Env>();
   admin.use(only('owner', 'sales'));
 
+  // shortcut: counts every event ever received on each load; keep counters on app_devices once app_events passes about a million rows.
   const appUsers = (where = sql`true`) => sql`
     select d.id, d.label, d.name, d.business, d.phone, d.email, d.city, d.blocked,
       d.last_seen_at as "lastSeenAt", d.profile_updated_at as "profileUpdatedAt", d.created_at as "createdAt",
