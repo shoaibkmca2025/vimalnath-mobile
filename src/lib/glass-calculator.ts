@@ -1,5 +1,5 @@
 import { calculateBars } from '@/lib/bar-optimizer';
-import { formatFeetRoundedUp, formatInches } from '@/lib/format';
+import { formatInches } from '@/lib/format';
 
 /** `note` carries extra detail shown under the label, e.g. the cut pieces behind a bar count. */
 export type MaterialItem = { label: string; value: string; note?: string };
@@ -71,105 +71,8 @@ type SystemFormula = {
   notice?: (cuttingWidth: number) => string;
 };
 
-const OVERLAP_MM = 16;
-const HEIGHT_DEDUCTION_MM = 92;
-const MIN_HEIGHT_MM = 1800;
-const MAX_HEIGHT_MM = 2998;
-/** Verticals come in 2.5 m up to this cutting height, 3 m above it. */
-const SHORT_VERTICAL_MAX_MM = 2489;
-
-/** Horizontal profile bars in stock, with the names they go by. */
-const HORIZONTAL_STOCK = [
-  { mm: 2498, name: '2.5 m' },
-  { mm: 2998, name: '3 m' },
-];
-/** Every glass panel takes a top and a bottom horizontal, cut at the cutting width. */
-const HORIZONTALS_PER_PANEL = 2;
-
-/**
- * The Horizontal row: 'bars' is one 2.5 m bar per panel; 'optimized' cuts the horizontals from the
- * stock lengths with the bar optimizer, e.g. "3 nos (2.5 m)" for six 1016 mm pieces.
- */
-type HorizontalRule = 'bars' | 'optimized';
-
-function horizontalItem(rule: HorizontalRule, panels: number, cuttingWidth: number): MaterialItem {
-  if (rule === 'bars') return { label: 'Horizontal', value: `${panels} nos (2.5 m)` };
-  const pieces = HORIZONTALS_PER_PANEL * panels;
-  const bars = calculateBars([{ length: cuttingWidth, qty: pieces }], HORIZONTAL_STOCK.map((stock) => ({ length: stock.mm })), 0);
-  const counts = new Map<number, number>();
-  for (const bar of bars) counts.set(bar.length, (counts.get(bar.length) ?? 0) + 1);
-  const value = [...counts.entries()]
-    .sort(([a], [b]) => b - a)
-    .map(([length, count]) => `${count} nos (${HORIZONTAL_STOCK.find((stock) => stock.mm === length)?.name ?? `${length} mm`})`)
-    .join(' + ');
-  return { label: 'Horizontal', value, note: `${pieces} pcs × ${cuttingWidth} mm (top and bottom of each glass)` };
-}
-
-/** Extra track beyond the opening and one parked panel, for systems whose panels all slide away. */
+/** Extra track beyond the opening and one parked shutter, for systems whose shutters all slide into the wall. */
 const TRACK_PARKING_EXTRA_MM = 200;
-
-/**
- * How the Top Track row is worked out:
- * - 'panels': one 2.5 m track per panel;
- * - 'opening': one track per panel, each as long as the opening width (systems with a fixed panel, e.g. 2+1);
- * - 'parking': one track per panel, each the opening width + one cutting width + 200 mm, so the panels can slide clear of the
- *   opening (systems where every panel slides, e.g. 2+0).
- */
-type TrackRule = 'panels' | 'opening' | 'parking';
-
-function trackItem(rule: TrackRule, panels: number, openingWidth: number, cuttingWidth: number): MaterialItem {
-  if (rule === 'panels') return { label: 'Top Track', value: `${panels} nos (2.5 m)` };
-  const length = rule === 'opening' ? openingWidth : openingWidth + cuttingWidth + TRACK_PARKING_EXTRA_MM;
-  return { label: 'Top Track', value: `${panels} nos (${formatFeetRoundedUp(length)})` };
-}
-
-/**
- * Telescopic sliding systems ("2+1" = 2 sliding + 1 fixed panel) follow one rule, confirmed by
- * Vimalnath for 1+0, 1+1, 2+0 and 2+1 and extended to 3+0, 3+1, 4+0 and 4+1:
- * - each sliding panel adds a 16 mm overlap, and the width is shared between all the glass panels;
- *   the cutting height is the opening height − 92 mm; glass is the cutting size − 21 mm;
- * - 3 gaskets and 4 connectors per panel, 2 verticals and 2 track caps, the horizontals by `horizontal`,
- *   the top track by `track`, and the system's sliding kit (`kit` names it when it isn't named after the system).
- */
-function telescopicFormula(
-  system: string,
-  maxWidth: number,
-  { kit = `${system} Sliding Kit`, track = 'panels', horizontal = 'bars' }: { kit?: string; track?: TrackRule; horizontal?: HorizontalRule } = {},
-): SystemFormula {
-  const [sliding, fixed] = system.split('+').map(Number);
-  const panels = sliding + fixed;
-  const minWidth = 600 * panels;
-  const cuttingWidth = (openingWidth: number) => (openingWidth + OVERLAP_MM * sliding) / panels;
-  return {
-    range: { minWidth, maxWidth, minHeight: MIN_HEIGHT_MM, maxHeight: MAX_HEIGHT_MM },
-    cuttingSize: {
-      width: cuttingWidth,
-      height: (_openingWidth, openingHeight) => openingHeight - HEIGHT_DEDUCTION_MM,
-    },
-    glassQuantity: panels,
-    materialBrackets: [
-      {
-        // One list for every cutting size the opening range produces.
-        minWidth: cuttingWidth(minWidth),
-        maxWidth: cuttingWidth(maxWidth),
-        minHeight: MIN_HEIGHT_MM - HEIGHT_DEDUCTION_MM,
-        maxHeight: MAX_HEIGHT_MM - HEIGHT_DEDUCTION_MM,
-        materials: (finishedWidth, cuttingHeight, openingWidth) => [
-          { label: 'Vertical', value: cuttingHeight <= SHORT_VERTICAL_MAX_MM ? '2 nos (2.5 m)' : '2 nos (3 m)' },
-          horizontalItem(horizontal, panels, finishedWidth),
-          trackItem(track, panels, openingWidth, finishedWidth),
-          { label: 'Track Cap', value: '2 nos (2.5 m)' },
-          { label: 'Sliding Handle / Latch Handle', value: '1+1' },
-          { label: kit, value: '1 nos' },
-          { label: 'Gasket', value: `${3 * panels} nos (8mm)` },
-          { label: 'Connector', value: `${4 * panels} nos` },
-          { label: 'Middle', value: 'According to design' },
-          { label: 'D. Connector', value: 'According to design' },
-        ],
-      },
-    ],
-  };
-}
 
 /**
  * 1+0, as specified by Vimalnath: length 600–1200 mm, height 1800–3000 mm; cutting length = length + 16,
@@ -223,15 +126,43 @@ const TRACK_STOCK: Stock = [8, 10, 12, 14, 16].map((feet) => ({ mm: feet * 304.8
  * total length, then fewest bars), e.g. "2 nos (96″)", with the cut size underneath. Also returns the
  * number of bars.
  */
-function optimizedRow(label: string, pieces: number, length: number, stock: Stock, what: string): { item: MaterialItem; bars: number } {
-  const bars = calculateBars([{ length, qty: pieces }], stock.map((entry) => ({ length: entry.mm })), 0);
+function optimizedRow(label: string, pieces: number, length: number, stock: Stock, what: string, sameLength = false): { item: MaterialItem; bars: number } {
+  const lengths = stock.map((entry) => entry.mm);
+  // Tracks are only joined when no stock bar is long enough for one piece.
+  const longEnough = lengths.filter((bar) => bar >= length);
+  const candidates = longEnough.length ? longEnough : lengths;
+  const bars = sameLength ? bestOf(candidates.map((single) => joinAndPack(pieces, length, [single]))) : joinAndPack(pieces, length, lengths);
   const counts = new Map<number, number>();
-  for (const bar of bars) counts.set(bar.length, (counts.get(bar.length) ?? 0) + 1);
+  for (const bar of bars) counts.set(bar, (counts.get(bar) ?? 0) + 1);
   const value = stock
     .filter((entry) => counts.has(entry.mm))
     .map((entry) => `${counts.get(entry.mm)} nos (${entry.name})`)
     .join(' + ');
-  return { item: { label, value, note: `Cut ${pieces} pcs × ${length} mm (${formatInches(length)}) · ${what}` }, bars: bars.length };
+  const joined = length > Math.max(...bars) ? ' · longer than one bar, so each is joined' : '';
+  return { item: { label, value, note: `Cut ${pieces} pcs × ${length} mm (${formatInches(length)}) · ${what}${joined}` }, bars: bars.length };
+}
+
+/**
+ * The stock bars (their lengths) for `pieces` cuts of `length` mm. A piece longer than the longest bar is
+ * joined: it takes whole bars of that length plus a remainder, and the remainders are packed by the bar
+ * optimizer (least total length, then fewest bars).
+ */
+function joinAndPack(pieces: number, length: number, stockLengths: number[]): number[] {
+  const longest = Math.max(...stockLengths);
+  const whole = length > longest ? Math.floor(length / longest) : 0;
+  const rest = length - whole * longest;
+  const bars: number[] = Array.from({ length: whole * pieces }, () => longest);
+  if (rest > 0.5) {
+    const packed = calculateBars([{ length: rest, qty: pieces }], stockLengths.map((bar) => ({ length: bar })), 0);
+    bars.push(...packed.map((bar) => bar.length));
+  }
+  return bars;
+}
+
+/** The plan with the least total length, then the fewest bars. */
+function bestOf(plans: number[][]): number[] {
+  const total = (plan: number[]) => plan.reduce((sum, bar) => sum + bar, 0);
+  return [...plans].sort((a, b) => total(a) - total(b) || a.length - b.length)[0] ?? [];
 }
 
 const optimizedHorizontalProfile = (pieces: number, length: number) =>
@@ -241,7 +172,15 @@ type TrackSpec =
   /** Fixed 2.5 m lengths. */
   | { fixed: number }
   /** `pieces` tracks of `length` mm each, cut from TRACK_STOCK by the bar optimizer. */
-  | { pieces: number; length: (openingWidth: number, cuttingWidth: number) => number; what: string };
+  | {
+      pieces: number;
+      length: (openingWidth: number, cuttingWidth: number) => number;
+      what: string;
+      /** Every track bar the same stock length (no 8 ft + 12 ft mixes). */
+      sameLength?: boolean;
+      /** A fixed number of track caps, in the top track's stock length; without it the caps match the track. */
+      caps?: number;
+    };
 
 type SystemSpec = {
   system: string;
@@ -290,8 +229,12 @@ function vimalnathSystem(spec: SystemSpec): SystemFormula {
             cap = { label: 'Track Cap', value: `${spec.track.fixed} nos (2.5 m)` };
           } else {
             const length = spec.track.length(openingWidth, finishedWidth);
-            track = optimizedRow('Top Track', spec.track.pieces, length, TRACK_STOCK, spec.track.what).item;
-            cap = { ...track, label: 'Track Cap', note: `${track.note?.split(' · ')[0]} · same as the top track` };
+            track = optimizedRow('Top Track', spec.track.pieces, length, TRACK_STOCK, spec.track.what, spec.track.sameLength).item;
+            cap =
+              spec.track.caps !== undefined
+                ? // One stock length (sameLength), so only the count changes: "3 nos (10 ft)" → "2 nos (10 ft)".
+                  { label: 'Track Cap', value: track.value.replace(/^\d+ nos/, `${spec.track.caps} nos`), note: 'Same length as the top track bars' }
+                : { ...track, label: 'Track Cap', note: `${track.note?.split(' · ')[0]} · same as the top track` };
           }
           return [
             { label: 'Vertical Profile', value: `${spec.verticals} nos (${cuttingHeight <= 2400 ? '2.5 m' : '3 m'})` },
@@ -346,9 +289,36 @@ const TWO_PLUS_ONE = vimalnathSystem({
   maxWidth: 3600,
   overlap: 32,
   verticals: 6,
-  track: { pieces: 3, length: (openingWidth) => openingWidth, what: 'one per panel, as long as the opening' },
+  track: { pieces: 3, length: (openingWidth) => openingWidth, what: 'one per panel, as long as the opening', sameLength: true, caps: 2 },
   handle: '1+1',
   connectors: 12,
+});
+
+// The larger systems follow the same structure as 2+0 and 2+1: 600–1200 mm of opening per glass, 16 mm of
+// overlap per sliding panel, 2 vertical profiles and 4 connectors per glass. "+0" systems slide fully into
+// the wall (wall-pocket reminder, tracks of opening + one shutter + 200 mm, handle named after the system);
+// "+1" systems keep a fixed panel (tracks as long as the opening, one stock length, 2 track caps, 1+1 handle).
+const allIntoWall = (system: string, glasses: number): SystemSpec => ({
+  system,
+  minWidth: 600 * glasses,
+  maxWidth: 1200 * glasses,
+  overlap: 16 * glasses,
+  verticals: 2 * glasses,
+  track: { pieces: glasses, length: (openingWidth, cuttingWidth) => openingWidth + cuttingWidth + TRACK_PARKING_EXTRA_MM, what: 'opening + one shutter + 200 mm' },
+  handle: system,
+  connectors: 4 * glasses,
+  notice: (cuttingWidth) => `Check the hiding space in the wall: it must be at least the shutter size, ${cuttingWidth} mm (${formatInches(cuttingWidth)}).`,
+});
+
+const withFixedPanel = (system: string, glasses: number): SystemSpec => ({
+  system,
+  minWidth: 600 * glasses,
+  maxWidth: 1200 * glasses,
+  overlap: 16 * (glasses - 1),
+  verticals: 2 * glasses,
+  track: { pieces: glasses, length: (openingWidth) => openingWidth, what: 'one per panel, as long as the opening', sameLength: true, caps: 2 },
+  handle: '1+1',
+  connectors: 4 * glasses,
 });
 
 // Formulas keyed by system ("1+0", "2+0", …), with the widest opening each allows. Any system not
@@ -358,10 +328,10 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
   '1+1': ONE_PLUS_ONE,
   '2+0': TWO_PLUS_ZERO,
   '2+1': TWO_PLUS_ONE,
-  '3+0': telescopicFormula('3+0', 3657, { track: 'parking', horizontal: 'optimized' }),
-  '3+1': telescopicFormula('3+1', 4876, { track: 'opening', horizontal: 'optimized' }),
-  '4+0': telescopicFormula('4+0', 4876, { track: 'parking', horizontal: 'optimized' }),
-  '4+1': telescopicFormula('4+1', 6095, { track: 'opening', horizontal: 'optimized' }),
+  '3+0': vimalnathSystem(allIntoWall('3+0', 3)),
+  '3+1': vimalnathSystem(withFixedPanel('3+1', 4)),
+  '4+0': vimalnathSystem(allIntoWall('4+0', 4)),
+  '4+1': vimalnathSystem(withFixedPanel('4+1', 5)),
 };
 
 export function getSystemRange(systemName: string): SizeRange | null {
