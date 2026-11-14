@@ -82,9 +82,16 @@ export function catalogueRoutes(sql: Sql) {
   });
 
   // Saves whole products, new or changed, with their options and specs. Five queries however many products, so hiding 650 at once stays quick.
-  catalogue.put('/products', editors, jsonBody(z.object({ products: z.array(Product).min(1).max(1000).refine(distinct('id'), 'A product is listed twice.') })), async (c) => {
-    const { products } = c.req.valid('json');
+  const ProductsSave = z.object({
+    products: z.array(Product).min(1).max(1000).refine(distinct('id'), 'A product is listed twice.'),
+    // Kept with each price change, for example "Raised 312 prices by 8%".
+    reason: z.string().trim().max(200).optional(),
+  });
+
+  catalogue.put('/products', editors, jsonBody(ProductsSave), async (c) => {
+    const { products, reason } = c.req.valid('json');
     const ids = products.map((product) => product.id);
+    const by = c.get('staff').name;
     await sql
       .begin(async (tx) => {
         // New products go to the top of the list, as the admin shows them.
@@ -107,12 +114,23 @@ export function catalogueRoutes(sql: Sql) {
           on conflict (id) do update set code = excluded.code, name = excluded.name, section = excluded.section, category_id = excluded.category_id,
             catalogue_source = excluded.catalogue_source, catalogue_page = excluded.catalogue_page, image = excluded.image,
             featured = excluded.featured, visible = excluded.visible`;
-        await tx`delete from product_options where product_id in ${tx(ids)}`;
+        const before = await tx`delete from product_options where product_id in ${tx(ids)} returning product_id, label, mrp`;
         await tx`delete from product_specs where product_id in ${tx(ids)}`;
         const options = products.flatMap((product) => product.options.map((option, sort_order) => ({ product_id: product.id, label: option.label, code: option.code || null, mrp: option.mrp, sort_order })));
         const specs = products.flatMap((product) => product.specs.map((spec, sort_order) => ({ product_id: product.id, label: spec.label, value: spec.value, sort_order })));
         if (options.length) await tx`insert into product_options ${tx(options)}`;
         if (specs.length) await tx`insert into product_specs ${tx(specs)}`;
+
+        // Price history: every option whose MRP changed, was added or was removed. Hiding or renaming records nothing.
+        const key = (productId: string, label: string) => `${productId}\u0000${label}`;
+        const was = new Map(before.map((row) => [key(row.product_id, row.label), row.mrp as number]));
+        const now = new Set(options.map((option) => key(option.product_id, option.label)));
+        const names = new Map(products.map((product) => [product.id, { code: product.code, product: product.name || product.section }]));
+        const changes = [
+          ...options.filter((option) => was.get(key(option.product_id, option.label)) !== option.mrp).map((option) => ({ product_id: option.product_id, option_label: option.label, old_mrp: was.get(key(option.product_id, option.label)) ?? null, new_mrp: option.mrp })),
+          ...before.filter((row) => !now.has(key(row.product_id, row.label))).map((row) => ({ product_id: row.product_id as string, option_label: row.label as string, old_mrp: row.mrp as number, new_mrp: null })),
+        ].map((change) => ({ ...change, ...names.get(change.product_id)!, changed_by: by, reason: reason ?? '' }));
+        if (changes.length) await tx`insert into price_changes ${tx(changes)}`;
       })
       .catch((error: { code?: string }) => {
         if (error.code === '23503') throw new HTTPException(400, { message: 'That category does not exist.', cause: { field: 'category' } });
@@ -120,6 +138,15 @@ export function catalogueRoutes(sql: Sql) {
       });
     return c.body(null, 204);
   });
+
+  // shortcut: the newest 300 changes only; add paging when people need to look further back.
+  catalogue.get('/price-history', async (c) =>
+    c.json(
+      await sql`
+        select id::text, product_id as "productId", code, product, option_label as option, old_mrp as "oldMrp", new_mrp as "newMrp", changed_by as by, reason, changed_at as at
+        from price_changes order by id desc limit 300`,
+    ),
+  );
 
   // Old orders keep their own copy of what was ordered, so deleting a product never changes them.
   catalogue.delete('/products/:id', editors, async (c) => {

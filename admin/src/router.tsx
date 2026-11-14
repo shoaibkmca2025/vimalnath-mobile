@@ -30,6 +30,7 @@ export const router = createBrowserRouter([
           { path: 'products', lazy: page(() => import('@/pages/ProductsPage')) },
           { path: 'products/new', lazy: page(() => import('@/pages/ProductEditorPage')) },
           { path: 'products/:id', lazy: page(() => import('@/pages/ProductEditorPage')) },
+          { path: 'prices', lazy: page(() => import('@/pages/PricesPage')) },
           { path: 'categories', lazy: page(() => import('@/pages/CategoriesPage')) },
           { path: 'price-lists', lazy: page(() => import('@/pages/PriceListsPage')) },
           { path: 'cutlist', lazy: page(() => import('@/pages/CutlistPage')) },

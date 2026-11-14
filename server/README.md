@@ -36,7 +36,7 @@ src/
   app.ts       Routes, security, request limits and the one error format
   staff.ts     Staff sign-in, roles and everything under /v1/admin
   app-users.ts The app's shop connection (/v1/app) and the admin's App Users (/v1/admin/app-users)
-  catalogue.ts Products, categories and price lists under /v1/admin (read: all staff; change: Owner and Catalogue editor)
+  catalogue.ts Products, categories, price lists and the MRP history (/v1/admin/price-history) under /v1/admin (read: all staff; change: Owner and Catalogue editor)
   orders.ts    Orders from the app (numbered VSC-0001 on), and /v1/admin/orders for status changes and internal notes
   media.ts     Uploads (POST /v1/admin/media: photos up to 5 MB, PDFs up to 25 MB) and serving them at /v1/media/<id>.webp, -md.webp, -sm.webp or .pdf
   validate.ts  Checks input; a route uses jsonBody(schema)

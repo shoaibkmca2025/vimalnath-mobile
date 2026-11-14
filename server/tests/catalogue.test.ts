@@ -127,3 +127,31 @@ test('access: everyone signed in reads; only Owners and Catalogue editors change
   assert.equal((await send('/categories', 'PUT', { categories: seed.categories }, sales)).status, 403);
   assert.equal((await send('/products', 'PUT', { products: [p2] }, await staff('owner'))).status, 204);
 });
+
+type Change = { productId: string; code: string; option: string; oldMrp: number | null; newMrp: number | null; by: string; reason: string };
+
+test('price history: each MRP change is kept with who made it and why; hiding a product records nothing', { skip }, async () => {
+  const cookie = await editor();
+  const name = `Staff ${next}`;
+  const history = async () => (await (await send('/price-history', 'GET', undefined, await staff('sales'))).json()) as Change[];
+  const p1 = (await read()).products.find((product) => product.id === 'p1')!;
+  const [bm] = p1.options;
+  const before = (await history()).length;
+
+  const raised = [{ ...bm!, mrp: bm!.mrp + 100 }, { label: 'Gold', mrp: 2500 }];
+  assert.equal((await send('/products', 'PUT', { products: [{ ...p1, options: raised }], reason: 'Raised 1 price by ₹100' }, cookie)).status, 204);
+  assert.equal((await send('/products', 'PUT', { products: [{ ...p1, options: raised, visible: false }] }, cookie)).status, 204);
+  assert.equal((await send('/products', 'PUT', { products: [{ ...p1, options: [raised[0]] }] }, cookie)).status, 204);
+
+  const changes = await history();
+  assert.equal(changes.length, before + 3);
+  assert.deepEqual(
+    changes.slice(0, 3).map((change) => [change.option, change.oldMrp, change.newMrp, change.by, change.reason]),
+    [
+      ['Gold', 2500, null, name, ''],
+      ['Gold', null, 2500, name, 'Raised 1 price by ₹100'],
+      [bm!.label, bm!.mrp, bm!.mrp + 100, name, 'Raised 1 price by ₹100'],
+    ],
+  );
+  assert.equal(changes[0]!.code, p1.code);
+});

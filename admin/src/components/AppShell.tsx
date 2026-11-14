@@ -3,6 +3,7 @@ import {
   CalculatorIcon,
   CaretRightIcon,
   ClockCounterClockwiseIcon,
+  CurrencyInrIcon,
   DeviceMobileIcon,
   GearSixIcon,
   ImagesIcon,
@@ -65,6 +66,7 @@ export function AppShell() {
       title: 'Catalogue',
       items: [
         { to: '/products', label: 'Products', icon: PackageIcon },
+        { to: '/prices', label: 'Prices', icon: CurrencyInrIcon },
         { to: '/categories', label: 'Categories', icon: TagIcon },
         { to: '/price-lists', label: 'Price Lists', icon: BookOpenIcon },
       ],

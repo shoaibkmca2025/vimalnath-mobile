@@ -9,8 +9,8 @@ export const isServerKey = (key: keyof Database): key is ServerKey => (SERVER_KE
 
 type Request = { path: string; method: 'PUT' | 'DELETE' | 'POST'; body?: unknown };
 
-/** The API calls that turn `before` into `after`: only what changed, or the whole list when it is short. */
-export function serverRequests<K extends ServerKey>(key: K, before: Database[K], after: Database[K]): Request[] {
+/** The API calls that turn `before` into `after`: only what changed, or the whole list when it is short. `reason` goes into the price history. */
+export function serverRequests<K extends ServerKey>(key: K, before: Database[K], after: Database[K], reason?: string): Request[] {
   if (before === after) return [];
   if (key === 'categories') return [{ path: '/categories', method: 'PUT', body: { categories: after } }];
   if (key === 'catalogues') return [{ path: '/price-lists', method: 'PUT', body: { priceLists: after } }];
@@ -22,7 +22,7 @@ export function serverRequests<K extends ServerKey>(key: K, before: Database[K],
   const changed = now.filter((product) => saved.get(product.id) !== JSON.stringify(product));
   const kept = new Set(now.map((product) => product.id));
   return [
-    ...(changed.length ? [{ path: '/products', method: 'PUT' as const, body: { products: changed } }] : []),
+    ...(changed.length ? [{ path: '/products', method: 'PUT' as const, body: reason ? { products: changed, reason } : { products: changed } }] : []),
     ...old.filter((product) => !kept.has(product.id)).map((product) => ({ path: `/products/${encodeURIComponent(product.id)}`, method: 'DELETE' as const })),
   ];
 }

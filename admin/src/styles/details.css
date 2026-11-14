@@ -907,3 +907,19 @@
     display: block;
   }
 }
+
+/* Prices page: an MRP box that fits a table row, tinted once it differs from the saved price. */
+.price-cell {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.price-input {
+  width: 9.5rem;
+}
+
+.price-input--changed .input {
+  border-color: var(--tint);
+  background: var(--tint-soft);
+}

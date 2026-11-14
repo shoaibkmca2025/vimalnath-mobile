@@ -105,7 +105,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const before = saved[key];
         let after = change(before as never) as typeof before;
         try {
-          for (const request of serverRequests<ServerKey>(key, before, after)) {
+          for (const request of serverRequests<ServerKey>(key, before, after, log?.summary)) {
             const result = await api<{ orders?: Order[] } | undefined>(request.path, request.method, request.body);
             // Order changes come back as the server recorded them (who, when), which is what the history should show.
             const fresh = new Map(result?.orders?.map((order) => [order.id, order]));
