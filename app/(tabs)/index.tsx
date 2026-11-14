@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { memo, useDeferredValue, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/Button';
@@ -36,8 +36,6 @@ export default function ShopScreen() {
   const shownQuery = useDeferredValue(query);
   const shownCategory = useDeferredValue(category);
   const shownSection = useDeferredValue(section);
-  const shownVisible = useDeferredValue(visible);
-  const updating = shownQuery !== query || shownCategory !== category || shownSection !== section || shownVisible !== visible;
 
   const searching = query.trim().length > 0;
   const trimmed = shownQuery.trim().toLowerCase();
@@ -49,7 +47,8 @@ export default function ShopScreen() {
     }
     return shopProducts.filter((product) => product.category === shownCategory && (!shownSection || product.section === shownSection));
   }, [trimmed, shownCategory, shownSection]);
-  const page = useMemo(() => results.slice(0, shownVisible), [results, shownVisible]);
+  const page = useMemo(() => results.slice(0, visible), [results, visible]);
+  const renderProduct = useCallback(({ item }: { item: ShopProduct }) => <ProductCard product={item} />, []);
 
   const selectCategory = (id: ShopCategoryId) => {
     setCategory(id);
@@ -60,7 +59,34 @@ export default function ShopScreen() {
   const activeCategory = shopCategories.find((item) => item.id === shownCategory)!;
 
   return (
-    <Screen title="Shop" subtitle="Architectural systems and hardware">
+    <Screen
+      title="Shop"
+      subtitle="Architectural systems and hardware"
+      // A virtualized grid: only cards near the screen are drawn, and new ones are added a few at a time,
+      // so Show More stays smooth however many products are loaded.
+      list={{
+        data: page,
+        renderItem: renderProduct,
+        keyExtractor: productKey,
+        numColumns: 2,
+        columnWrapperStyle: styles.gridRow,
+        initialNumToRender: 6,
+        maxToRenderPerBatch: 6,
+        updateCellsBatchingPeriod: 40,
+        windowSize: 7,
+        removeClippedSubviews: Platform.OS === 'android',
+        ListFooterComponent:
+          results.length > visible ? (
+            <Button
+              label={`Show More (${results.length - visible})`}
+              onPress={() => setVisible((count) => count + PAGE_SIZE)}
+              variant="gray"
+              size="medium"
+              style={styles.more}
+            />
+          ) : null,
+      }}
+    >
       <View style={styles.search}>
         <Ionicons name="search" size={18} color={colors.secondaryLabel} />
         <TextInput
@@ -146,42 +172,20 @@ export default function ShopScreen() {
       {results.length === 0 ? (
         <EmptyState icon="search" title="No Results" message={`No products match “${shownQuery.trim()}”. Check the spelling or try a product code.`} />
       ) : (
-        <View style={updating && styles.updating}>
-          <View style={styles.resultsHeader}>
-            <Text style={styles.resultsTitle} accessibilityRole="header">
-              {trimmed ? 'Results' : (shownSection ?? activeCategory.label)}
-            </Text>
-            <Text style={styles.resultsCount}>
-              {results.length} product{results.length === 1 ? '' : 's'}
-            </Text>
-          </View>
-          <ProductGrid products={page} />
+        <View style={styles.resultsHeader}>
+          <Text style={styles.resultsTitle} accessibilityRole="header">
+            {trimmed ? 'Results' : (shownSection ?? activeCategory.label)}
+          </Text>
+          <Text style={styles.resultsCount}>
+            {results.length} product{results.length === 1 ? '' : 's'}
+          </Text>
         </View>
-      )}
-
-      {results.length > shownVisible && (
-        <Button
-          label={`Show More (${results.length - shownVisible})`}
-          onPress={() => setVisible((count) => count + PAGE_SIZE)}
-          variant="gray"
-          size="medium"
-          style={styles.more}
-        />
       )}
     </Screen>
   );
 }
 
-/** Memoized on the page of products, so renders for the search field or chips skip the cards. */
-const ProductGrid = memo(function ProductGrid({ products }: { products: ShopProduct[] }) {
-  return (
-    <View style={styles.grid}>
-      {products.map((product) => (
-        <ProductCard key={product.id} product={product} />
-      ))}
-    </View>
-  );
-});
+const productKey = (product: ShopProduct) => product.id;
 
 const styles = StyleSheet.create({
   search: {
@@ -214,7 +218,6 @@ const styles = StyleSheet.create({
   resultsHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginTop: 28, marginBottom: 12 },
   resultsTitle: { ...type.title3, flexShrink: 1 },
   resultsCount: { ...type.footnote, color: colors.secondaryLabel },
-  updating: { opacity: 0.6 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 20 },
-  more: { marginTop: 24, alignSelf: 'center' },
+  gridRow: { justifyContent: 'space-between', marginBottom: 20 },
+  more: { marginTop: 4, alignSelf: 'center' },
 });

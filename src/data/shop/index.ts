@@ -107,8 +107,12 @@ function coverImage(category: ShopCategoryId, preferredId: string): ImageSourceP
 const photo = (label: string, id: ShopCategoryId, image: ImageSourcePropType): ShopCategory => ({ id, label, image, fit: 'cover' });
 const product = (label: string, id: ShopCategoryId, preferredId: string): ShopCategory => ({ id, label, image: coverImage(id, preferredId), fit: 'contain' });
 
-// Follows the order of the Taiton catalogue index.
 export const shopCategories: ShopCategory[] = [
+  // Systems first, then hardware.
+  photo('Office Partition', 'office', require('../../../assets/shop/systems/office-partition.webp')),
+  photo('Telescopic Sliding', 'telescopic', require('../../../assets/images/telescopic-sliding-photo.webp')),
+  photo('Sliding Folding System', 'folding', require('../../../assets/images/sliding-folding-photo.webp')),
+  photo('Synchronized Systems', 'synchro', require('../../../assets/images/synchronized-system-photo.webp')),
   photo('Glass Hardware', 'glass', require('../../../assets/shop/systems/hardware.webp')),
   product('Door Control', 'doorControl', 'hardware-tfs-8400'),
   product('Shower Cubicles', 'shower', 'hardware-tsh-2'),
@@ -116,10 +120,6 @@ export const shopCategories: ShopCategory[] = [
   product('Smart Locks', 'locks', 'hardware-tam-dl-g2g'),
   product('Wardrobe Systems', 'wardrobe', 'hardware-tvc-whh-hinge'),
   product('Sliding & Swing Doors', 'doors', 'hardware-tsl-11-kit'),
-  photo('Office Partition', 'office', require('../../../assets/shop/systems/office-partition.webp')),
-  photo('Sliding Folding System', 'folding', require('../../../assets/images/sliding-folding-photo.webp')),
-  photo('Telescopic Sliding', 'telescopic', require('../../../assets/images/telescopic-sliding-photo.webp')),
-  photo('Synchronized Systems', 'synchro', require('../../../assets/images/synchronized-system-photo.webp')),
 ];
 
 const byId = new Map(shopProducts.map((product) => [product.id, product]));
