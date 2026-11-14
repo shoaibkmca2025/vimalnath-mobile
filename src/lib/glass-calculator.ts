@@ -1,5 +1,5 @@
 import { calculateBars } from '@/lib/bar-optimizer';
-import { formatFeetRoundedUp } from '@/lib/format';
+import { formatFeetRoundedUp, formatInches } from '@/lib/format';
 
 /** `note` carries extra detail shown under the label, e.g. the cut pieces behind a bar count. */
 export type MaterialItem = { label: string; value: string; note?: string };
@@ -15,6 +15,8 @@ export type GlassPlanResult = {
   materials: MaterialItem[];
   /** Shown on screen and in the PDF when the sizes need checking before anything is cut. */
   warning?: string;
+  /** An installation reminder shown with the results and in the PDF, e.g. about the wall pocket. */
+  notice?: string;
 };
 
 export type SizeRange = { minWidth: number; maxWidth: number; minHeight: number; maxHeight: number };
@@ -58,7 +60,7 @@ type MaterialBracket = {
   maxWidth: number;
   minHeight: number;
   maxHeight: number;
-  materials: (cuttingWidth: number, cuttingHeight: number, openingWidth: number) => MaterialItem[];
+  materials: (cuttingWidth: number, cuttingHeight: number, openingWidth: number, openingHeight: number) => MaterialItem[];
 };
 
 type SystemFormula = {
@@ -66,6 +68,7 @@ type SystemFormula = {
   cuttingSize: CuttingSizeFormula;
   glassQuantity: number;
   materialBrackets: MaterialBracket[];
+  notice?: (cuttingWidth: number) => string;
 };
 
 const OVERLAP_MM = 16;
@@ -168,13 +171,193 @@ function telescopicFormula(
   };
 }
 
+/**
+ * 1+0, as specified by Vimalnath: length 600–1200 mm, height 1800–3000 mm; cutting length = length + 16,
+ * cutting height = height − 93; one glass. The list is for openings up to 2400 mm high; taller openings
+ * get 3 m vertical profiles.
+ */
+const ONE_PLUS_ZERO: SystemFormula = {
+  range: { minWidth: 600, maxWidth: 1200, minHeight: 1800, maxHeight: 3000 },
+  cuttingSize: {
+    width: (openingWidth) => openingWidth + 16,
+    height: (_openingWidth, openingHeight) => openingHeight - 93,
+  },
+  glassQuantity: 1,
+  materialBrackets: [
+    {
+      // Every cutting size the opening range produces.
+      minWidth: 600 + 16,
+      maxWidth: 1200 + 16,
+      minHeight: 1800 - 93,
+      maxHeight: 3000 - 93,
+      materials: (_cuttingWidth, _cuttingHeight, _openingWidth, openingHeight) => [
+        { label: 'Vertical Profile', value: openingHeight <= 2400 ? '2 nos (2.5 m)' : '2 nos (3 m)' },
+        { label: 'Horizontal Profile', value: '1 nos (2.5 m)' },
+        { label: 'Sliding Top Track', value: '1 nos (2.5 m)' },
+        { label: 'Track Cap', value: '2 nos (2.5 m)' },
+        { label: 'Sliding Handle / Latch Handle', value: '1+1' },
+        { label: '1+0 Telescopic Sliding Kit', value: '1 nos' },
+        { label: 'Gasket', value: '3 nos (8mm)' },
+        { label: 'Connector', value: '4 nos' },
+        { label: 'Middle Vertical', value: 'According to design' },
+        { label: 'Georgian Bar', value: 'According to design' },
+        { label: 'Damru Connector', value: 'According to design' },
+      ],
+    },
+  ],
+};
+
+type Stock = { mm: number; name: string }[];
+
+/** Vimalnath's full-length vertical and horizontal profile bars: 96″ and 118″. */
+const PROFILE_STOCK: Stock = [
+  { mm: 96 * 25.4, name: '96″' },
+  { mm: 118 * 25.4, name: '118″' },
+];
+
+/** Top track and track cap lengths in stock: 8, 10, 12, 14 and 16 ft. */
+const TRACK_STOCK: Stock = [8, 10, 12, 14, 16].map((feet) => ({ mm: feet * 304.8, name: `${feet} ft` }));
+
+/**
+ * A row worked out by the bar optimizer: `pieces` cuts of `length` mm from the stock lengths (least
+ * total length, then fewest bars), e.g. "2 nos (96″)", with the cut size underneath. Also returns the
+ * number of bars.
+ */
+function optimizedRow(label: string, pieces: number, length: number, stock: Stock, what: string): { item: MaterialItem; bars: number } {
+  const bars = calculateBars([{ length, qty: pieces }], stock.map((entry) => ({ length: entry.mm })), 0);
+  const counts = new Map<number, number>();
+  for (const bar of bars) counts.set(bar.length, (counts.get(bar.length) ?? 0) + 1);
+  const value = stock
+    .filter((entry) => counts.has(entry.mm))
+    .map((entry) => `${counts.get(entry.mm)} nos (${entry.name})`)
+    .join(' + ');
+  return { item: { label, value, note: `Cut ${pieces} pcs × ${length} mm (${formatInches(length)}) · ${what}` }, bars: bars.length };
+}
+
+const optimizedHorizontalProfile = (pieces: number, length: number) =>
+  optimizedRow('Horizontal Profile', pieces, length, PROFILE_STOCK, 'top and bottom of each glass');
+
+type TrackSpec =
+  /** Fixed 2.5 m lengths. */
+  | { fixed: number }
+  /** `pieces` tracks of `length` mm each, cut from TRACK_STOCK by the bar optimizer. */
+  | { pieces: number; length: (openingWidth: number, cuttingWidth: number) => number; what: string };
+
+type SystemSpec = {
+  system: string;
+  minWidth: number;
+  maxWidth: number;
+  /** Added to the opening length before it's shared between the glasses (16 mm per overlap). */
+  overlap: number;
+  verticals: number;
+  track: TrackSpec;
+  handle: string;
+  connectors: number;
+  notice?: (cuttingWidth: number) => string;
+};
+
+/**
+ * The telescopic systems as specified by Vimalnath (1+1, 2+0, 2+1): height 1800–3000 mm; cutting length =
+ * (length + overlap) ÷ glasses, cutting height = height − 93. Vertical profiles are 2.5 m up to a 2400 mm
+ * cutting height and 3 m above it; horizontals (top and bottom of each glass) come from the bar optimizer;
+ * the gasket count is the vertical plus horizontal profile count; the track cap matches the top track.
+ */
+function vimalnathSystem(spec: SystemSpec): SystemFormula {
+  const [sliding, fixed] = spec.system.split('+').map(Number);
+  const glasses = sliding + fixed;
+  const cuttingWidth = (openingWidth: number) => (openingWidth + spec.overlap) / glasses;
+  return {
+    range: { minWidth: spec.minWidth, maxWidth: spec.maxWidth, minHeight: 1800, maxHeight: 3000 },
+    cuttingSize: {
+      width: cuttingWidth,
+      height: (_openingWidth, openingHeight) => openingHeight - 93,
+    },
+    glassQuantity: glasses,
+    notice: spec.notice,
+    materialBrackets: [
+      {
+        // Every cutting size the opening range produces.
+        minWidth: cuttingWidth(spec.minWidth),
+        maxWidth: cuttingWidth(spec.maxWidth),
+        minHeight: 1800 - 93,
+        maxHeight: 3000 - 93,
+        materials: (finishedWidth, cuttingHeight, openingWidth) => {
+          const horizontal = optimizedHorizontalProfile(2 * glasses, finishedWidth);
+          let track: MaterialItem;
+          let cap: MaterialItem;
+          if ('fixed' in spec.track) {
+            track = { label: 'Top Track', value: `${spec.track.fixed} nos (2.5 m)` };
+            cap = { label: 'Track Cap', value: `${spec.track.fixed} nos (2.5 m)` };
+          } else {
+            const length = spec.track.length(openingWidth, finishedWidth);
+            track = optimizedRow('Top Track', spec.track.pieces, length, TRACK_STOCK, spec.track.what).item;
+            cap = { ...track, label: 'Track Cap', note: `${track.note?.split(' · ')[0]} · same as the top track` };
+          }
+          return [
+            { label: 'Vertical Profile', value: `${spec.verticals} nos (${cuttingHeight <= 2400 ? '2.5 m' : '3 m'})` },
+            horizontal.item,
+            track,
+            cap,
+            { label: 'Sliding Handle / Latch Handle', value: spec.handle },
+            { label: `${spec.system} Telescopic Sliding Kit`, value: '1 nos' },
+            {
+              label: 'Gasket',
+              value: `${spec.verticals + horizontal.bars} nos (8mm)`,
+              note: `${spec.verticals} vertical + ${horizontal.bars} horizontal profiles`,
+            },
+            { label: 'Connector', value: `${spec.connectors} nos` },
+            { label: 'Middle', value: 'According to design' },
+            { label: 'Georgian Bar', value: 'According to design' },
+            { label: 'Damru Connector', value: 'According to design' },
+          ];
+        },
+      },
+    ],
+  };
+}
+
+const ONE_PLUS_ONE = vimalnathSystem({
+  system: '1+1',
+  minWidth: 1200,
+  maxWidth: 2400,
+  overlap: 16,
+  verticals: 4,
+  track: { fixed: 2 },
+  handle: '1+1',
+  connectors: 8,
+});
+
+// Both shutters slide into the wall, so 2+0 reminds the user to check the wall pocket.
+const TWO_PLUS_ZERO = vimalnathSystem({
+  system: '2+0',
+  minWidth: 1200,
+  maxWidth: 2400,
+  overlap: 32,
+  verticals: 4,
+  track: { pieces: 2, length: (openingWidth, cuttingWidth) => openingWidth + cuttingWidth + TRACK_PARKING_EXTRA_MM, what: 'opening + one shutter + 200 mm' },
+  handle: '2+0',
+  connectors: 8,
+  notice: (cuttingWidth) => `Check the hiding space in the wall: it must be at least the shutter size, ${cuttingWidth} mm (${formatInches(cuttingWidth)}).`,
+});
+
+const TWO_PLUS_ONE = vimalnathSystem({
+  system: '2+1',
+  minWidth: 1800,
+  maxWidth: 3600,
+  overlap: 32,
+  verticals: 6,
+  track: { pieces: 3, length: (openingWidth) => openingWidth, what: 'one per panel, as long as the opening' },
+  handle: '1+1',
+  connectors: 12,
+});
+
 // Formulas keyed by system ("1+0", "2+0", …), with the widest opening each allows. Any system not
 // listed here falls back to the CUTTING_ALLOWANCE_MM placeholder below until its formula is confirmed.
 const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
-  '1+0': telescopicFormula('1+0', 1200, { kit: '0+1 Sliding Kit' }),
-  '1+1': telescopicFormula('1+1', 2438),
-  '2+0': telescopicFormula('2+0', 2438, { track: 'parking', horizontal: 'optimized' }),
-  '2+1': telescopicFormula('2+1', 3657, { track: 'opening', horizontal: 'optimized' }),
+  '1+0': ONE_PLUS_ZERO,
+  '1+1': ONE_PLUS_ONE,
+  '2+0': TWO_PLUS_ZERO,
+  '2+1': TWO_PLUS_ONE,
   '3+0': telescopicFormula('3+0', 3657, { track: 'parking', horizontal: 'optimized' }),
   '3+1': telescopicFormula('3+1', 4876, { track: 'opening', horizontal: 'optimized' }),
   '4+0': telescopicFormula('4+0', 4876, { track: 'parking', horizontal: 'optimized' }),
@@ -246,7 +429,8 @@ export function computeGlassPlan(
       glassWidth,
       glassHeight,
       glassQuantity: formula.glassQuantity,
-      materials: bracket.materials(cuttingWidth, cuttingHeight, width),
+      materials: bracket.materials(cuttingWidth, cuttingHeight, width, height),
+      notice: formula.notice?.(cuttingWidth),
       warning:
         cuttingWidth > MAX_PANEL_WIDTH_MM
           ? `Panel width ${cuttingWidth} mm is over the ${MAX_PANEL_WIDTH_MM} mm printed for this system. Check with Vimalnath before ordering.`

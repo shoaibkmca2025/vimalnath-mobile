@@ -40,7 +40,7 @@ export function calculateBars(pieces: Piece[], stock: BarStock[], kerf: number):
 
   // Small jobs (e.g. one window's verticals) are solved exactly; the heuristic below can pick a
   // poor mix of stock lengths, like four 2450 mm bars where two 3000 mm bars would do.
-  if (lengths.length <= EXACT_MAX_PIECES && sortedStock.length <= EXACT_MAX_STOCK_LENGTHS) {
+  if (lengths.length <= EXACT_MAX_PIECES && stockMixes(lengths.length, sortedStock.length) <= EXACT_MAX_MIXES) {
     const exact = exactBars(lengths, sortedStock, remaining, kerf);
     if (exact) return exact;
   }
@@ -72,7 +72,15 @@ export function calculateBars(pieces: Piece[], stock: BarStock[], kerf: number):
 }
 
 const EXACT_MAX_PIECES = 12;
-const EXACT_MAX_STOCK_LENGTHS = 3;
+/** The exact search tries every mix of stock bars; beyond this many mixes it falls back to the heuristic. */
+const EXACT_MAX_MIXES = 10000;
+
+/** How many mixes of up to `pieces` bars drawn from `kinds` stock lengths there are: C(pieces + kinds, kinds). */
+function stockMixes(pieces: number, kinds: number): number {
+  let result = 1;
+  for (let i = 1; i <= kinds; i++) result = (result * (pieces + i)) / i;
+  return result;
+}
 
 /**
  * Tries every mix of stock bars in order of total length (then fewest bars) and returns the first

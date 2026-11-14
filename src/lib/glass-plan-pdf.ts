@@ -6,10 +6,12 @@ import type { GlassPlanResult } from './glass-calculator';
 export type GlassPlanPdfInput = {
   systemName: string;
   result: GlassPlanResult;
+  /** The profile colour the user picked, printed at the top of the material list. */
+  materialColour?: string;
 };
 
 /** Builds the printable HTML for a glass cutting plan — handed to expo-print to render as a PDF. */
-export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): string {
+export function buildGlassPlanHtml({ systemName, result, materialColour }: GlassPlanPdfInput): string {
   const generatedOn = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 
   return `
@@ -43,6 +45,7 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
           .material-row:last-child { border-bottom: none; }
           .material-row small { display: block; margin-top: 2px; font-size: 10px; color: #5a6b8c; }
           .footer { margin-top: 10px; padding-top: 10px; border-top: 1px solid #e1e8f7; font-size: 10px; color: #93a1bd; }
+          .notice { margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; background: #e6eeff; color: #0f3fb8; font-size: 13px; font-weight: 600; }
           .warning { margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; background: #fdecee; color: #a30010; font-size: 13px; font-weight: 600; }
         </style>
       </head>
@@ -59,6 +62,7 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
           </div>
         </div>
 
+        ${result.notice ? `<div class="notice">${escapeHtml(result.notice)}</div>` : ''}
         ${result.warning ? `<div class="warning">${escapeHtml(result.warning)}</div>` : ''}
 
         <div class="sizes">
@@ -79,6 +83,7 @@ export function buildGlassPlanHtml({ systemName, result }: GlassPlanPdfInput): s
 
         <section class="material">
           <h2>Material List</h2>
+          ${materialColour ? `<div class="material-row"><span><b>Material Colour</b></span><span><b>${escapeHtml(materialColour)}</b></span></div>` : ''}
           ${result.materials
             .map(
               (item) =>

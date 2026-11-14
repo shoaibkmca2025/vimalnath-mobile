@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { FractionButton, FractionSheet } from '@/components/FractionPicker';
@@ -25,6 +25,16 @@ type InchSize = { whole: string; sixteenths: number };
 type Dimension = 'width' | 'height';
 
 const EMPTY_INCHES: InchSize = { whole: '', sixteenths: 0 };
+
+const COLOUR_KEY = 'vimalnath:material-colour';
+/** Profile finishes, as named in the Taiton price list for telescopic kits. */
+const MATERIAL_COLOURS = [
+  { name: 'Black Matte', swatch: '#1f1f1f' },
+  { name: 'Brushed Gold', swatch: '#c9a96b' },
+  { name: 'Rose Gold', swatch: '#d4a39a' },
+  { name: 'Grey', swatch: '#8a8f98' },
+  { name: 'Champagne', swatch: '#e2cfae' },
+];
 
 const toMm = (unit: Unit, mm: string, inches: InchSize) =>
   unit === 'mm' ? Number(mm) : inches.whole || inches.sixteenths ? inchesToMm(Number(inches.whole) || 0, inches.sixteenths) : 0;
@@ -52,6 +62,18 @@ export default function GlassCalculatorScreen() {
   const [result, setResult] = useState<GlassPlanResult | null>(null);
   const [sizeError, setSizeError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'share' | 'save' | null>(null);
+  // Telescopic systems let the user pick the profile colour for the material list (remembered).
+  const hasColour = widthLabel === 'Length';
+  const [colour, setColour] = useState(MATERIAL_COLOURS[0].name);
+  useEffect(() => {
+    AsyncStorage.getItem(COLOUR_KEY)
+      .then((saved) => saved && MATERIAL_COLOURS.some((item) => item.name === saved) && setColour(saved))
+      .catch(() => {});
+  }, []);
+  const chooseColour = (name: string) => {
+    setColour(name);
+    AsyncStorage.setItem(COLOUR_KEY, name).catch(() => {});
+  };
 
   // The last unit chosen is remembered for the next calculation.
   useEffect(() => {
@@ -112,7 +134,7 @@ export default function GlassCalculatorScreen() {
     if (!result) return;
     setBusy(mode);
     try {
-      const html = buildGlassPlanHtml({ systemName, result });
+      const html = buildGlassPlanHtml({ systemName, result, materialColour: hasColour ? colour : undefined });
       const fileName = pdfFileName(`${systemName} ${result.openingWidth}x${result.openingHeight}`);
       if (mode === 'share') {
         await sharePdf(html, fileName, 'Share glass cutting plan');
@@ -182,6 +204,12 @@ export default function GlassCalculatorScreen() {
 
       {result && (
         <View style={styles.results}>
+          {result.notice && (
+            <View style={styles.notice}>
+              <Ionicons name="information-circle" size={18} color={colors.tint} />
+              <Text style={styles.noticeText}>{result.notice}</Text>
+            </View>
+          )}
           {result.warning && (
             <View style={styles.warning} accessibilityRole="alert">
               <Ionicons name="alert-circle" size={16} color={colors.red} />
@@ -203,7 +231,30 @@ export default function GlassCalculatorScreen() {
             background={colors.tintFill}
           />
 
-          <InsetGroup header="Material list" style={styles.materials}>
+          {hasColour && (
+            <InsetGroup header="Material colour" style={styles.materials}>
+              <View style={styles.colours} accessibilityRole="radiogroup" accessibilityLabel="Material colour">
+                {MATERIAL_COLOURS.map((item) => {
+                  const selected = item.name === colour;
+                  return (
+                    <Pressable
+                      key={item.name}
+                      onPress={() => chooseColour(item.name)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={item.name}
+                      style={({ pressed }) => [styles.colourChip, selected && styles.colourChipSelected, pressed && { opacity: 0.6 }]}
+                    >
+                      <View style={[styles.swatch, { backgroundColor: item.swatch }]} />
+                      <Text style={[styles.colourText, selected && styles.colourTextSelected]}>{item.name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </InsetGroup>
+          )}
+
+          <InsetGroup header={hasColour ? `Material list · ${colour}` : 'Material list'} style={hasColour ? undefined : styles.materials}>
             {result.materials.map((item) => (
               <ValueRow key={item.label} label={item.label} value={item.value} detail={item.note} />
             ))}
@@ -322,11 +373,19 @@ const styles = StyleSheet.create({
   errorText: { ...type.footnote, flex: 1, color: colors.red },
   results: { marginTop: 32 },
   warning: { flexDirection: 'row', gap: 6, marginBottom: 12, marginHorizontal: 4 },
+  notice: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 12, padding: 12, backgroundColor: colors.tintFill, borderRadius: radius.md },
+  noticeText: { ...type.subheadline, flex: 1, fontWeight: '600', color: colors.tint },
   sizeCard: { marginBottom: 12, paddingHorizontal: 16, paddingVertical: 14, borderRadius: radius.md },
   sizeTitle: { ...type.subheadline, fontWeight: '600' },
   sizeValue: { ...type.title2, marginTop: 2, ...tabularNums },
   sizeInches: { ...type.headline, marginBottom: 2, color: colors.secondaryLabel, ...tabularNums },
   materials: { marginTop: 16 },
+  colours: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 12 },
+  colourChip: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 10, paddingRight: 14, borderWidth: 1.5, borderColor: colors.separator, borderRadius: 20 },
+  colourChipSelected: { borderColor: colors.tint, backgroundColor: colors.tintFill },
+  swatch: { width: 20, height: 20, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0, 0, 0, 0.25)' },
+  colourText: { ...type.subheadline, minWidth: 60 },
+  colourTextSelected: { color: colors.tint, fontWeight: '600' },
   exportRow: { flexDirection: 'row', gap: 12 },
   exportButton: { flex: 1 },
 });
