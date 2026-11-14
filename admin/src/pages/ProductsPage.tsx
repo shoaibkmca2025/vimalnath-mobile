@@ -57,13 +57,14 @@ export default function ProductsPage() {
     });
   }, [db.products, query, category, view]);
 
-  const setVisibility = (ids: string[], visible: boolean) => {
+  const setVisibility = async (ids: string[], visible: boolean) => {
     const previous = db.products;
-    update('products', (products) => products.map((product) => (ids.includes(product.id) ? { ...product, visible } : product)), {
+    const ok = await update('products', (products) => products.map((product) => (ids.includes(product.id) ? { ...product, visible } : product)), {
       area: 'catalogue',
       summary: `${visible ? 'Showed' : 'Hid'} ${plural(ids.length, 'product')} in the Shop`,
       to: '/products',
     });
+    if (!ok) return;
     setSelected(new Set());
     toast({
       message: `${plural(ids.length, 'product')} ${visible ? 'shown in' : 'hidden from'} the app.`,

@@ -34,30 +34,35 @@ export default function CategoriesPage() {
     drawer.show(category);
   };
 
-  const move = (index: number, direction: -1 | 1) => {
+  const move = async (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= db.categories.length) return;
     const moved = db.categories[index]!;
-    update('categories', (categories) => {
+    // Found by id when the save runs (after any earlier click's save), so quick clicks each move it one more place.
+    const ok = await update('categories', (categories) => {
+      const from = categories.findIndex((category) => category.id === moved.id);
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= categories.length) return categories;
       const next = [...categories];
-      [next[index], next[target]] = [next[target]!, next[index]!];
+      [next[from], next[to]] = [next[to]!, next[from]!];
       return next;
     }, { area: 'catalogue', summary: `Moved the ${moved.label} category ${direction < 0 ? 'up' : 'down'}`, to: '/categories' });
-    toast({ message: `${moved.label} moved ${direction < 0 ? 'up' : 'down'}.`, tone: 'info' });
+    if (ok) toast({ message: `${moved.label} moved ${direction < 0 ? 'up' : 'down'}.`, tone: 'info' });
   };
 
   const labelError = draft && !draft.label.trim() ? 'Enter a name for this category.' : null;
   const dirty = Boolean(draft && drawer.item && JSON.stringify(draft) !== JSON.stringify(drawer.item));
 
-  const save = () => {
+  const save = async () => {
     setTouched(true);
     if (!draft || labelError) return;
     const saved = { ...draft, label: draft.label.trim() };
-    update('categories', (categories) => categories.map((category) => (category.id === saved.id ? saved : category)), {
+    const ok = await update('categories', (categories) => categories.map((category) => (category.id === saved.id ? saved : category)), {
       area: 'catalogue',
       summary: `Edited the ${saved.label} category${saved.visible ? '' : ' (hidden)'}`,
       to: '/categories',
     });
+    if (!ok) return;
     drawer.close();
     toast({ message: `${saved.label} saved.` });
   };

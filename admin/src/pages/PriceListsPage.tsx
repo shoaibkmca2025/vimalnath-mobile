@@ -1,5 +1,5 @@
-import { ArrowSquareOutIcon, CheckCircleIcon, ClockIcon, PencilSimpleIcon } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { ArrowSquareOutIcon, CheckCircleIcon, ClockIcon, PencilSimpleIcon, UploadSimpleIcon } from '@phosphor-icons/react';
+import { useRef, useState } from 'react';
 
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
@@ -12,6 +12,7 @@ import { useData } from '@/data/useData';
 import type { PriceList } from '@/data/types';
 import { useDrawerItem } from '@/hooks/useDrawerItem';
 import { plural } from '@/lib/format';
+import { upload } from '@/lib/upload';
 
 const COVER: Record<string, string> = {
   blue: 'linear-gradient(160deg, #2458e8, #6d94ff)',
@@ -21,13 +22,51 @@ const COVER: Record<string, string> = {
 };
 
 function urlError(url: string) {
-  if (!url.trim()) return null;
+  // Empty, or a PDF uploaded below.
+  if (!url.trim() || /^\/v1\/media\/[a-f0-9]{24}\.pdf$/.test(url.trim())) return null;
   try {
     const parsed = new URL(url.trim());
     return parsed.protocol === 'https:' ? null : 'Use a secure link that starts with https://.';
   } catch {
     return 'Enter the full link, starting with https://.';
   }
+}
+
+/** Uploads a price-list PDF (up to 25 MB) and hands back its address for the link field. */
+function PdfUpload({ onUploaded }: { onUploaded: (url: string) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setProgress(0);
+    try {
+      onUploaded(await upload(file, setProgress));
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : 'That PDF couldn’t be uploaded.');
+    } finally {
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="stack" style={{ gap: 'var(--space-2)' }}>
+      <input ref={inputRef} type="file" accept="application/pdf" className="visually-hidden" tabIndex={-1} aria-hidden onChange={(event) => pick(event.target.files?.[0])} />
+      <div className="row-wrap">
+        <Button size="sm" icon={UploadSimpleIcon} onClick={() => inputRef.current?.click()} loading={progress !== null} loadingLabel={`Uploading ${Math.round((progress ?? 0) * 100)}%`}>
+          Upload PDF
+        </Button>
+      </div>
+      {error && (
+        <p className="field__error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default function PriceListsPage() {
@@ -48,15 +87,16 @@ export default function PriceListsPage() {
   const errors = draft ? { title: draft.title.trim() ? null : 'Enter the price list’s title.', url: urlError(draft.url) } : { title: null, url: null };
   const dirty = Boolean(draft && drawer.item && JSON.stringify(draft) !== JSON.stringify(drawer.item));
 
-  const save = () => {
+  const save = async () => {
     setTouched(new Set(['title', 'url']));
     if (!draft || errors.title || errors.url) return;
     const saved = { ...draft, title: draft.title.trim(), url: draft.url.trim() };
-    update('catalogues', (lists) => lists.map((list) => (list.number === saved.number ? saved : list)), {
+    const ok = await update('catalogues', (lists) => lists.map((list) => (list.number === saved.number ? saved : list)), {
       area: 'catalogue',
       summary: saved.url ? `Published the ${saved.title} price list` : `Edited the ${saved.title} price list`,
       to: '/price-lists',
     });
+    if (!ok) return;
     drawer.close();
     toast({ message: saved.url ? `${saved.title} is published in the app.` : `${saved.title} saved. It shows as coming soon until it has a link.` });
   };
@@ -149,9 +189,10 @@ export default function PriceListsPage() {
               onChange={(event) => setDraft({ ...draft, url: event.target.value })}
               onBlur={() => setTouched((current) => new Set(current).add('url'))}
               error={touched.has('url') ? errors.url : null}
-              hint="A share link anyone can open. Leave empty to show “coming soon” in the app."
+              hint="Upload the PDF, or paste a share link anyone can open. Leave empty to show “coming soon” in the app."
               data-autofocus
             />
+            <PdfUpload onUploaded={(url) => setDraft({ ...draft, url })} />
             <TextField
               label="Title"
               required

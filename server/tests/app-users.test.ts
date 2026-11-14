@@ -77,7 +77,7 @@ test('orders: a resent order is stored once, and the phone is told it arrived', 
   assert.equal((await phone('/orders', body)).status, 200);
   assert.equal((await phone('/orders', body)).status, 200);
   const { orders } = (await (await phone('/orders')).json()) as Orders;
-  assert.deepEqual(orders.map((sent) => [sent.mobileEventId, sent.mobileOrderId, sent.status]), [['order:dev1:o1:2026', 'o1', 'Received']]);
+  assert.deepEqual(orders.map((sent) => [sent.mobileEventId, sent.mobileOrderId, sent.status]), [['order:dev1:o1:2026', 'o1', 'Placed']]);
   assert.equal((await appUser(id)).orders, 1);
 });
 

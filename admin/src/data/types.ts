@@ -64,6 +64,8 @@ export type OrderLine = {
   qty: number;
   /** MRP per unit; missing when the product is priced from its catalogue page. */
   mrp?: number;
+  /** Set by the server when the line didn't match the catalogue, e.g. "No longer in the catalogue". */
+  problem?: string;
 };
 
 export type OrderEvent = {
@@ -89,6 +91,8 @@ export type Order = {
   history: OrderEvent[];
   /** Only seen in the admin, never by the customer. */
   internalNote?: { text: string; at: string; by: string };
+  /** The App Users entry whose phone sent it. */
+  appUser?: { id: number; label: string };
 };
 
 export type ActivityArea = 'orders' | 'catalogue' | 'calculators' | 'content' | 'settings';
@@ -109,5 +113,5 @@ export type Seed = {
   settings: Settings;
 };
 
-/** Everything the admin edits. Orders are sample data until the app sends real ones to a server. */
+/** Everything the admin shows and edits. */
 export type Database = Omit<Seed, 'generatedAt'> & { orders: Order[]; activity: Activity[] };

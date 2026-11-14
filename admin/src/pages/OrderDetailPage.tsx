@@ -9,12 +9,13 @@ import {
   PrinterIcon,
   ReceiptIcon,
   TruckIcon,
+  WarningCircleIcon,
   XCircleIcon,
 } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
-import { OrderStatusBadge } from '@/components/Badge';
+import { Badge, OrderStatusBadge } from '@/components/Badge';
 import { Button, ButtonLink, IconButton } from '@/components/Button';
 import { Card, CardHeader } from '@/components/Card';
 import { ConfirmDialog } from '@/components/Dialog';
@@ -70,14 +71,15 @@ export default function OrderDetailPage() {
 
   const by = () => readSession()?.name ?? 'Admin';
 
-  const setStatus = (status: OrderStatus) => {
+  const setStatus = async (status: OrderStatus) => {
     if (status === order.status) return;
     const previous = order;
-    update(
+    const ok = await update(
       'orders',
       (orders) => orders.map((item) => (item.id === order.id ? { ...item, status, history: [...item.history, { status, at: new Date().toISOString(), by: by() }] } : item)),
       { area: 'orders', summary: `Marked ${order.number} ${ORDER_STATUS[status].label.toLowerCase()}`, to: `/orders/${order.id}` },
     );
+    if (!ok) return;
     toast({
       message: `${order.number} marked ${ORDER_STATUS[status].label.toLowerCase()}.`,
       action: {
@@ -93,13 +95,14 @@ export default function OrderDetailPage() {
   };
 
   const noteDirty = noteDraft.trim() !== (order.internalNote?.text ?? '');
-  const saveNote = () => {
+  const saveNote = async () => {
     const text = noteDraft.trim();
-    update(
+    const ok = await update(
       'orders',
       (orders) => orders.map((item) => (item.id === order.id ? { ...item, internalNote: text ? { text, at: new Date().toISOString(), by: by() } : undefined } : item)),
       { area: 'orders', summary: text ? `Updated the internal note on ${order.number}` : `Removed the internal note on ${order.number}`, to: `/orders/${order.id}` },
     );
+    if (!ok) return;
     setNoteDraft(text);
     toast({ message: text ? 'Internal note saved.' : 'Internal note removed.' });
   };
@@ -226,6 +229,13 @@ export default function OrderDetailPage() {
                                   <NoteIcon size={14} aria-hidden /> {line.note}
                                 </p>
                               )}
+                              {line.problem && (
+                                <div className="no-print" style={{ marginTop: 'var(--space-1)' }}>
+                                  <Badge tone="warning" icon={WarningCircleIcon}>
+                                    {line.problem}
+                                  </Badge>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -301,7 +311,7 @@ export default function OrderDetailPage() {
                 value={order.status}
                 onChange={(event) => setStatus(event.target.value as OrderStatus)}
                 options={STATUS_ORDER.map((value) => ({ value, label: ORDER_STATUS[value].label }))}
-                hint="The app still shows the order as Placed until the admin is connected."
+                hint="The customer sees the new status in their app after its next sync."
               />
             </div>
             <ol className="timeline" aria-label="Status history">
@@ -350,6 +360,14 @@ export default function OrderDetailPage() {
                 </div>
               )}
               <dl className="kv kv--compact no-print">
+                {order.appUser && (
+                  <>
+                    <dt>Sent from</dt>
+                    <dd>
+                      <Link to={`/app-users?q=${encodeURIComponent(order.appUser.label)}`}>{order.appUser.label}</Link>
+                    </dd>
+                  </>
+                )}
                 <dt>Orders</dt>
                 <dd className="num">{formatNumber(customer.orders)}</dd>
                 <dt>Ordered (MRP)</dt>

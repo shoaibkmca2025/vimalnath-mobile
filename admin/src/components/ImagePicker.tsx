@@ -2,7 +2,7 @@ import { ImageSquareIcon, UploadSimpleIcon } from '@phosphor-icons/react';
 import { useId, useRef, useState } from 'react';
 
 import { Button } from '@/components/Button';
-import { MAX_IMAGE_KB, readImageFile } from '@/lib/image';
+import { MAX_IMAGE_MB, sized, upload } from '@/lib/upload';
 
 type Props = {
   label: string;
@@ -19,15 +19,18 @@ export function ImagePicker({ label, value, onChange, shape = 'square', allowRem
   const inputRef = useRef<HTMLInputElement>(null);
   const id = useId();
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
+    setError(null);
+    setProgress(0);
     try {
-      onChange(await readImageFile(file));
-      setError(null);
+      onChange(await upload(file, setProgress));
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : 'That photo couldn’t be used.');
     } finally {
+      setProgress(null);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
@@ -40,7 +43,7 @@ export function ImagePicker({ label, value, onChange, shape = 'square', allowRem
       {value ? (
         <img
           className="image-preview"
-          src={value}
+          src={sized(value, 'md')}
           alt={`Current ${label.toLowerCase()}`}
           style={shape === 'wide' ? { aspectRatio: '16 / 9', objectFit: 'cover' } : undefined}
         />
@@ -62,10 +65,17 @@ export function ImagePicker({ label, value, onChange, shape = 'square', allowRem
         onChange={(event) => pick(event.target.files?.[0])}
       />
       <div className="row-wrap">
-        <Button size="sm" icon={UploadSimpleIcon} onClick={() => inputRef.current?.click()} aria-describedby={`${id}-label ${id}-hint`}>
+        <Button
+          size="sm"
+          icon={UploadSimpleIcon}
+          onClick={() => inputRef.current?.click()}
+          aria-describedby={`${id}-label ${id}-hint`}
+          loading={progress !== null}
+          loadingLabel={`Uploading ${Math.round((progress ?? 0) * 100)}%`}
+        >
           {value ? 'Replace Photo' : 'Add Photo'}
         </Button>
-        {value && allowRemove && (
+        {value && allowRemove && progress === null && (
           <Button size="sm" variant="danger-plain" onClick={() => onChange(null)}>
             Remove
           </Button>
@@ -77,7 +87,7 @@ export function ImagePicker({ label, value, onChange, shape = 'square', allowRem
         </p>
       ) : (
         <p className="field__hint" id={`${id}-hint`}>
-          {hint ?? `JPG, PNG or WebP, up to ${MAX_IMAGE_KB} KB.`}
+          {hint ?? `JPG, PNG or WebP, up to ${MAX_IMAGE_MB} MB.`}
         </p>
       )}
     </div>

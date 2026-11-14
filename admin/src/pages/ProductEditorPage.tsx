@@ -81,12 +81,17 @@ function validate(draft: Draft, products: Product[]): Errors {
   else if (code.toLowerCase() !== products.find((product) => product.id === draft.id)?.code.toLowerCase() && products.some((product) => product.code.toLowerCase() === code.toLowerCase()))
     errors.code = `Another product already uses ${code}.`;
   if (!draft.name.trim() && !draft.section.trim()) errors.name = 'Enter a name, or a section the app can show instead.';
+  const labels = new Set<string>();
   draft.options.forEach((option, index) => {
     const used = option.label.trim() || option.code.trim() || option.mrp.trim();
     if (!used) return;
-    if (!option.label.trim()) errors[`option-${option.key}-label`] = `Name option ${index + 1}, e.g. a finish or size.`;
+    const label = option.label.trim();
+    if (!label) errors[`option-${option.key}-label`] = `Name option ${index + 1}, e.g. a finish or size.`;
+    // The app and saved carts find an option by its name.
+    else if (labels.has(label)) errors[`option-${option.key}-label`] = `Another option is already called ${label}.`;
+    labels.add(label);
     const mrp = Number(option.mrp);
-    if (!option.mrp.trim() || !Number.isFinite(mrp) || mrp <= 0) errors[`option-${option.key}-mrp`] = 'Enter an MRP above ₹0.';
+    if (!option.mrp.trim() || !Number.isInteger(mrp) || mrp <= 0) errors[`option-${option.key}-mrp`] = 'Enter an MRP in whole rupees, above ₹0.';
   });
   draft.specs.forEach((spec) => {
     if (spec.label.trim() && !spec.value.trim()) errors[`spec-${spec.key}-value`] = `Enter a value for ${spec.label.trim()}.`;
@@ -116,6 +121,7 @@ export default function ProductEditorPage() {
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [saving, setSaving] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
   const leaving = useRef(false);
 
@@ -170,35 +176,45 @@ export default function ProductEditorPage() {
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }));
 
-  const save = (event?: FormEvent) => {
+  const save = async (event?: FormEvent) => {
     event?.preventDefault();
+    // A second Save or Enter while the first is on its way would add the same new product again.
+    if (saving) return;
     setSubmitted(true);
     if (Object.keys(errors).length) {
       requestAnimationFrame(() => summaryRef.current?.focus());
       return;
     }
     const product = fromDraft(draft);
-    if (isNew) {
-      let newId = `custom-${slug(product.code) || 'product'}`;
-      while (db.products.some((item) => item.id === newId)) newId += '-1';
-      product.id = newId;
-      update('products', (products) => [product, ...products], { area: 'catalogue', summary: `Added ${product.code} to the Shop`, to: `/products/${newId}` });
-      toast({ message: `${product.code} added to the Shop.` });
-      leaving.current = true;
-      navigate(`/products/${newId}`, { replace: true });
-    } else {
-      update('products', (products) => products.map((item) => (item.id === product.id ? product : item)), { area: 'catalogue', summary: `Edited ${product.code}`, to: `/products/${product.id}` });
-      toast({ message: `${product.code} saved.` });
-      setSubmitted(false);
-      setTouched(new Set());
+    setSaving(true);
+    try {
+      if (isNew) {
+        let newId = `custom-${slug(product.code) || 'product'}`;
+        while (db.products.some((item) => item.id === newId)) newId += '-1';
+        product.id = newId;
+        if (!(await update('products', (products) => [product, ...products], { area: 'catalogue', summary: `Added ${product.code} to the Shop`, to: `/products/${newId}` }))) return;
+        toast({ message: `${product.code} added to the Shop.` });
+        leaving.current = true;
+        navigate(`/products/${newId}`, { replace: true });
+      } else {
+        if (!(await update('products', (products) => products.map((item) => (item.id === product.id ? product : item)), { area: 'catalogue', summary: `Edited ${product.code}`, to: `/products/${product.id}` }))) return;
+        toast({ message: `${product.code} saved.` });
+        setSubmitted(false);
+        setTouched(new Set());
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
-  const remove = () => {
+  const remove = async () => {
     if (!existing) return;
     const previous = db.products;
     leaving.current = true;
-    update('products', (products) => products.filter((product) => product.id !== existing.id), { area: 'catalogue', summary: `Deleted ${existing.code}` });
+    if (!(await update('products', (products) => products.filter((product) => product.id !== existing.id), { area: 'catalogue', summary: `Deleted ${existing.code}` }))) {
+      leaving.current = false;
+      return;
+    }
     toast({ message: `${existing.code} deleted.`, action: { label: 'Undo', onAction: () => update('products', () => previous, { area: 'catalogue', summary: `Restored ${existing.code}`, to: `/products/${existing.id}` }) } });
     navigate('/products', { replace: true });
   };
@@ -431,7 +447,7 @@ export default function ProductEditorPage() {
           <Card aria-labelledby="photo-title">
             <CardHeader id="photo-title" title="Photo" />
             <div className="card__body">
-              <ImagePicker label="Product photo" value={draft.image} onChange={(image) => set('image', image)} hint="A square photo on white works best. JPG, PNG or WebP, up to 500 KB." />
+              <ImagePicker label="Product photo" value={draft.image} onChange={(image) => set('image', image)} hint="A square photo on white works best. JPG, PNG or WebP, up to 5 MB." />
             </div>
           </Card>
 
@@ -460,7 +476,7 @@ export default function ProductEditorPage() {
           >
             {isNew ? 'Cancel' : 'Discard'}
           </Button>
-          <Button type="submit" variant="primary">
+          <Button type="submit" variant="primary" loading={saving}>
             {isNew ? 'Add Product' : 'Save Changes'}
           </Button>
         </div>

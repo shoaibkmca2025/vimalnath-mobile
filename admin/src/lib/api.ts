@@ -1,4 +1,4 @@
-const UNREACHABLE = 'Couldn’t reach the server. Check your connection and try again.';
+export const UNREACHABLE = 'Couldn’t reach the server. Check your connection and try again.';
 
 export class ApiError extends Error {
   readonly field?: string;

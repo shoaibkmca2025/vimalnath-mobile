@@ -9,6 +9,7 @@ Start Docker Desktop, then from this folder:
 ```bash
 docker compose up -d --build
 docker compose exec api node src/staff.ts you@company.com "Your Name"   # prints a link to set the first Owner's password
+(cd admin && npm install && npm run seed) && (cd server && npm install && npm run import-data)   # once: copies the app's catalogue into the database
 ```
 
 | What | Where |
@@ -16,7 +17,7 @@ docker compose exec api node src/staff.ts you@company.com "Your Name"   # prints
 | Admin panel | http://localhost:8090 |
 | Mobile app, web version | http://localhost:8091 |
 
-The API starts behind the admin panel and applies database migrations itself. `docker compose down` stops everything and keeps the data. The phone app itself can't run in a container; use Expo Go as below.
+The API starts behind the admin panel and applies database migrations itself. The import uses `server/.env` (copy it from `.env.example`), which points at the Docker database; the admin shows how to run it until it's done. `docker compose down` stops everything and keeps the data. The phone app itself can't run in a container; use Expo Go as below.
 
 ## Run it
 

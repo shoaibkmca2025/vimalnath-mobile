@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useMemo, useState } from 'react';
 import { AppState } from 'react-native';
 
 import type { Order } from '@/providers/OrdersProvider';
@@ -12,7 +13,7 @@ export type AdminConnection = {
   allowLocalHttp: boolean;
   customerId?: string;
 };
-export type CentralOrder = { id: string; number?: string; status: string; mobileOrderId?: string; sourceId?: string; mobileEventId?: string; eventId?: string };
+export type CentralOrder = { id: string; number?: string; status: string; mobileOrderId?: string; sourceId?: string; mobileEventId?: string; eventId?: string; history?: { status: string; at: string }[] };
 export type SyncStatus = {
   connection: AdminConnection;
   connected: boolean;
@@ -57,6 +58,13 @@ function locked<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 export function getAdminSyncStatus() { return current; }
+
+/** The shop's copy of each order this phone sent (its shop number, status and history), by the phone's own order id. */
+export function useShopOrders() {
+  const [orders, setOrders] = useState(() => current.centralOrders);
+  useEffect(() => subscribeAdminSync((status) => setOrders(status.centralOrders)), []);
+  return useMemo(() => new Map(orders.map((order) => [order.mobileOrderId, order])), [orders]);
+}
 export function subscribeAdminSync(listener: (status: SyncStatus) => void) {
   listeners.add(listener);
   return () => { listeners.delete(listener); };

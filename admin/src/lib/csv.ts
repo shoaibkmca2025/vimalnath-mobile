@@ -10,9 +10,12 @@ const escape = (value: Cell) => {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 
+/** The rows as CSV text, with cells that Excel would run as formulas made safe. */
+export const toCsv = (header: string[], rows: Cell[][]) => [header, ...rows].map((row) => row.map(escape).join(',')).join('\r\n');
+
 /** Saves rows as a CSV that opens in Excel with Indian rupee symbols intact (UTF-8 with a BOM). */
 export function downloadCsv(fileName: string, header: string[], rows: Cell[][]) {
-  const text = [header, ...rows].map((row) => row.map(escape).join(',')).join('\r\n');
+  const text = toCsv(header, rows);
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob(['﻿', text], { type: 'text/csv;charset=utf-8' }));
   link.download = `${fileName}-${new Date().toISOString().slice(0, 10)}.csv`;

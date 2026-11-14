@@ -45,22 +45,30 @@ export function createApp({ adminOrigin, production, trustProxy, checkDatabase, 
   const limit = rateLimit(requestsPerMinute, (c) => clientOf(c, trustProxy));
 
   app.use(logger());
-  app.use(secureHeaders());
+  const pageHeaders = secureHeaders();
+  // The app and its web version show media from other addresses, so other sites may embed it.
+  const mediaHeaders = secureHeaders({ crossOriginResourcePolicy: 'cross-origin' });
+  app.use((c, next) => (c.req.path.startsWith('/v1/media/') ? mediaHeaders : pageHeaders)(c, next));
   if (production && trustProxy) {
     app.use(async (c, next) => {
       if (c.req.header('x-forwarded-proto') === 'http') throw new HTTPException(403, { message: 'This API only works over https.' });
       await next();
     });
   }
-  app.use(
-    '/v1/*',
-    bodyLimit({
-      maxSize: 1024 * 1024,
-      onError: () => {
-        throw new HTTPException(413, { message: 'That request is too large.' });
-      },
-    }),
-  );
+  const smallBodies = bodyLimit({
+    maxSize: 1024 * 1024,
+    onError: () => {
+      throw new HTTPException(413, { message: 'That request is too large.' });
+    },
+  });
+  // An upload is the file itself; the largest allowed is a 25 MB price-list PDF.
+  const uploads = bodyLimit({
+    maxSize: 25 * 1024 * 1024,
+    onError: () => {
+      throw new HTTPException(413, { message: 'Choose a file under 25 MB.' });
+    },
+  });
+  app.use('/v1/*', (c, next) => (c.req.path === '/v1/admin/media' ? uploads : smallBodies)(c, next));
   app.use('/v1/admin/*', cors({ origin: adminOrigin, credentials: true }));
   // The app sends a token, not a cookie, so any address may call it (its web version runs on its own).
   app.use('/v1/app/*', cors());

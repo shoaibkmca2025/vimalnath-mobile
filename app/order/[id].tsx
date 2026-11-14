@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { InsetGroup, ValueRow } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
 import { findShopProduct, formatINR } from '@/data/shop';
+import { useShopOrders } from '@/lib/admin-sync';
 import { formatOrderDate } from '@/lib/format';
 import { buildOrderHtml } from '@/lib/order-pdf';
 import { pdfFileName, sharePdf } from '@/lib/pdf-export';
@@ -22,6 +23,7 @@ export default function OrderScreen() {
   const { showToast } = useAppUI();
   const [sharing, setSharing] = useState(false);
   const order = orders.find((item) => item.id === id);
+  const shop = useShopOrders().get(id);
 
   if (!order) {
     return (
@@ -31,10 +33,15 @@ export default function OrderScreen() {
     );
   }
 
+  // Once the order reaches the shop, its shop number and status replace the ones this phone gave it, so the
+  // customer and the shop quote the same number.
+  const number = shop?.number ?? order.number;
+  const status = shop?.status ?? order.status;
+
   const share = async () => {
     setSharing(true);
     try {
-      await sharePdf(buildOrderHtml(order), pdfFileName(`${order.number} ${order.customer}`), `Share order ${order.number}`);
+      await sharePdf(buildOrderHtml({ ...order, number, status }), pdfFileName(`${number} ${order.customer}`), `Share order ${number}`);
     } catch (err) {
       console.error('Order PDF export failed:', err);
       const reason = err instanceof Error && err.message ? err.message : 'Unknown error';
@@ -73,7 +80,7 @@ export default function OrderScreen() {
       doRemove();
       return;
     }
-    Alert.alert('Delete This Order?', `${order.number} will be removed from this phone. This can’t be undone.`, [
+    Alert.alert('Delete This Order?', `${number} will be removed from this phone. This can’t be undone.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: doRemove },
     ]);
@@ -82,13 +89,22 @@ export default function OrderScreen() {
   const unpriced = order.lines.filter((line) => line.mrp === undefined).length;
 
   return (
-    <Screen title={order.number} subtitle={formatOrderDate(order.createdAt)} back={{ fallback: '/orders', label: 'Orders' }} grouped>
+    <Screen title={number} subtitle={formatOrderDate(order.createdAt)} back={{ fallback: '/orders', label: 'Orders' }} grouped>
       <InsetGroup header="Details">
-        <ValueRow label="Status" value={order.status} />
+        <ValueRow label="Status" value={status} />
+        {number !== order.number ? <ValueRow label="Number on this phone" value={order.number} /> : null}
         <ValueRow label="Customer / site" value={order.customer} />
         {order.phone ? <ValueRow label="Phone" value={order.phone} /> : null}
         {order.notes ? <ValueRow label="Notes" value={order.notes} /> : null}
       </InsetGroup>
+
+      {shop?.history?.length ? (
+        <InsetGroup header="Progress at the shop">
+          {shop.history.map((step, index) => (
+            <ValueRow key={`${step.status}-${index}`} label={step.status} value={formatOrderDate(step.at)} />
+          ))}
+        </InsetGroup>
+      ) : null}
 
       <InsetGroup header="Items">
         {order.lines.map((line, index) => {

@@ -1,6 +1,6 @@
 # Vimalnath API
 
-The backend for the mobile app and admin panel, following the plan in `docs/Vimalnath-Backend-Modules.pdf`. Built so far: Module 1 (API server, database, security, deployment) and Module 2 (staff sign-in and roles).
+The backend for the mobile app and admin panel, following the plan in `docs/Vimalnath-Backend-Modules.pdf`. Built so far: Module 1 (API server, database, security, deployment), Module 2 (staff sign-in and roles), Module 3 (app users), Module 4 (catalogue: products, categories and price lists, edited in the admin), Module 5 (photo and PDF uploads) and Module 6 (orders).
 
 Needs Node 24.2 or newer, which runs the TypeScript directly, so there is no build step.
 
@@ -36,6 +36,9 @@ src/
   app.ts       Routes, security, request limits and the one error format
   staff.ts     Staff sign-in, roles and everything under /v1/admin
   app-users.ts The app's shop connection (/v1/app) and the admin's App Users (/v1/admin/app-users)
+  catalogue.ts Products, categories and price lists under /v1/admin (read: all staff; change: Owner and Catalogue editor)
+  orders.ts    Orders from the app (numbered VSC-0001 on), and /v1/admin/orders for status changes and internal notes
+  media.ts     Uploads (POST /v1/admin/media: photos up to 5 MB, PDFs up to 25 MB) and serving them at /v1/media/<id>.webp, -md.webp, -sm.webp or .pdf
   validate.ts  Checks input; a route uses jsonBody(schema)
   config.ts    Reads and checks the settings at startup
   migrate.ts   Applies new migrations
@@ -48,8 +51,8 @@ Every error looks like `{ "error": { "message": "...", "field": "name" } }`. `fi
 
 | Route | What it does |
 |---|---|
-| `GET /v1/app/orders` | `{ customerId, orders }`. The app checks this around every sync. |
-| `POST /v1/app/orders` | `{ eventId, order }`, kept as received. Module 6 turns these into real orders. |
+| `GET /v1/app/orders` | `{ customerId, orders }`: each order's shop number, status and history. The app checks this around every sync. |
+| `POST /v1/app/orders` | `{ eventId, order }`. Saved once however often it's sent, at the server's prices; lines that no longer match the catalogue are flagged for staff, not refused. |
 | `POST /v1/app/profile` | `{ eventId, profile }`, the User screen's details. |
 | `POST /v1/app/activity` | A product view, sent only if the customer turned on activity sharing. |
 

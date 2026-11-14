@@ -69,7 +69,7 @@ export default function OrdersPage() {
       rows.map((order) => [order.number, order.createdAt.slice(0, 16).replace('T', ' '), order.customer, order.phone, ORDER_STATUS[order.status].label, order.lines.length, itemCount(order), order.total, order.notes]),
     );
 
-  const move = (ids: string[], from: OrderStatus, to: OrderStatus) => {
+  const move = async (ids: string[], from: OrderStatus, to: OrderStatus) => {
     const eligible = ids.filter((id) => db.orders.find((order) => order.id === id)?.status === from);
     if (!eligible.length) {
       toast({ message: `None of the selected orders are ${ORDER_STATUS[from].label.toLowerCase()}.`, tone: 'info' });
@@ -79,7 +79,7 @@ export default function OrdersPage() {
     const at = new Date().toISOString();
     const by = readSession()?.name ?? 'Admin';
     const numbers = eligible.map((id) => db.orders.find((order) => order.id === id)!.number);
-    update(
+    const ok = await update(
       'orders',
       (orders) => orders.map((order) => (eligible.includes(order.id) ? { ...order, status: to, history: [...order.history, { status: to, at, by }] } : order)),
       {
@@ -88,6 +88,7 @@ export default function OrdersPage() {
         to: numbers.length === 1 ? `/orders/${eligible[0]}` : '/orders',
       },
     );
+    if (!ok) return;
     setSelected(new Set());
     toast({
       message: `${plural(eligible.length, 'order')} marked ${ORDER_STATUS[to].label.toLowerCase()}.`,

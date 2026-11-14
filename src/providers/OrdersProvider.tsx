@@ -26,7 +26,8 @@ export type Order = {
   customer: string;
   phone?: string;
   notes?: string;
-  status: 'Placed';
+  /** "Placed" when made; once the order reaches the shop, the shop's status is shown instead. */
+  status: string;
   lines: OrderLine[];
   /** Sum of the priced lines only. */
   total: number;

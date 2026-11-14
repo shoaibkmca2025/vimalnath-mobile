@@ -7,9 +7,12 @@ export type LogEntry = Pick<Activity, 'area' | 'summary' | 'to'>;
 
 export type DataContextValue = {
   db: Database;
-  /** Changes one part of the data. Pass `log` to record the change in the activity log. */
-  update: <K extends keyof Database>(key: K, change: (current: Database[K]) => Database[K], log?: LogEntry) => void;
-  /** Drops every local edit and goes back to the app's data. */
+  /**
+   * Changes one part of the data. Pass `log` to record the change in the activity log.
+   * Catalogue changes go to the server and show once it accepts them; it resolves false, after an error toast, if it doesn't.
+   */
+  update: <K extends keyof Database>(key: K, change: (current: Database[K]) => Database[K], log?: LogEntry) => Promise<boolean>;
+  /** Drops every local edit (not the catalogue, which is on the server) and goes back to the app's data. */
   reset: () => void;
   hasChanges: boolean;
 };

@@ -151,8 +151,8 @@ export default function SettingsPage() {
             <p className="notice">
               <InfoIcon size={16} weight="bold" aria-hidden />
               <span>
-                So far only sign-in and staff accounts use the server. The catalogue comes from the app’s own data, orders are sample data, and your edits are saved in this
-                browser only — the app won’t see them until the admin has a server.
+                Orders, products, categories and price lists are saved on the server, along with staff and app users. Edits to bar sections, banners, videos and
+                settings are saved in this browser only. Phones send orders and see their status; they get catalogue changes once app sync is built.
               </span>
             </p>
             <div className="row-wrap">
@@ -187,7 +187,7 @@ export default function SettingsPage() {
       <ConfirmDialog
         open={confirmReset}
         title="Reset to the app’s data?"
-        body="Every edit made in this browser — products, prices, order statuses, settings — is discarded. Download a copy first if you might need it."
+        body="Every edit saved only in this browser — bar sections, banners, videos and settings — is discarded. Orders and the catalogue are on the server and stay as they are. Download a copy first if you might need it."
         confirmLabel="Reset"
         destructive
         onCancel={() => setConfirmReset(false)}

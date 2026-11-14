@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import type postgres from 'postgres';
 import type { Sql } from 'postgres';
 import { z } from 'zod';
 
+import { AppOrder, appOrders, placeOrder } from './orders.ts';
 import { newToken, only, sha256, type Env } from './staff.ts';
 import { jsonBody, parse } from './validate.ts';
 
@@ -15,11 +15,7 @@ const Label = z.string().trim().min(1, 'Enter who this is for.').max(100, 'Use 1
 const AppUserId = z.coerce.number().int().positive().max(2147483647);
 
 const ProfileEvent = z.object({ eventId: EventId, profile: z.object({ name: Text, business: Text, phone: Text, email: Text, city: Text }) });
-// Kept whole for Module 6; only what identifies an order is checked here.
-const OrderEvent = z.object({
-  eventId: EventId,
-  order: z.looseObject({ id: z.string().min(1).max(100), createdAt: z.string().max(40), lines: z.array(z.looseObject({})).min(1).max(1000), total: z.number() }),
-});
+const OrderEvent = z.object({ eventId: EventId, order: AppOrder });
 const ActivityEvent = z.object({
   eventId: EventId,
   type: z.string().min(1).max(40),
@@ -47,17 +43,11 @@ export function appRoutes(sql: Sql) {
 
   // The app calls this around every sync: customerId pins the phone to one customer, and
   // mobileEventId tells it which of its orders have arrived, so it never sends one twice.
-  app.get('/orders', async (c) => {
-    const deviceId = c.get('deviceId');
-    const orders = await sql`
-      select event_id as id, event_id as "mobileEventId", body->'order'->>'id' as "mobileOrderId", 'Received' as status
-      from app_events where device_id = ${deviceId} and kind = 'order' order by received_at desc`;
-    return c.json({ customerId: String(deviceId), orders });
-  });
+  app.get('/orders', async (c) => c.json({ customerId: String(c.get('deviceId')), orders: await appOrders(sql, c.get('deviceId')) }));
 
   app.post('/orders', jsonBody(OrderEvent), async (c) => {
     const { eventId, order } = c.req.valid('json');
-    await sql`insert into app_events (device_id, event_id, kind, body) values (${c.get('deviceId')}, ${eventId}, 'order', ${sql.json({ order } as postgres.JSONValue)}) on conflict do nothing`;
+    await placeOrder(sql, c.get('deviceId'), eventId, order);
     return c.json({ received: true });
   });
 
@@ -84,10 +74,10 @@ export function appUserAdminRoutes(sql: Sql) {
   const appUsers = (where = sql`true`) => sql`
     select d.id, d.label, d.name, d.business, d.phone, d.email, d.city, d.blocked,
       d.last_seen_at as "lastSeenAt", d.profile_updated_at as "profileUpdatedAt", d.created_at as "createdAt",
-      count(e.event_id) filter (where e.kind = 'order')::int as orders,
-      count(e.event_id) filter (where e.kind = 'activity')::int as views
-    from app_devices d left join app_events e on e.device_id = d.id
-    where ${where} group by d.id order by d.created_at desc`;
+      (select count(*) from orders o where o.device_id = d.id)::int as orders,
+      (select count(*) from app_events e where e.device_id = d.id)::int as views
+    from app_devices d
+    where ${where} order by d.created_at desc`;
   const one = async (id: number) => (await appUsers(sql`d.id = ${id}`))[0];
 
   // shortcut: sends every app user at once; page it on the server past a few thousand.

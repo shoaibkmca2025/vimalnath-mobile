@@ -6,12 +6,14 @@ import { EmptyState } from '@/components/EmptyState';
 import { InsetGroup } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
 import { formatINR } from '@/data/shop';
+import { useShopOrders } from '@/lib/admin-sync';
 import { formatOrderDate } from '@/lib/format';
 import { useOrders } from '@/providers/OrdersProvider';
 import { colors, tabularNums, type } from '@/theme';
 
 export default function OrdersScreen() {
   const { orders } = useOrders();
+  const shop = useShopOrders();
 
   return (
     <Screen title="Orders" subtitle={orders.length ? `${orders.length} order${orders.length === 1 ? '' : 's'} on this phone` : undefined} grouped>
@@ -26,12 +28,16 @@ export default function OrdersScreen() {
         <InsetGroup separatorInset={64}>
           {orders.map((order) => {
             const items = order.lines.reduce((sum, line) => sum + line.qty, 0);
+            // Once the order reaches the shop, its shop number and status replace the ones this phone gave it.
+            const remote = shop.get(order.id);
+            const number = remote?.number ?? order.number;
+            const status = remote?.status ?? order.status;
             return (
               <Pressable
                 key={order.id}
                 onPress={() => router.push({ pathname: '/order/[id]', params: { id: order.id } })}
                 accessibilityRole="button"
-                accessibilityLabel={`Order ${order.number} for ${order.customer}, ${formatINR(order.total)}, ${formatOrderDate(order.createdAt)}`}
+                accessibilityLabel={`Order ${number} for ${order.customer}, ${formatINR(order.total)}, ${formatOrderDate(order.createdAt)}`}
                 style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
               >
                 <View style={styles.icon}>
@@ -40,7 +46,7 @@ export default function OrdersScreen() {
                 <View style={styles.copy}>
                   <View style={styles.titleLine}>
                     <Text style={[type.headline, styles.shrink]} numberOfLines={1}>
-                      {order.number}
+                      {number}
                     </Text>
                     <Text style={styles.total}>{formatINR(order.total)}</Text>
                   </View>
@@ -48,7 +54,7 @@ export default function OrdersScreen() {
                     {order.customer}
                   </Text>
                   <Text style={styles.meta} numberOfLines={1}>
-                    {order.status} · {formatOrderDate(order.createdAt)} · {items} item{items === 1 ? '' : 's'}
+                    {status} · {formatOrderDate(order.createdAt)} · {items} item{items === 1 ? '' : 's'}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.tertiaryLabel} />

@@ -225,10 +225,10 @@ export function AppShell() {
               <kbd className="kbd search-trigger__kbd">{isMac ? '⌘K' : 'Ctrl K'}</kbd>
             </button>
             {navigation.state === 'loading' && <span className="spinner" style={{ color: 'var(--tint)' }} role="status" aria-label="Loading page" />}
-            <Link to="/settings#preview-data" className="preview-pill" title="Edits are saved in this browser only, and orders are sample data, until the admin is connected to a server.">
+            <Link to="/settings#preview-data" className="preview-pill" title="Orders and the catalogue are saved on the server. Other edits are saved in this browser only, until their modules reach the server.">
               <InfoIcon size={14} weight="bold" aria-hidden />
               <span className="preview-pill__text">Preview data</span>
-              <span className="visually-hidden">: edits are saved in this browser only</span>
+              <span className="visually-hidden">: some edits are saved in this browser only</span>
             </Link>
           </header>
 
