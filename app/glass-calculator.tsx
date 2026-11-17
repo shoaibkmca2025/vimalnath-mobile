@@ -14,6 +14,7 @@ import { computeGlassPlan, getSystemRange, parsePanelCount, type GlassPlanResult
 import { buildGlassPlanHtml } from '@/lib/glass-plan-pdf';
 import { SIZE_UNIT_KEY, UNIT_OPTIONS, type LengthUnit } from '@/lib/length-units';
 import { pdfFileName, savePdf, sharePdf } from '@/lib/pdf-export';
+import { rememberPdf } from '@/lib/saved-pdfs';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, radius, tabularNums, type } from '@/theme';
 
@@ -50,8 +51,8 @@ export default function GlassCalculatorScreen() {
   const { name, backLabel, fallbackRoute } = useLocalSearchParams<{ name?: string; backLabel?: string; fallbackRoute?: string }>();
   const systemName = name ?? 'Sliding System';
   const panelCount = parsePanelCount(systemName);
-  // Telescopic sliding systems ("2+1 Sliding System") call the opening's width its length.
-  const widthLabel = /synchro|folding/i.test(systemName) ? 'Width' : 'Length';
+  // Telescopic and synchronized systems call the opening's width its length; folding systems keep "Width".
+  const widthLabel = /folding/i.test(systemName) ? 'Width' : 'Length';
 
   const [unit, setUnit] = useState<Unit>('mm');
   const [width, setWidth] = useState('');
@@ -62,7 +63,7 @@ export default function GlassCalculatorScreen() {
   const [result, setResult] = useState<GlassPlanResult | null>(null);
   const [sizeError, setSizeError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'share' | 'save' | null>(null);
-  // Telescopic systems let the user pick the profile colour for the material list (remembered).
+  // Telescopic and synchronized systems let the user pick the profile colour for the material list (remembered).
   const hasColour = widthLabel === 'Length';
   const [colour, setColour] = useState(MATERIAL_COLOURS[0].name);
   useEffect(() => {
@@ -136,6 +137,8 @@ export default function GlassCalculatorScreen() {
     try {
       const html = buildGlassPlanHtml({ systemName, result, materialColour: hasColour ? colour : undefined });
       const fileName = pdfFileName(`${systemName} ${result.openingWidth}x${result.openingHeight}`);
+      // Kept for Saved PDFs (top bar), whichever way it's sent.
+      void rememberPdf({ source: 'cutlist', title: systemName, detail: `Opening ${result.openingWidth} × ${result.openingHeight} mm`, fileName, html });
       if (mode === 'share') {
         await sharePdf(html, fileName, 'Share glass cutting plan');
       } else {

@@ -24,11 +24,35 @@ export function pdfFileName(title: string): string {
  */
 async function renderPdf(html: string, fileName: string): Promise<File> {
   const { uri } = await withTimeout(Print.printToFileAsync({ html, ...A4 }), 20000, 'Generating PDF');
-  const rendered = new File(uri);
+  return namedCopy(uri, fileName);
+}
+
+/** Renders the HTML to a PDF file at a temporary path (native only); the caller moves or copies it. */
+export async function renderPdfToFile(html: string): Promise<File> {
+  const { uri } = await withTimeout(Print.printToFileAsync({ html, ...A4 }), 20000, 'Generating PDF');
+  return new File(uri);
+}
+
+/** A copy of the file in the cache under a readable name, which is what the share sheet shows. */
+function namedCopy(uri: string, fileName: string): File {
   const named = new File(Paths.cache, fileName);
   if (named.exists) named.delete();
-  rendered.copySync(named);
+  new File(uri).copySync(named);
   return named;
+}
+
+/** Shares a PDF that is already a file on this phone (e.g. one kept in Saved PDFs). */
+export async function sharePdfFile(uri: string, fileName: string, dialogTitle: string): Promise<void> {
+  const file = namedCopy(uri, fileName);
+  if (!(await withTimeout(Sharing.isAvailableAsync(), 5000, 'Checking sharing availability'))) {
+    throw new Error('Sharing is not available on this device');
+  }
+  await Sharing.shareAsync(file.uri, { mimeType: PDF_MIME, dialogTitle, UTI: 'com.adobe.pdf' });
+}
+
+/** Saves a PDF that is already a file on this phone to a folder the person picks (Android) or via Files (iOS). */
+export async function savePdfFile(uri: string, fileName: string): Promise<SavePdfOutcome> {
+  return saveFile(namedCopy(uri, fileName), fileName);
 }
 
 /** On web there is no file to hand over, so open the browser print dialog, where "Save as PDF" is available. */
@@ -63,8 +87,10 @@ export async function savePdf(html: string, fileName: string): Promise<SavePdfOu
     return { saved: false };
   }
 
-  const file = await renderPdf(html, fileName);
+  return saveFile(await renderPdf(html, fileName), fileName);
+}
 
+async function saveFile(file: File, fileName: string): Promise<SavePdfOutcome> {
   if (Platform.OS === 'android') {
     let folder: Directory;
     try {

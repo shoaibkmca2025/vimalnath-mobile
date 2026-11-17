@@ -19,6 +19,7 @@ import { confirmDestructive } from '@/lib/confirm';
 import { inchesToMm, mmToInchParts, pad2 } from '@/lib/format';
 import { formatLength, formatLengthValue, SIZE_UNIT_KEY, UNIT_OPTIONS, type LengthUnit } from '@/lib/length-units';
 import { pdfFileName, sharePdf } from '@/lib/pdf-export';
+import { rememberPdf } from '@/lib/saved-pdfs';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, tabularNums, type } from '@/theme';
 
@@ -242,7 +243,11 @@ export default function BarOptimizerScreen() {
     if (!plan) return;
     setExporting(true);
     try {
-      await sharePdf(buildBarPlanHtml({ siteName, section, plan }), pdfFileName(`Bar plan ${siteName || section.code}`), 'Save or share bar plan');
+      const html = buildBarPlanHtml({ siteName, section, plan });
+      const fileName = pdfFileName(`Bar plan ${siteName || section.code}`);
+      // Kept for Saved PDFs (top bar), whichever way it's sent.
+      void rememberPdf({ source: 'optimizer', title: siteName ? `Bar plan · ${siteName}` : 'Bar plan', detail: `${section.code} · ${plan.bars.length} bar${plan.bars.length === 1 ? '' : 's'}`, fileName, html });
+      await sharePdf(html, fileName, 'Save or share bar plan');
       setExportOpen(false);
     } catch (err) {
       console.error('PDF export failed:', err);
