@@ -11,6 +11,7 @@ import { connect } from './db.ts';
 import { mediaAdminRoutes, mediaRoutes } from './media.ts';
 import { orderAdminRoutes } from './orders.ts';
 import { adminRoutes } from './staff.ts';
+import { versionRoutes } from './versions.ts';
 
 const config = loadConfig();
 const sql = connect(config.DATABASE_URL);
@@ -26,6 +27,7 @@ admin.route('/app-users', appUserAdminRoutes(sql));
 admin.route('/', catalogueRoutes(sql));
 admin.route('/', calculatorRoutes(sql));
 admin.route('/', contentRoutes(sql));
+admin.route('/', versionRoutes(sql));
 admin.route('/media', mediaAdminRoutes(sql));
 admin.route('/orders', orderAdminRoutes(sql));
 admin.route('/customers', customerRoutes(sql));

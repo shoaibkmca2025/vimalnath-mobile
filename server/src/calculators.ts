@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { distinct, Image, Required, Text } from './catalogue.ts';
 import { only, type Env } from './staff.ts';
 import { jsonBody } from './validate.ts';
+import { claimList, Seen } from './versions.ts';
 
 // The app's calculator code is written for exactly these three systems, so they can be edited but never added or removed.
 const SYSTEM_IDS = ['telescopic', 'synchronized', 'folding'] as const;
@@ -53,9 +54,11 @@ export function calculatorRoutes(sql: Sql) {
   });
 
   // The whole cutlist at once: three cards and a couple of dozen configurations, in the order the app shows them.
-  calculators.put('/cutlist', editors, jsonBody(z.object({ cutlist: Cutlist })), async (c) => {
-    const { systems, configurations } = c.req.valid('json').cutlist;
+  calculators.put('/cutlist', editors, jsonBody(z.object({ cutlist: Cutlist, version: Seen })), async (c) => {
+    const { cutlist, version } = c.req.valid('json');
+    const { systems, configurations } = cutlist;
     await sql.begin(async (tx) => {
+      await claimList(tx, 'cutlist', version);
       for (const [sort_order, system] of systems.entries()) {
         await tx`update cutlist_systems set name = ${system.name}, subtitle = ${system.subtitle}, photo = ${system.photo}, sort_order = ${sort_order} where id = ${system.id}`;
       }
@@ -67,9 +70,11 @@ export function calculatorRoutes(sql: Sql) {
   });
 
   // The whole section library at once: it is short, and the order is the order people see.
-  calculators.put('/bar-sections', editors, jsonBody(z.object({ sections: Sections })), async (c) => {
-    const rows = c.req.valid('json').sections.map(({ bar, ...section }, sort_order) => ({ ...section, bar_mm: bar, sort_order }));
+  calculators.put('/bar-sections', editors, jsonBody(z.object({ sections: Sections, version: Seen })), async (c) => {
+    const { sections, version } = c.req.valid('json');
+    const rows = sections.map(({ bar, ...section }, sort_order) => ({ ...section, bar_mm: bar, sort_order }));
     await sql.begin(async (tx) => {
+      await claimList(tx, 'sections', version);
       await tx`delete from bar_sections`;
       if (rows.length) await tx`insert into bar_sections ${tx(rows)}`;
     });

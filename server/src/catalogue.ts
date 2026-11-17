@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { only, type Env } from './staff.ts';
 import { jsonBody } from './validate.ts';
+import { claimList, Seen } from './versions.ts';
 
 // Rules match the admin's product editor, so anything it allows is saved and anything it stops is refused here too.
 export const Text = (max: number) => z.string().trim().max(max, `Use ${max} characters or fewer.`);
@@ -156,19 +157,27 @@ export function catalogueRoutes(sql: Sql) {
   });
 
   // The whole list, in the order the app shows it.
-  catalogue.put('/categories', editors, jsonBody(z.object({ categories: z.array(Category).min(1).max(100).refine(distinct('id'), 'A category is listed twice.') })), async (c) => {
-    const rows = c.req.valid('json').categories.map(({ fit, ...category }, sort_order) => ({ ...category, image_fit: fit, sort_order }));
-    await sql`
-      insert into categories ${sql(rows)}
-      on conflict (id) do update set label = excluded.label, image = excluded.image, image_fit = excluded.image_fit, visible = excluded.visible, sort_order = excluded.sort_order`;
+  catalogue.put('/categories', editors, jsonBody(z.object({ categories: z.array(Category).min(1).max(100).refine(distinct('id'), 'A category is listed twice.'), version: Seen })), async (c) => {
+    const { categories, version } = c.req.valid('json');
+    const rows = categories.map(({ fit, ...category }, sort_order) => ({ ...category, image_fit: fit, sort_order }));
+    await sql.begin(async (tx) => {
+      await claimList(tx, 'categories', version);
+      await tx`
+        insert into categories ${tx(rows)}
+        on conflict (id) do update set label = excluded.label, image = excluded.image, image_fit = excluded.image_fit, visible = excluded.visible, sort_order = excluded.sort_order`;
+    });
     return c.body(null, 204);
   });
 
-  catalogue.put('/price-lists', editors, jsonBody(z.object({ priceLists: z.array(PriceList).min(1).max(20).refine(distinct('number'), 'A price list is listed twice.') })), async (c) => {
-    const rows = c.req.valid('json').priceLists.map((list, sort_order) => ({ ...list, sort_order }));
-    await sql`
-      insert into price_lists ${sql(rows)}
-      on conflict (number) do update set kicker = excluded.kicker, title = excluded.title, meta = excluded.meta, tone = excluded.tone, url = excluded.url, sort_order = excluded.sort_order`;
+  catalogue.put('/price-lists', editors, jsonBody(z.object({ priceLists: z.array(PriceList).min(1).max(20).refine(distinct('number'), 'A price list is listed twice.'), version: Seen })), async (c) => {
+    const { priceLists, version } = c.req.valid('json');
+    const rows = priceLists.map((list, sort_order) => ({ ...list, sort_order }));
+    await sql.begin(async (tx) => {
+      await claimList(tx, 'catalogues', version);
+      await tx`
+        insert into price_lists ${tx(rows)}
+        on conflict (number) do update set kicker = excluded.kicker, title = excluded.title, meta = excluded.meta, tone = excluded.tone, url = excluded.url, sort_order = excluded.sort_order`;
+    });
     return c.body(null, 204);
   });
 

@@ -133,7 +133,7 @@ export default function SettingsPage() {
               onChange={(event) => set('minAppVersion', event.target.value)}
               onBlur={touch('minAppVersion')}
               error={shown('minAppVersion')}
-              hint="Phones on an older version are asked to update before they order."
+              hint="Once app sync is built, phones on an older version will be asked to update before they order."
             />
           </div>
         </Card>

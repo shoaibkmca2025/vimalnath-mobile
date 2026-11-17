@@ -40,6 +40,7 @@ src/
   customers.ts Customers (/v1/admin/customers): each app user belongs to one; notes, tags and merging
   calculators.ts Cutlist systems, configurations and bar sections (/v1/admin/calculators, /cutlist, /bar-sections; change: Owner and Catalogue editor)
   content.ts   Banners, installation videos, More Apps and settings (/v1/admin/content, /banners, /videos, /more-apps; /settings is Owner only)
+  versions.ts  A save counter per whole list (/v1/admin/versions): a save from an out-of-date admin tab is refused (409) instead of replacing a newer change
   orders.ts    Orders from the app (numbered VSC-0001 on), and /v1/admin/orders for status changes and internal notes
   media.ts     Uploads (POST /v1/admin/media: photos up to 5 MB, PDFs up to 25 MB) and serving them at /v1/media/<id>.webp, -md.webp, -sm.webp or .pdf
   validate.ts  Checks input; a route uses jsonBody(schema)

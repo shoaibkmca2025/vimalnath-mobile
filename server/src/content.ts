@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { distinct, Image, isHttps, Required, Text } from './catalogue.ts';
 import { only, type Env } from './staff.ts';
 import { jsonBody } from './validate.ts';
+import { claimList, Seen } from './versions.ts';
 
 const Link = Text(300).refine((url) => !url || isHttps(url), 'Use a secure link that starts with https://.');
 const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
@@ -96,18 +97,21 @@ export function contentRoutes(sql: Sql) {
   });
 
   // Each list is short and saved whole, in the order the app shows it.
-  content.put('/banners', editors, jsonBody(z.object({ banners: Banners })), async (c) => {
-    const rows = c.req.valid('json').banners.map((banner, sort_order) => ({ ...banner, sort_order }));
+  content.put('/banners', editors, jsonBody(z.object({ banners: Banners, version: Seen })), async (c) => {
+    const { banners, version } = c.req.valid('json');
+    const rows = banners.map((banner, sort_order) => ({ ...banner, sort_order }));
     await sql.begin(async (tx) => {
+      await claimList(tx, 'banners', version);
       await tx`delete from banners`;
       if (rows.length) await tx`insert into banners ${tx(rows)}`;
     });
     return c.body(null, 204);
   });
 
-  content.put('/videos', editors, jsonBody(z.object({ videoSections: VideoSections })), async (c) => {
-    const { videoSections } = c.req.valid('json');
+  content.put('/videos', editors, jsonBody(z.object({ videoSections: VideoSections, version: Seen })), async (c) => {
+    const { videoSections, version } = c.req.valid('json');
     await sql.begin(async (tx) => {
+      await claimList(tx, 'videoSections', version);
       await tx`delete from video_sections`; // their videos go too (on delete cascade)
       for (const [sort_order, { title, videos }] of videoSections.entries()) {
         const [section] = await tx`insert into video_sections ${tx({ title, sort_order })} returning id`;
@@ -117,18 +121,24 @@ export function contentRoutes(sql: Sql) {
     return c.body(null, 204);
   });
 
-  content.put('/more-apps', editors, jsonBody(z.object({ moreApps: MoreApps })), async (c) => {
-    const rows = c.req.valid('json').moreApps.map(({ playStore, appStore, ...app }, sort_order) => ({ ...app, play_store: playStore, app_store: appStore, sort_order }));
+  content.put('/more-apps', editors, jsonBody(z.object({ moreApps: MoreApps, version: Seen })), async (c) => {
+    const { moreApps, version } = c.req.valid('json');
+    const rows = moreApps.map(({ playStore, appStore, ...app }, sort_order) => ({ ...app, play_store: playStore, app_store: appStore, sort_order }));
     await sql.begin(async (tx) => {
+      await claimList(tx, 'moreApps', version);
       await tx`delete from more_apps`;
       if (rows.length) await tx`insert into more_apps ${tx(rows)}`;
     });
     return c.body(null, 204);
   });
 
-  content.put('/settings', only('owner'), jsonBody(z.object({ settings: Settings })), async (c) => {
-    const rows = Object.entries(c.req.valid('json').settings).map(([key, value]) => ({ key, value }));
-    await sql`insert into settings ${sql(rows)} on conflict (key) do update set value = excluded.value`;
+  content.put('/settings', only('owner'), jsonBody(z.object({ settings: Settings, version: Seen })), async (c) => {
+    const { settings, version } = c.req.valid('json');
+    const rows = Object.entries(settings).map(([key, value]) => ({ key, value }));
+    await sql.begin(async (tx) => {
+      await claimList(tx, 'settings', version);
+      await tx`insert into settings ${tx(rows)} on conflict (key) do update set value = excluded.value`;
+    });
     return c.body(null, 204);
   });
 

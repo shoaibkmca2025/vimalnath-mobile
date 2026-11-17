@@ -56,6 +56,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   /** What the server has: each catalogue save is worked out against this. */
   const server = useRef<Pick<Database, ServerKey> | null>(null);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
+  /** How many times each whole list had been saved when this tab read it; the server refuses a save from an older copy. */
+  const versions = useRef<Record<string, number>>({});
 
   const changes = state.status === 'ready' ? state.changes : null;
   useEffect(() => {
@@ -66,7 +68,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     let active = true;
     // Catalogue editors don't work with orders, and the server refuses them.
     const orders = readSession()?.role === 'catalogue' ? Promise.resolve<Order[]>([]) : api<Order[]>('/orders');
-    Promise.all([api<Catalogue>('/catalogue'), orders, api<Calculators>('/calculators'), api<Content>('/content')])
+    // Versions before the lists: a save that lands in between then makes this tab ask for a reload, never overwrite it.
+    api<Record<string, number>>('/versions')
+      .then((loaded) => {
+        versions.current = loaded;
+        return Promise.all([api<Catalogue>('/catalogue'), orders, api<Calculators>('/calculators'), api<Content>('/content')]);
+      })
       .then(([catalogue, orders, { cutlist, sections }, content]) => {
         if (!active) return;
         if (!catalogue.products.length) throw new Error('The catalogue isn’t in the database yet. In the server folder, run npm run import-data, then try again.');
@@ -92,7 +99,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         let after = change(before as never) as typeof before;
         try {
           for (const request of serverRequests<ServerKey>(key, before, after, log?.summary)) {
-            const result = await api<{ orders?: Order[] } | undefined>(request.path, request.method, request.body);
+            const seen = versions.current[key];
+            const result = await api<{ orders?: Order[] } | undefined>(request.path, request.method, seen === undefined ? request.body : { ...(request.body as object), version: seen });
+            if (seen !== undefined) versions.current[key] = seen + 1;
             // Order changes come back as the server recorded them (who, when), which is what the history should show.
             const fresh = new Map(result?.orders?.map((order) => [order.id, order]));
             if (fresh.size) after = (after as Order[]).map((order) => fresh.get(order.id) ?? order) as typeof before;
