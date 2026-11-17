@@ -58,22 +58,23 @@ export default function SectionsPage() {
   const touch = (key: string) => () => setTouched((current) => new Set(current).add(key));
   const dirty = JSON.stringify(draft) !== JSON.stringify(original ? { ...original, bar: String(original.bar) } : EMPTY);
 
-  const save = () => {
+  const save = async () => {
     setTouched(new Set(Object.keys(errors)));
     if (Object.values(errors).some(Boolean)) return;
     const saved: Section = { code: draft.code.trim(), name: draft.name.trim(), system: draft.system.trim(), bar, dimensions: draft.dimensions.trim(), description: draft.description.trim() };
-    update('sections', (sections) => (editing ? sections.map((section) => (section.code === editing ? saved : section)) : [...sections, saved]), {
+    const ok = await update('sections', (sections) => (editing ? sections.map((section) => (section.code === editing ? saved : section)) : [...sections, saved]), {
       area: 'calculators',
       summary: editing ? `Edited bar section ${saved.code}` : `Added bar section ${saved.code}`,
       to: '/sections',
     });
+    if (!ok) return;
     drawer.close();
     toast({ message: editing ? `${saved.code} saved.` : `${saved.code} added to the section library.` });
   };
 
-  const remove = (section: Section) => {
+  const remove = async (section: Section) => {
     const previous = db.sections;
-    update('sections', (sections) => sections.filter((item) => item.code !== section.code), { area: 'calculators', summary: `Deleted bar section ${section.code}`, to: '/sections' });
+    if (!(await update('sections', (sections) => sections.filter((item) => item.code !== section.code), { area: 'calculators', summary: `Deleted bar section ${section.code}`, to: '/sections' }))) return;
     toast({ message: `${section.code} deleted.`, action: { label: 'Undo', onAction: () => update('sections', () => previous, { area: 'calculators', summary: `Restored bar section ${section.code}`, to: '/sections' }) } });
   };
 

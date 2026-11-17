@@ -47,16 +47,19 @@ export const customerKey = (name: string) =>
     .replace(/[^\p{L}\p{M}\p{N}]+/gu, '-')
     .replace(/^-|-$/g, '');
 
+/** The customer an order belongs to: its customer record (Module 7), or the name typed on it for an order without one. */
+export const customerOf = (order: Order) => (order.customerRecord ? { key: String(order.customerRecord.id), name: order.customerRecord.name } : { key: customerKey(order.customer), name: order.customer });
+
 export const isOpen = (status: OrderStatus) => status === 'placed' || status === 'confirmed' || status === 'dispatched';
 
 export const itemCount = (order: Order) => order.lines.reduce((sum, line) => sum + line.qty, 0);
 
-/** Customers aren't stored separately yet: the app only asks for a customer or site name, so orders are grouped by it. */
+/** Order figures per customer (see customerOf), worked out from the orders this admin has loaded. Cancelled orders are not counted as spent. */
 export function customersFromOrders(orders: Order[]): Customer[] {
   const byKey = new Map<string, Customer>();
   for (const order of orders) {
-    const key = customerKey(order.customer);
-    const current = byKey.get(key) ?? { key, name: order.customer, orders: 0, spent: 0, firstOrder: order.createdAt, lastOrder: order.createdAt, open: 0 };
+    const { key, name } = customerOf(order);
+    const current = byKey.get(key) ?? { key, name, orders: 0, spent: 0, firstOrder: order.createdAt, lastOrder: order.createdAt, open: 0 };
     current.orders += 1;
     if (order.status !== 'cancelled') current.spent += order.total;
     if (isOpen(order.status)) current.open += 1;

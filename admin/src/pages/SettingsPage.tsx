@@ -151,8 +151,8 @@ export default function SettingsPage() {
             <p className="notice">
               <InfoIcon size={16} weight="bold" aria-hidden />
               <span>
-                Orders, products, categories and price lists are saved on the server, along with staff and app users. Edits to bar sections, banners, videos and
-                settings are saved in this browser only. Phones send orders and see their status; they get catalogue changes once app sync is built.
+                Orders, customers, products, prices, categories, price lists, cutlist systems and bar sections are saved on the server, along with staff and app
+                users. Edits to banners, videos and settings are saved in this browser only. Phones send orders and see their status; they get catalogue changes once app sync is built.
               </span>
             </p>
             <div className="row-wrap">
@@ -187,7 +187,7 @@ export default function SettingsPage() {
       <ConfirmDialog
         open={confirmReset}
         title="Reset to the app’s data?"
-        body="Every edit saved only in this browser — bar sections, banners, videos and settings — is discarded. Orders and the catalogue are on the server and stay as they are. Download a copy first if you might need it."
+        body="Every edit saved only in this browser — banners, videos and settings — is discarded. Orders and the catalogue are on the server and stay as they are. Download a copy first if you might need it."
         confirmLabel="Reset"
         destructive
         onCancel={() => setConfirmReset(false)}

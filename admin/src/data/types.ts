@@ -93,6 +93,8 @@ export type Order = {
   internalNote?: { text: string; at: string; by: string };
   /** The App Users entry whose phone sent it. */
   appUser?: { id: number; label: string };
+  /** The customer that app user belongs to (Module 7); customers group orders by this, not by the typed name. */
+  customerRecord?: { id: number; name: string };
 };
 
 export type ActivityArea = 'orders' | 'catalogue' | 'calculators' | 'content' | 'settings';

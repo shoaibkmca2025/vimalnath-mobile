@@ -2,8 +2,10 @@ import { serve } from '@hono/node-server';
 
 import { createApp } from './app.ts';
 import { appRoutes, appUserAdminRoutes } from './app-users.ts';
+import { calculatorRoutes } from './calculators.ts';
 import { catalogueRoutes } from './catalogue.ts';
 import { loadConfig } from './config.ts';
+import { customerRoutes } from './customers.ts';
 import { connect } from './db.ts';
 import { mediaAdminRoutes, mediaRoutes } from './media.ts';
 import { orderAdminRoutes } from './orders.ts';
@@ -21,8 +23,10 @@ const app = createApp({
 const admin = adminRoutes(sql, { adminOrigin: config.ADMIN_ORIGIN, production, trustProxy: config.TRUST_PROXY });
 admin.route('/app-users', appUserAdminRoutes(sql));
 admin.route('/', catalogueRoutes(sql));
+admin.route('/', calculatorRoutes(sql));
 admin.route('/media', mediaAdminRoutes(sql));
 admin.route('/orders', orderAdminRoutes(sql));
+admin.route('/customers', customerRoutes(sql));
 app.route('/v1/admin', admin);
 app.route('/v1/app', appRoutes(sql));
 app.route('/v1/media', mediaRoutes(sql));

@@ -7,13 +7,13 @@ import { only, type Env } from './staff.ts';
 import { jsonBody } from './validate.ts';
 
 // Rules match the admin's product editor, so anything it allows is saved and anything it stops is refused here too.
-const Text = (max: number) => z.string().trim().max(max, `Use ${max} characters or fewer.`);
-const Required = (max: number, message: string) => Text(max).min(1, message);
+export const Text = (max: number) => z.string().trim().max(max, `Use ${max} characters or fewer.`);
+export const Required = (max: number, message: string) => Text(max).min(1, message);
 // One of the app's own photos (/media/...), or one uploaded through /v1/admin/media.
-const Image = z.string().max(300).regex(/^(\/media\/[\w./-]+|\/v1\/media\/[a-f0-9]{24}\.webp)$/, 'Choose a JPG, PNG or WebP photo.');
+export const Image = z.string().max(300).regex(/^(\/media\/[\w./-]+|\/v1\/media\/[a-f0-9]{24}\.webp)$/, 'Choose a JPG, PNG or WebP photo.');
 const isHttps = (url: string) => URL.canParse(url) && new URL(url).protocol === 'https:';
 
-const distinct = <K extends string>(key: K) => (items: Record<K, string>[]) => new Set(items.map((item) => item[key])).size === items.length;
+export const distinct = <K extends string>(key: K) => (items: Record<K, string>[]) => new Set(items.map((item) => item[key])).size === items.length;
 
 const Product = z
   .object({

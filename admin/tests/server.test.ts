@@ -82,3 +82,12 @@ test('order saves: a changed or removed internal note is sent; nothing else is',
   assert.deepEqual(serverRequests('orders', [order('1', 'placed', 'x')], [order('1')]), [{ path: '/orders/1/internal-note', method: 'PUT', body: { text: '' } }]);
   assert.deepEqual(serverRequests('orders', [order('1')], [order('1')]), []);
 });
+
+test('calculator saves: the cutlist and the bar sections are sent whole, and only when they changed', () => {
+  const cutlist = { systems: [], configurations: { telescopic: [], synchronized: [], folding: [] } };
+  const edited = { ...cutlist, configurations: { ...cutlist.configurations, folding: [{ name: '2 Door', image: '/media/f.jpg' }] } };
+  assert.deepEqual(serverRequests('cutlist', cutlist, edited), [{ path: '/cutlist', method: 'PUT', body: { cutlist: edited } }]);
+  assert.deepEqual(serverRequests('cutlist', cutlist, cutlist), []);
+  const sections = [{ code: 'S-101', name: 'Frame', system: 'Sliding', bar: 6000, dimensions: '', description: '' }];
+  assert.deepEqual(serverRequests('sections', sections, []), [{ path: '/bar-sections', method: 'PUT', body: { sections: [] } }]);
+});

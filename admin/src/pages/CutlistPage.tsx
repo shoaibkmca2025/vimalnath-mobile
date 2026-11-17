@@ -45,28 +45,30 @@ export default function CutlistPage() {
   const configError = configDraft && !configDraft.name.trim() ? 'Enter the configuration’s name, e.g. 2+1 Sliding System.' : null;
   const systemError = systemDraft && !systemDraft.name.trim() ? 'Enter the system’s name.' : null;
 
-  const saveConfig = () => {
+  const saveConfig = async () => {
     setTouched(true);
     if (!configDraft || configError || configDrawer.item === null) return;
     const index = configDrawer.item;
     const saved = { ...configDraft, name: configDraft.name.trim() };
-    update('cutlist', (cutlist) => ({
+    const ok = await update('cutlist', (cutlist) => ({
       ...cutlist,
       configurations: { ...cutlist.configurations, [systemId]: cutlist.configurations[systemId].map((item, i) => (i === index ? saved : item)) },
     }), { area: 'calculators', summary: `Edited the ${saved.name} configuration`, to: `/cutlist?system=${systemId}` });
+    if (!ok) return;
     configDrawer.close();
     toast({ message: `${saved.name} saved.` });
   };
 
-  const saveSystem = () => {
+  const saveSystem = async () => {
     setTouched(true);
     if (!systemDraft || systemError) return;
     const saved = { ...systemDraft, name: systemDraft.name.trim(), subtitle: systemDraft.subtitle.trim() };
-    update('cutlist', (cutlist) => ({ ...cutlist, systems: cutlist.systems.map((item) => (item.id === saved.id ? saved : item)) }), {
+    const ok = await update('cutlist', (cutlist) => ({ ...cutlist, systems: cutlist.systems.map((item) => (item.id === saved.id ? saved : item)) }), {
       area: 'calculators',
       summary: `Edited the ${saved.name} system card`,
       to: `/cutlist?system=${saved.id}`,
     });
+    if (!ok) return;
     systemDrawer.close();
     toast({ message: `${saved.name} saved.` });
   };

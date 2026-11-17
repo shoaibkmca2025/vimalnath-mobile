@@ -24,7 +24,7 @@ import { SelectField, TextAreaField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
-import { NEXT_ACTION_LABEL, ORDER_STATUS, STATUS_ORDER, customerKey, customersFromOrders, itemCount, nextStatus, whatsappLink } from '@/data/orders';
+import { NEXT_ACTION_LABEL, ORDER_STATUS, STATUS_ORDER, customerOf, customersFromOrders, itemCount, nextStatus, whatsappLink } from '@/data/orders';
 import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import type { Order, OrderStatus } from '@/data/types';
@@ -112,7 +112,7 @@ export default function OrderDetailPage() {
   const priced = order.lines.filter((line) => line.mrp !== undefined);
   const unpriced = order.lines.length - priced.length;
   const products = new Map(db.products.map((product) => [product.id, product]));
-  const customer = customersFromOrders(db.orders.filter((item) => customerKey(item.customer) === customerKey(order.customer)))[0]!;
+  const customer = customersFromOrders(db.orders.filter((item) => customerOf(item).key === customerOf(order).key))[0]!;
   const newer = db.orders[index - 1];
   const older = db.orders[index + 1];
   const reached = (status: OrderStatus) => order.history.findLast((event) => event.status === status);
@@ -342,10 +342,11 @@ export default function OrderDetailPage() {
             <div className="card__body stack">
               <div className="row" style={{ gap: 'var(--space-3)' }}>
                 <span className="avatar avatar--lg" aria-hidden>
-                  {initials(order.customer)}
+                  {initials(customer.name)}
                 </span>
                 <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', fontWeight: 600 }}>{order.customer}</span>
+                  <span style={{ display: 'block', fontWeight: 600 }}>{customer.name}</span>
+                  {order.customer !== customer.name && <span className="cell-sub" style={{ display: 'block' }}>Site: {order.customer}</span>}
                   <span className="cell-sub">{order.phone ?? 'No phone number given'}</span>
                 </span>
               </div>

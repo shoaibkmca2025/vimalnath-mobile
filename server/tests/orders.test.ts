@@ -51,7 +51,7 @@ async function staff(role: string) {
 /** A connected phone, placing orders the way the app's sync sends them. */
 async function phone(label = 'Ravi Glass Works') {
   const token = `token-${++next}`;
-  await sql`insert into app_devices (label, token_hash) values (${label}, ${sha256(token)})`;
+  await sql`with customer as (insert into customers (name) values (${label}) returning id) insert into app_devices (label, token_hash, customer_id) select ${label}, ${sha256(token)}, id from customer`;
   const auth = { Authorization: `Bearer ${token}` };
   let made = 0;
   return {

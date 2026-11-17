@@ -1,43 +1,74 @@
-import { ChatCircleTextIcon, ClockIcon, CurrencyInrIcon, MapPinIcon, PhoneIcon, ReceiptIcon, ShoppingCartIcon, UsersThreeIcon } from '@phosphor-icons/react';
-import { useMemo } from 'react';
+import { ChatCircleTextIcon, ClockIcon, CurrencyInrIcon, DeviceMobileIcon, MapPinIcon, PhoneIcon, ReceiptIcon, ShoppingCartIcon, UsersThreeIcon } from '@phosphor-icons/react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
-import { OrderStatusBadge } from '@/components/Badge';
-import { ButtonLink } from '@/components/Button';
+import { Badge, OrderStatusBadge } from '@/components/Badge';
+import { Button, ButtonLink } from '@/components/Button';
 import { Card, CardHeader } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
 import { EmptyState } from '@/components/EmptyState';
+import { TextAreaField, TextField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { Stat } from '@/components/Stat';
+import { useToast } from '@/components/useToast';
 import { topProducts } from '@/data/analytics';
-import { ORDER_STATUS, STATUS_ORDER, customerKey, customersFromOrders, itemCount, whatsappLink } from '@/data/orders';
+import type { CustomerRecord } from '@/data/customers';
+import { ORDER_STATUS, STATUS_ORDER, customerOf, itemCount, whatsappLink } from '@/data/orders';
 import { useData } from '@/data/useData';
 import type { Order } from '@/data/types';
-import { formatDate, formatINR, formatINRCompact, formatNumber, formatRelativeDay, initials, plural, relativePhrase } from '@/lib/format';
+import { api, type ApiError } from '@/lib/api';
+import { formatDate, formatINR, formatINRCompact, formatNumber, formatRelativeDay, formatRelativeTime, initials, plural, relativePhrase } from '@/lib/format';
+
+type Draft = { name: string; tags: string; note: string };
+const draftOf = (customer: CustomerRecord): Draft => ({ name: customer.name, tags: customer.tags.join(', '), note: customer.note });
 
 export default function CustomerDetailPage() {
   const { key } = useParams();
   const { db } = useData();
   const navigate = useNavigate();
+  const toast = useToast();
+  const [customer, setCustomer] = useState<CustomerRecord | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [failure, setFailure] = useState<ApiError | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const orders = useMemo(() => db.orders.filter((order) => customerKey(order.customer) === key), [db.orders, key]);
-  const customer = useMemo(() => customersFromOrders(orders)[0], [orders]);
+  useEffect(() => {
+    let active = true;
+    api<CustomerRecord>(`/customers/${encodeURIComponent(key ?? '')}`).then(
+      (found) => {
+        if (!active) return;
+        // A merged customer's old link lands on the one it was merged into.
+        if (String(found.id) !== key) navigate(`/customers/${found.id}`, { replace: true });
+        setCustomer(found);
+        setDraft(draftOf(found));
+      },
+      (error: Error) => active && setLoadError(error.message),
+    );
+    return () => {
+      active = false;
+    };
+  }, [key, navigate]);
 
-  if (!customer)
+  const orders = useMemo(() => (customer ? db.orders.filter((order) => customerOf(order).key === String(customer.id)) : []), [db.orders, customer]);
+
+  if (!customer || !draft)
     return (
       <>
-        <PageHeader title="Customer not found" crumbs={[{ label: 'Customers', to: '/customers' }]} />
+        <PageHeader title={loadError ? 'Customer not found' : 'Customer'} crumbs={[{ label: 'Customers', to: '/customers' }]} />
         <Card>
           <EmptyState
             icon={UsersThreeIcon}
-            title="No orders from this customer"
+            title={loadError ? 'This customer doesn’t exist' : 'Loading customer…'}
             action={
-              <ButtonLink to="/customers" variant="primary">
-                Back to Customers
-              </ButtonLink>
+              loadError && (
+                <ButtonLink to="/customers" variant="primary">
+                  Back to Customers
+                </ButtonLink>
+              )
             }
           >
-            The link may be incomplete, or their orders were removed.
+            {loadError}
           </EmptyState>
         </Card>
       </>
@@ -47,9 +78,29 @@ export default function CustomerDetailPage() {
   const products = topProducts(counted).slice(0, 6);
   const topQty = Math.max(1, ...products.map((product) => product.qty));
   const places = [...new Set(orders.map((order) => order.notes).filter((note): note is string => Boolean(note)))].slice(0, 4);
-  const phones = [...new Set(orders.map((order) => order.phone).filter((phone): phone is string => Boolean(phone)))];
+  const sites = [...new Set(orders.map((order) => order.customer).filter(Boolean))].slice(0, 6);
+  const phone = customer.phone || orders.find((order) => order.phone)?.phone || '';
   const statusMix = STATUS_ORDER.map((status) => ({ status, count: orders.filter((order) => order.status === status).length })).filter((row) => row.count);
-  const averageGapDays = orders.length > 1 ? (new Date(customer.lastOrder).getTime() - new Date(customer.firstOrder).getTime()) / (orders.length - 1) / 86_400_000 : null;
+  const averageGapDays =
+    customer.firstOrder && customer.lastOrder && customer.orders > 1 ? (new Date(customer.lastOrder).getTime() - new Date(customer.firstOrder).getTime()) / (customer.orders - 1) / 86_400_000 : null;
+  const paid = customer.orders - orders.filter((order) => order.status === 'cancelled').length;
+  const dirty = JSON.stringify(draft) !== JSON.stringify(draftOf(customer));
+
+  const save = async () => {
+    setSaving(true);
+    setFailure(null);
+    try {
+      const tags = draft.tags.split(',').map((tag) => tag.trim()).filter(Boolean);
+      const saved = await api<CustomerRecord>(`/customers/${customer.id}`, 'PATCH', { name: draft.name, tags, note: draft.note });
+      setCustomer(saved);
+      setDraft(draftOf(saved));
+      toast({ message: `${saved.name} saved.` });
+    } catch (error) {
+      setFailure(error as ApiError);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const columns: Column<Order>[] = [
     {
@@ -61,7 +112,7 @@ export default function CustomerDetailPage() {
           <Link to={`/orders/${order.id}`} className="cell-title num">
             {order.number}
           </Link>
-          <div className="cell-sub">{formatRelativeDay(order.createdAt)}</div>
+          <div className="cell-sub">{order.customer}</div>
         </>
       ),
     },
@@ -87,14 +138,14 @@ export default function CustomerDetailPage() {
       <PageHeader
         title={customer.name}
         crumbs={[{ label: 'Customers', to: '/customers' }]}
-        description={`Customer since ${formatDate(customer.firstOrder)} · last ordered ${relativePhrase(formatRelativeDay(customer.lastOrder))}`}
+        description={`Customer since ${formatDate(customer.createdAt)} · ${customer.lastOrder ? `last ordered ${relativePhrase(formatRelativeDay(customer.lastOrder))}` : 'no orders yet'}`}
         actions={
-          customer.phone && (
+          phone && (
             <>
-              <a className="btn btn--secondary" href={`tel:${customer.phone.replace(/\s/g, '')}`}>
+              <a className="btn btn--secondary" href={`tel:${phone.replace(/\s/g, '')}`}>
                 <PhoneIcon size={17} weight="bold" aria-hidden /> Call
               </a>
-              <a className="btn btn--secondary" href={whatsappLink(customer.phone)} target="_blank" rel="noreferrer">
+              <a className="btn btn--secondary" href={whatsappLink(phone)} target="_blank" rel="noreferrer">
                 <ChatCircleTextIcon size={17} weight="bold" aria-hidden /> WhatsApp
               </a>
             </>
@@ -106,37 +157,95 @@ export default function CustomerDetailPage() {
         <div className="stats">
           <Stat label="Ordered (MRP)" icon={CurrencyInrIcon} value={formatINRCompact(customer.spent)} title={formatINR(customer.spent)} foot="Cancelled orders left out" />
           <Stat label="Orders" icon={ReceiptIcon} value={formatNumber(customer.orders)} foot={`${plural(counted.reduce((sum, order) => sum + itemCount(order), 0), 'item')} in all`} />
-          <Stat label="Average order" icon={ShoppingCartIcon} value={formatINRCompact(counted.length ? customer.spent / counted.length : 0)} foot={averageGapDays === null ? 'One order so far' : `Orders every ${Math.max(1, Math.round(averageGapDays))} days on average`} />
+          <Stat
+            label="Average order"
+            icon={ShoppingCartIcon}
+            value={formatINRCompact(paid > 0 ? customer.spent / paid : 0)}
+            foot={averageGapDays === null ? (customer.orders ? 'One order so far' : 'No orders yet') : `Orders every ${plural(Math.max(1, Math.round(averageGapDays)), 'day')} on average`}
+          />
           <Stat label="Open orders" icon={ClockIcon} value={formatNumber(customer.open)} foot={customer.open ? 'Not delivered yet' : 'Nothing waiting'} />
         </div>
 
         <div className="editor">
-          <Card className="table-card" aria-labelledby="orders-title">
-            <CardHeader id="orders-title" title="Orders" description={plural(orders.length, 'order')} />
-            <DataTable
-              caption={`Orders from ${customer.name}`}
-              rows={orders}
-              columns={columns}
-              getRowId={(order) => order.id}
-              onRowClick={(order) => navigate(`/orders/${order.id}`)}
-              initialSort={{ key: 'date', direction: 'desc' }}
-              pageSize={10}
-              empty={null}
-            />
-          </Card>
+          <div className="stack">
+            <Card className="table-card" aria-labelledby="orders-title">
+              <CardHeader id="orders-title" title="Orders" description={plural(orders.length, 'order')} />
+              {orders.length ? (
+                <DataTable
+                  caption={`Orders from ${customer.name}`}
+                  rows={orders}
+                  columns={columns}
+                  getRowId={(order) => order.id}
+                  onRowClick={(order) => navigate(`/orders/${order.id}`)}
+                  initialSort={{ key: 'date', direction: 'desc' }}
+                  pageSize={10}
+                  empty={null}
+                />
+              ) : (
+                <p className="card__body muted">No orders yet. They appear here as soon as their app sends one.</p>
+              )}
+            </Card>
+
+            <Card aria-labelledby="notes-title">
+              <CardHeader id="notes-title" title="Notes and tags" description="Only people using this admin see these." />
+              <div className="card__body stack">
+                <TextField label="Name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} error={failure?.field === 'name' ? failure.message : null} required />
+                <TextField
+                  label="Tags"
+                  value={draft.tags}
+                  onChange={(event) => setDraft({ ...draft, tags: event.target.value })}
+                  hint="Separate with commas, for example dealer, contractor, pays late."
+                  error={failure?.field?.startsWith('tags') ? failure.message : null}
+                />
+                <TextAreaField label="Note" value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} rows={4} error={failure?.field === 'note' ? failure.message : null} />
+                {failure && !failure.field && (
+                  <p className="notice notice--warning" role="alert">
+                    {failure.message}
+                  </p>
+                )}
+                <div className="row" style={{ justifyContent: 'flex-end' }}>
+                  {dirty && <Button onClick={() => setDraft(draftOf(customer))}>Discard</Button>}
+                  <Button variant="primary" disabled={!dirty} loading={saving} onClick={save}>
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
 
           <div className="stack editor__aside">
             <Card aria-labelledby="contact-title">
-              <CardHeader id="contact-title" title="Contact" />
+              <CardHeader id="contact-title" title="Contact" description="From the profile their app sent." />
               <div className="card__body stack">
                 <div className="row" style={{ gap: 'var(--space-3)' }}>
                   <span className="avatar avatar--lg" aria-hidden>
                     {initials(customer.name)}
                   </span>
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontWeight: 600 }}>{customer.name}</span>
-                    <span className="cell-sub">{phones.length ? phones.join(', ') : 'No phone number given'}</span>
+                    <span style={{ display: 'block', fontWeight: 600 }}>{customer.business || customer.name}</span>
+                    <span className="cell-sub">{phone || 'No phone number given'}</span>
                   </span>
+                </div>
+                {customer.tags.length > 0 && (
+                  <div className="row-wrap" style={{ gap: 4 }}>
+                    {customer.tags.map((tag) => (
+                      <Badge key={tag} tone="neutral">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                <dl className="kv kv--compact">
+                  <dt>Email</dt>
+                  <dd>{customer.email || '—'}</dd>
+                  <dt>City</dt>
+                  <dd>{customer.city || '—'}</dd>
+                </dl>
+                <div>
+                  <p className="field__label" style={{ marginBottom: 6 }}>
+                    Sites on their orders
+                  </p>
+                  {sites.length ? <p>{sites.join(', ')}</p> : <p className="muted">None yet.</p>}
                 </div>
                 <div>
                   <p className="field__label" style={{ marginBottom: 6 }}>
@@ -158,22 +267,45 @@ export default function CustomerDetailPage() {
               </div>
             </Card>
 
-            <Card aria-labelledby="mix-title">
-              <CardHeader id="mix-title" title="Order status" />
+            <Card aria-labelledby="phones-title">
+              <CardHeader id="phones-title" title="Their app" description={plural(customer.appUsers.length, 'phone')} />
               <ul className="list">
-                {statusMix.map(({ status, count }) => (
-                  <li key={status} className="list-row">
-                    <span className="list-row__main">
-                      <OrderStatusBadge status={status} />
-                    </span>
-                    <span className="num" style={{ fontWeight: 600 }}>
-                      {formatNumber(count)}
-                    </span>
-                    <span className="visually-hidden">{ORDER_STATUS[status].description}</span>
+                {customer.appUsers.map((user) => (
+                  <li key={user.id}>
+                    <Link to={`/app-users?q=${encodeURIComponent(user.label)}`} className="list-row list-row--link">
+                      <DeviceMobileIcon size={18} color="var(--text-2)" aria-hidden />
+                      <span className="list-row__main">
+                        <span className="list-row__title" style={{ display: 'block' }}>
+                          {user.label}
+                        </span>
+                        <span className="list-row__meta">
+                          {user.blocked ? 'Blocked' : user.lastSeenAt ? `Last seen ${formatRelativeTime(user.lastSeenAt).toLowerCase()}` : 'Not connected yet'}
+                        </span>
+                      </span>
+                    </Link>
                   </li>
                 ))}
               </ul>
             </Card>
+
+            {statusMix.length > 0 && (
+              <Card aria-labelledby="mix-title">
+                <CardHeader id="mix-title" title="Order status" />
+                <ul className="list">
+                  {statusMix.map(({ status, count }) => (
+                    <li key={status} className="list-row">
+                      <span className="list-row__main">
+                        <OrderStatusBadge status={status} />
+                      </span>
+                      <span className="num" style={{ fontWeight: 600 }}>
+                        {formatNumber(count)}
+                      </span>
+                      <span className="visually-hidden">{ORDER_STATUS[status].description}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
 
             <Card aria-labelledby="buys-title">
               <CardHeader id="buys-title" title="What they order" description="By units, cancelled orders left out." />

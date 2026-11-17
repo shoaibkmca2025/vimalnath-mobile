@@ -86,7 +86,11 @@ export function appUserAdminRoutes(sql: Sql) {
   // The token is shown once: only its hash is kept.
   admin.post('/', jsonBody(z.object({ label: Label })), async (c) => {
     const token = newToken();
-    const [row] = await sql`insert into app_devices (label, token_hash) values (${c.req.valid('json').label}, ${sha256(token)}) returning id`;
+    const { label } = c.req.valid('json');
+    // Each new app user starts as its own customer; staff merge them when one customer has several phones.
+    const [row] = await sql`
+      with customer as (insert into customers (name) values (${label}) returning id)
+      insert into app_devices (label, token_hash, customer_id) select ${label}, ${sha256(token)}, id from customer returning id`;
     return c.json({ appUser: await one(row!.id), token }, 201);
   });
 

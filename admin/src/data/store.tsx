@@ -4,12 +4,13 @@ import { BootScreen } from '@/components/BootScreen';
 import { useToast } from '@/components/useToast';
 import { api } from '@/lib/api';
 import { readSession } from './session';
-import { isServerKey, SERVER_KEYS, serverRequests, type Catalogue, type ServerKey } from './server';
+import { isServerKey, SERVER_KEYS, serverRequests, type Calculators, type Catalogue, type ServerKey } from './server';
 import type { Activity, Database, Order, Seed } from './types';
 import { DataContext, type DataContextValue, type LogEntry } from './useData';
 
 /**
- * The admin's data. Orders and the catalogue (products, categories, price lists) are read from and saved to the server.
+ * The admin's data. Orders, the catalogue (products, categories, price lists) and the calculator data (cutlist, bar sections)
+ * are read from and saved to the server.
  * Everything else still comes from public/data/seed.json (built from the mobile app's data by scripts/seed.mjs),
  * with edits kept in this browser's localStorage until its own module reaches the server.
  * Pages only use `db`, `update` and `reset`.
@@ -72,12 +73,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     });
     // Catalogue editors don't work with orders, and the server refuses them.
     const orders = readSession()?.role === 'catalogue' ? Promise.resolve<Order[]>([]) : api<Order[]>('/orders');
-    Promise.all([seed, api<Catalogue>('/catalogue'), orders])
-      .then(([{ sections, videoSections, cutlist, banners, settings }, catalogue, orders]) => {
+    Promise.all([seed, api<Catalogue>('/catalogue'), orders, api<Calculators>('/calculators')])
+      .then(([{ videoSections, banners, settings }, catalogue, orders, { cutlist, sections }]) => {
         if (!active) return;
         if (!catalogue.products.length) throw new Error('The catalogue isn’t in the database yet. In the server folder, run npm run import-data, then try again.');
         const { products, categories, catalogues } = catalogue;
-        server.current = { products, categories, catalogues, orders };
+        server.current = { products, categories, catalogues, orders, cutlist, sections };
         const base: Database = { ...catalogue, sections, videoSections, cutlist, banners, settings, orders, activity: [] };
         setState({ status: 'ready', base, changes: readChanges() });
       })

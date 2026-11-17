@@ -1,4 +1,4 @@
-import { customerKey, itemCount } from './orders';
+import { customerOf, itemCount } from './orders';
 import type { Category, Order, Product } from './types';
 
 export const DAY = 86_400_000;
@@ -97,8 +97,8 @@ export function topProducts(orders: Order[]): Ranked[] {
 export function topCustomers(orders: Order[]): Ranked[] {
   const rows = new Map<string, Ranked>();
   for (const order of orders) {
-    const id = customerKey(order.customer);
-    const row = rows.get(id) ?? { id, label: order.customer, value: 0, qty: 0, unpriced: 0, orders: 0 };
+    const { key: id, name } = customerOf(order);
+    const row = rows.get(id) ?? { id, label: name, value: 0, qty: 0, unpriced: 0, orders: 0 };
     row.value += order.total;
     row.qty += itemCount(order);
     row.orders += 1;

@@ -1,9 +1,10 @@
 import type { Database, Order, OrderStatus } from './types';
 
 /** The parts of the admin's data that are saved on the server. Everything else is still preview data in this browser. */
-export const SERVER_KEYS = ['products', 'categories', 'catalogues', 'orders'] as const;
+export const SERVER_KEYS = ['products', 'categories', 'catalogues', 'orders', 'cutlist', 'sections'] as const;
 export type ServerKey = (typeof SERVER_KEYS)[number];
 export type Catalogue = Pick<Database, 'products' | 'categories' | 'catalogues' | 'catalogPages'>;
+export type Calculators = Pick<Database, 'cutlist' | 'sections'>;
 
 export const isServerKey = (key: keyof Database): key is ServerKey => (SERVER_KEYS as readonly string[]).includes(key);
 
@@ -14,6 +15,8 @@ export function serverRequests<K extends ServerKey>(key: K, before: Database[K],
   if (before === after) return [];
   if (key === 'categories') return [{ path: '/categories', method: 'PUT', body: { categories: after } }];
   if (key === 'catalogues') return [{ path: '/price-lists', method: 'PUT', body: { priceLists: after } }];
+  if (key === 'cutlist') return [{ path: '/cutlist', method: 'PUT', body: { cutlist: after } }];
+  if (key === 'sections') return [{ path: '/bar-sections', method: 'PUT', body: { sections: after } }];
   if (key === 'orders') return orderRequests(before as Order[], after as Order[]);
 
   const old = before as Database['products'];

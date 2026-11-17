@@ -29,7 +29,11 @@ export const seed: Seed = {
   sections: [{ code: 'S-101', name: 'Sliding frame', system: 'Sliding', bar: 6000, dimensions: '45 × 25 mm', description: 'Frame.' }],
   videoSections: [{ title: 'Sliding', videos: [{ title: 'Telescopic', detail: '1+0 to 4+1', url: 'https://youtube.com/x' }] }],
   cutlist: {
-    systems: [{ id: 'telescopic', name: 'Telescopic', subtitle: 'Travel', photo: null }],
+    systems: [
+      { id: 'telescopic', name: 'Telescopic', subtitle: 'Travel', photo: null },
+      { id: 'synchronized', name: 'Synchronized', subtitle: 'Both ways', photo: '/media/s.jpg' },
+      { id: 'folding', name: 'Folding', subtitle: 'Stacks', photo: null },
+    ],
     configurations: { telescopic: [{ name: '1+0', image: '/media/c.jpg' }], synchronized: [], folding: [] },
   },
   banners: [{ id: 'hero-1', image: '/media/h.webp', kicker: 'New', headline: 'Move', body: 'Text', active: true }],

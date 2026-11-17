@@ -123,9 +123,10 @@ export function orderAdminRoutes(sql: Sql) {
             from order_lines l where l.order_id = o.id),
           'history', (select json_agg(json_build_object('status', e.status, 'at', e.at, 'by', e.by) order by e.at) from order_events e where e.order_id = o.id),
           'internalNote', case when o.internal_note is not null then json_build_object('text', o.internal_note, 'at', o.internal_note_at, 'by', o.internal_note_by) end,
-          'appUser', json_build_object('id', d.id, 'label', d.label)
+          'appUser', json_build_object('id', d.id, 'label', d.label),
+          'customerRecord', json_build_object('id', cu.id, 'name', cu.name)
         )) as "order"
-        from orders o join app_devices d on d.id = o.device_id
+        from orders o join app_devices d on d.id = o.device_id join customers cu on cu.id = d.customer_id
         where ${where}
         order by o.placed_at desc, o.id desc`
     ).map((row) => row.order);
