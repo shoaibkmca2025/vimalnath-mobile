@@ -2,6 +2,8 @@
 FROM node:24-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
+# npm ci's postinstall writes the offline PDF viewer's source from pdfjs-dist.
+COPY scripts/build-pdfjs-source.mjs scripts/
 RUN npm ci
 COPY . .
 RUN CI=1 npx expo export -p web --output-dir dist
