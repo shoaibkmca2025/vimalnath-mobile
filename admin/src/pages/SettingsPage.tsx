@@ -1,11 +1,10 @@
-import { ArrowCounterClockwiseIcon, DownloadSimpleIcon, InfoIcon } from '@phosphor-icons/react';
-import { useEffect, useState, type FormEvent } from 'react';
-import { useLocation } from 'react-router';
+import { DownloadSimpleIcon, InfoIcon } from '@phosphor-icons/react';
+import { useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/Button';
 import { Card, CardHeader } from '@/components/Card';
-import { ConfirmDialog } from '@/components/Dialog';
 import { PasswordField, Segmented, TextAreaField, TextField } from '@/components/Field';
+import { ImagePicker } from '@/components/ImagePicker';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/useToast';
 import { useData } from '@/data/useData';
@@ -14,6 +13,14 @@ import { api, type ApiError } from '@/lib/api';
 import { useTheme, type ThemePreference } from '@/lib/theme';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
+
+/** The same rules as the server: empty, or a version no newer than the latest ("1.9.0" is older than "1.10.0"). */
+function minVersionError(min: string, latest: string) {
+  if (!min) return null;
+  if (!VERSION.test(min)) return 'Enter the version like 1.2.0, or leave it empty.';
+  return min.localeCompare(latest, 'en', { numeric: true }) > 0 ? 'The minimum version can’t be newer than the latest version.' : null;
+}
 
 function websiteError(url: string) {
   if (!url.trim()) return null;
@@ -25,13 +32,11 @@ function websiteError(url: string) {
 }
 
 export default function SettingsPage() {
-  const { db, update, reset, hasChanges } = useData();
+  const { db, update } = useData();
   const toast = useToast();
-  const location = useLocation();
   const [theme, setTheme] = useTheme();
   const [draft, setDraft] = useState<Settings>(db.settings);
   const [touched, setTouched] = useState<Set<string>>(new Set());
-  const [confirmReset, setConfirmReset] = useState(false);
 
   const [source, setSource] = useState(db.settings);
   if (source !== db.settings) {
@@ -39,34 +44,29 @@ export default function SettingsPage() {
     setDraft(db.settings);
   }
 
-  // The "Preview data" pill in the top bar links straight to that section.
-  useEffect(() => {
-    if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' });
-  }, [location.hash]);
-
   const errors: Record<string, string | null> = {
     companyName: draft.companyName.trim() ? null : 'Enter the company name.',
     email: draft.email.trim() && !EMAIL.test(draft.email.trim()) ? 'Enter an email address like sales@company.com.' : null,
     phone: draft.phone.trim() && draft.phone.replace(/\D/g, '').length < 10 ? 'Enter a 10-digit number, with the area code for landlines.' : null,
     website: websiteError(draft.website),
+    appVersion: VERSION.test(draft.appVersion.trim()) ? null : 'Enter the version like 1.2.0.',
+    minAppVersion: minVersionError(draft.minAppVersion.trim(), draft.appVersion.trim()),
   };
   const shown = (key: string) => (touched.has(key) ? errors[key] : null);
   const touch = (key: string) => () => setTouched((current) => new Set(current).add(key));
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const dirty = JSON.stringify(draft) !== JSON.stringify(db.settings);
 
-  const save = () => {
+  const save = async () => {
     setTouched(new Set(Object.keys(errors)));
     const firstError = Object.entries(errors).find(([, message]) => message);
     if (firstError) {
       document.getElementById(`setting-${firstError[0]}`)?.focus();
       return;
     }
-    update('settings', () => ({ ...draft, companyName: draft.companyName.trim(), email: draft.email.trim(), website: draft.website.trim(), phone: draft.phone.trim() }), {
-      area: 'settings',
-      summary: 'Updated the company details and app defaults',
-      to: '/settings',
-    });
+    const trimmed = Object.fromEntries(Object.entries(draft).map(([key, value]) => [key, value.trim()])) as Settings;
+    const ok = await update('settings', () => trimmed, { area: 'settings', summary: 'Updated the company details and app settings', to: '/settings' });
+    if (!ok) return;
     setTouched(new Set());
     toast({ message: 'Settings saved.' });
   };
@@ -94,6 +94,9 @@ export default function SettingsPage() {
             <TextField id="setting-email" label="Email" type="email" autoComplete="email" value={draft.email} onChange={(event) => set('email', event.target.value)} onBlur={touch('email')} error={shown('email')} placeholder="sales@company.com" />
             <TextField id="setting-website" className="span-2" label="Website" type="url" inputMode="url" value={draft.website} onChange={(event) => set('website', event.target.value)} onBlur={touch('website')} error={shown('website')} placeholder="https://" />
             <TextAreaField className="span-2" label="Address" value={draft.address} onChange={(event) => set('address', event.target.value)} rows={3} autoComplete="street-address" />
+            <div style={{ maxWidth: 220 }}>
+              <ImagePicker label="Logo" allowRemove={false} value={draft.logo} onChange={(logo) => logo && set('logo', logo)} hint="Square. Shown on the app’s About screen and on printed orders." />
+            </div>
           </div>
         </Card>
 
@@ -118,13 +121,21 @@ export default function SettingsPage() {
         </Card>
 
         <Card aria-labelledby="about-title">
-          <CardHeader id="about-title" title="About the app" />
-          <dl className="card__body kv">
-            <dt>App version</dt>
-            <dd className="num">{db.settings.appVersion}</dd>
-            <dt>Developed by</dt>
-            <dd>{db.settings.developer}</dd>
-          </dl>
+          <CardHeader id="about-title" title="App versions" description={`The app is developed by ${db.settings.developer}.`} />
+          <div className="card__body form-grid">
+            <TextField id="setting-appVersion" label="Latest version" required inputMode="decimal" value={draft.appVersion} onChange={(event) => set('appVersion', event.target.value)} onBlur={touch('appVersion')} error={shown('appVersion')} hint="The newest version in the Play Store and App Store." />
+            <TextField
+              id="setting-minAppVersion"
+              label="Minimum version"
+              inputMode="decimal"
+              placeholder="Any version"
+              value={draft.minAppVersion}
+              onChange={(event) => set('minAppVersion', event.target.value)}
+              onBlur={touch('minAppVersion')}
+              error={shown('minAppVersion')}
+              hint="Phones on an older version are asked to update before they order."
+            />
+          </div>
         </Card>
 
         <ChangePassword />
@@ -145,22 +156,19 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        <Card aria-labelledby="preview-data-title" id="preview-data" style={{ scrollMarginTop: 'calc(var(--topbar-height) + 16px)' }}>
-          <CardHeader id="preview-data-title" title="Preview data" />
+        <Card aria-labelledby="data-title">
+          <CardHeader id="data-title" title="Your data" />
           <div className="card__body stack">
             <p className="notice">
               <InfoIcon size={16} weight="bold" aria-hidden />
               <span>
-                Orders, customers, products, prices, categories, price lists, cutlist systems and bar sections are saved on the server, along with staff and app
-                users. Edits to banners, videos and settings are saved in this browser only. Phones send orders and see their status; they get catalogue changes once app sync is built.
+                Everything you edit here is saved on the server. The Activity page is the exception: it lists changes made in this browser only, until the activity log
+                moves to the server. Phones send orders and see their status; they get catalogue, content and settings changes once app sync is built.
               </span>
             </p>
-            <div className="row-wrap">
+            <div>
               <Button icon={DownloadSimpleIcon} onClick={download}>
                 Download Data
-              </Button>
-              <Button variant="danger-plain" icon={ArrowCounterClockwiseIcon} disabled={!hasChanges} onClick={() => setConfirmReset(true)}>
-                Reset to App Data
               </Button>
             </div>
           </div>
@@ -184,19 +192,6 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <ConfirmDialog
-        open={confirmReset}
-        title="Reset to the app’s data?"
-        body="Every edit saved only in this browser — banners, videos and settings — is discarded. Orders and the catalogue are on the server and stay as they are. Download a copy first if you might need it."
-        confirmLabel="Reset"
-        destructive
-        onCancel={() => setConfirmReset(false)}
-        onConfirm={() => {
-          setConfirmReset(false);
-          reset();
-          toast({ message: 'Preview data reset to the app’s data.', tone: 'info' });
-        }}
-      />
     </>
   );
 }

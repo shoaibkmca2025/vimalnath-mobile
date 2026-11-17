@@ -38,6 +38,7 @@ export const router = createBrowserRouter([
           { path: 'sections', lazy: page(() => import('@/pages/SectionsPage')) },
           { path: 'banners', lazy: page(() => import('@/pages/BannersPage')) },
           { path: 'videos', lazy: page(() => import('@/pages/VideosPage')) },
+          { path: 'more-apps', lazy: page(() => import('@/pages/MoreAppsPage')) },
           { path: 'activity', lazy: page(() => import('@/pages/ActivityPage')) },
           { path: 'staff', lazy: page(() => import('@/pages/StaffPage')) },
           { path: 'settings', lazy: page(() => import('@/pages/SettingsPage')) },

@@ -4,16 +4,14 @@ import { BootScreen } from '@/components/BootScreen';
 import { useToast } from '@/components/useToast';
 import { api } from '@/lib/api';
 import { readSession } from './session';
-import { isServerKey, SERVER_KEYS, serverRequests, type Calculators, type Catalogue, type ServerKey } from './server';
-import type { Activity, Database, Order, Seed } from './types';
+import { serverRequests, type Calculators, type Catalogue, type Content, type ServerKey } from './server';
+import type { Activity, Database, Order } from './types';
 import { DataContext, type DataContextValue, type LogEntry } from './useData';
 
 /**
- * The admin's data. Orders, the catalogue (products, categories, price lists) and the calculator data (cutlist, bar sections)
- * are read from and saved to the server.
- * Everything else still comes from public/data/seed.json (built from the mobile app's data by scripts/seed.mjs),
- * with edits kept in this browser's localStorage until its own module reaches the server.
- * Pages only use `db`, `update` and `reset`.
+ * The admin's data, read from and saved to the server.
+ * Only the activity log is kept in this browser's localStorage, until Module 12 moves it to the server.
+ * Pages only use `db` and `update`.
  */
 
 // v2: orders follow the app's fields (phone and notes, no city) and every change is logged.
@@ -21,14 +19,13 @@ const STORAGE_KEY = 'vimalnath-admin:changes:v2';
 /** Older entries drop off so the log can't outgrow the browser's storage. */
 const ACTIVITY_LIMIT = 400;
 
-type Changes = Partial<Database>;
+type Changes = Pick<Partial<Database>, 'activity'>;
 
 function readChanges(): Changes {
   try {
-    const changes = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Changes;
-    // Catalogue edits made before it had a server are dropped: the server's copy is the real one now.
-    for (const key of SERVER_KEYS) delete changes[key];
-    return changes;
+    // Edits saved here before their module reached the server are dropped: the server's copy is the real one.
+    const { activity } = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Changes;
+    return activity ? { activity } : {};
   } catch {
     return {};
   }
@@ -67,19 +64,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    const seed = fetch('/data/seed.json').then((response) => {
-      if (!response.ok) throw new Error(`The app’s data file couldn’t be loaded (HTTP ${response.status}).`);
-      return response.json() as Promise<Seed>;
-    });
     // Catalogue editors don't work with orders, and the server refuses them.
     const orders = readSession()?.role === 'catalogue' ? Promise.resolve<Order[]>([]) : api<Order[]>('/orders');
-    Promise.all([seed, api<Catalogue>('/catalogue'), orders, api<Calculators>('/calculators')])
-      .then(([{ videoSections, banners, settings }, catalogue, orders, { cutlist, sections }]) => {
+    Promise.all([api<Catalogue>('/catalogue'), orders, api<Calculators>('/calculators'), api<Content>('/content')])
+      .then(([catalogue, orders, { cutlist, sections }, content]) => {
         if (!active) return;
         if (!catalogue.products.length) throw new Error('The catalogue isn’t in the database yet. In the server folder, run npm run import-data, then try again.');
         const { products, categories, catalogues } = catalogue;
-        server.current = { products, categories, catalogues, orders, cutlist, sections };
-        const base: Database = { ...catalogue, sections, videoSections, cutlist, banners, settings, orders, activity: [] };
+        server.current = { products, categories, catalogues, orders, cutlist, sections, ...content };
+        const base: Database = { ...catalogue, sections, cutlist, ...content, orders, activity: [] };
         setState({ status: 'ready', base, changes: readChanges() });
       })
       .catch((error: unknown) => {
@@ -92,14 +85,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const update = useCallback<DataContextValue['update']>(
     (key, change, log) => {
-      if (!isServerKey(key)) {
-        setState((previous) => {
-          if (previous.status !== 'ready') return previous;
-          const current = (previous.changes[key] ?? previous.base[key]) as Database[typeof key];
-          return { ...previous, changes: withLog({ ...previous.changes, [key]: change(current) }, previous.base, log) };
-        });
-        return Promise.resolve(true);
-      }
       // One save at a time, shown only once the server has it, so a refused edit leaves the screen and any form as they were.
       const saving = queue.current.then(async () => {
         const saved = server.current!;
@@ -147,14 +132,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     };
   }, [ready]);
 
-  const reset = useCallback(() => {
-    setState((previous) => (previous.status === 'ready' ? { ...previous, changes: {} } : previous));
-  }, []);
-
-  const value = useMemo<DataContextValue | null>(() => {
-    if (state.status !== 'ready') return null;
-    return { db: { ...state.base, ...state.changes }, update, reset, hasChanges: Object.keys(state.changes).length > 0 };
-  }, [state, update, reset]);
+  const value = useMemo<DataContextValue | null>(() => (state.status === 'ready' ? { db: { ...state.base, ...state.changes }, update } : null), [state, update]);
 
   if (state.status === 'loading') return <BootScreen />;
   if (state.status === 'error')

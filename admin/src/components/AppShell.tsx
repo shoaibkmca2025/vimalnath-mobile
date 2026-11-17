@@ -6,8 +6,8 @@ import {
   CurrencyInrIcon,
   DeviceMobileIcon,
   GearSixIcon,
+  GridFourIcon,
   ImagesIcon,
-  InfoIcon,
   ListIcon,
   MagnifyingGlassIcon,
   PackageIcon,
@@ -84,6 +84,7 @@ export function AppShell() {
       items: [
         { to: '/banners', label: 'Home Banners', icon: ImagesIcon },
         { to: '/videos', label: 'Installation Videos', icon: PlayCircleIcon },
+        { to: '/more-apps', label: 'More Apps', icon: GridFourIcon },
       ],
     },
     {
@@ -227,11 +228,6 @@ export function AppShell() {
               <kbd className="kbd search-trigger__kbd">{isMac ? '⌘K' : 'Ctrl K'}</kbd>
             </button>
             {navigation.state === 'loading' && <span className="spinner" style={{ color: 'var(--tint)' }} role="status" aria-label="Loading page" />}
-            <Link to="/settings#preview-data" className="preview-pill" title="Orders and the catalogue are saved on the server. Other edits are saved in this browser only, until their modules reach the server.">
-              <InfoIcon size={14} weight="bold" aria-hidden />
-              <span className="preview-pill__text">Preview data</span>
-              <span className="visually-hidden">: some edits are saved in this browser only</span>
-            </Link>
           </header>
 
           <main id="main" ref={mainRef} className="main" tabIndex={-1}>

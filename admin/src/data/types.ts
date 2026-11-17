@@ -34,6 +34,9 @@ export type CutlistSystemId = 'telescopic' | 'synchronized' | 'folding';
 export type CutlistSystem = { id: CutlistSystemId; name: string; subtitle: string; photo: string | null };
 export type Configuration = { name: string; image: string };
 
+/** Another 4AM Global Media app, listed under More Apps. A link is empty when the app isn’t in that store. */
+export type MoreApp = { name: string; description: string; icon: string | null; playStore: string; appStore: string };
+
 export type Banner = { id: string; image: string; kicker: string; headline: string; body: string; active: boolean };
 
 export type Settings = {
@@ -46,7 +49,10 @@ export type Settings = {
   defaultUnit: 'mm' | 'in';
   priceListEdition: string;
   developer: string;
+  /** The newest version in the stores. */
   appVersion: string;
+  /** Older apps ask people to update before ordering; empty means any version may order. */
+  minAppVersion: string;
   logo: string;
 };
 
@@ -116,4 +122,4 @@ export type Seed = {
 };
 
 /** Everything the admin shows and edits. */
-export type Database = Omit<Seed, 'generatedAt'> & { orders: Order[]; activity: Activity[] };
+export type Database = Omit<Seed, 'generatedAt'> & { orders: Order[]; moreApps: MoreApp[]; activity: Activity[] };

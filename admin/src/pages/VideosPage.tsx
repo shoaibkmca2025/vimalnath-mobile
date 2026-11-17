@@ -63,11 +63,11 @@ export default function VideosPage() {
     ? JSON.stringify({ title: draft.title, detail: draft.detail, url: draft.url, section: draft.section }) !== JSON.stringify({ ...originalVideo, section: String(editing.section) })
     : Boolean(draft.title || draft.url || draft.detail);
 
-  const save = () => {
+  const save = async () => {
     setTouched(new Set(Object.keys(errors)));
     if (Object.values(errors).some(Boolean)) return;
     const video: Video = { title: draft.title.trim(), detail: draft.detail.trim(), url: draft.url.trim() };
-    update('videoSections', (current) => {
+    const ok = await update('videoSections', (current) => {
       let next: VideoSection[] = current.map((section) => ({ ...section, videos: [...section.videos] }));
       if (editing) next[editing.section]!.videos.splice(editing.video, 1);
       if (draft.section === NEW_SECTION) next.push({ title: draft.newSection.trim(), videos: [video] });
@@ -76,6 +76,7 @@ export default function VideosPage() {
       next = next.filter((section) => section.videos.length);
       return next;
     }, { area: 'content', summary: editing ? `Edited the video “${video.title}”` : `Added the video “${video.title}”`, to: '/videos' });
+    if (!ok) return;
     drawer.close();
     toast({ message: editing ? `${video.title} saved.` : `${video.title} added to Installation Videos.` });
   };
@@ -93,15 +94,16 @@ export default function VideosPage() {
     );
   };
 
-  const remove = (position: Position) => {
+  const remove = async (position: Position) => {
     const previous = sections;
     const video = sections[position.section]!.videos[position.video]!;
-    update('videoSections', (current) =>
+    const ok = await update('videoSections', (current) =>
       current
         .map((section, index) => (index === position.section ? { ...section, videos: section.videos.filter((_, i) => i !== position.video) } : section))
         .filter((section) => section.videos.length),
       { area: 'content', summary: `Deleted the video “${video.title}”`, to: '/videos' },
     );
+    if (!ok) return;
     toast({ message: `${video.title} deleted.`, action: { label: 'Undo', onAction: () => update('videoSections', () => previous, { area: 'content', summary: `Restored the video “${video.title}”`, to: '/videos' }) } });
   };
 

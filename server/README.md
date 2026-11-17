@@ -1,6 +1,6 @@
 # Vimalnath API
 
-The backend for the mobile app and admin panel, following the plan in `docs/Vimalnath-Backend-Modules.pdf`. Built so far: Module 1 (API server, database, security, deployment), Module 2 (staff sign-in and roles), Module 3 (app users), Module 4 (catalogue: products, categories and price lists, edited in the admin), Module 5 (photo and PDF uploads), Module 6 (orders) and Module 7 (customers).
+The backend for the mobile app and admin panel, following the plan in `docs/Vimalnath-Backend-Modules.pdf`. Built so far: Module 1 (API server, database, security, deployment), Module 2 (staff sign-in and roles), Module 3 (app users), Module 4 (catalogue: products, categories and price lists, edited in the admin), Module 5 (photo and PDF uploads), Module 6 (orders), Module 7 (customers), Module 8 (calculator settings: 8.1, 8.2 and 8.5) and Module 9 (app content and settings: 9.1 to 9.6, saved and edited in the admin; phones get them with app sync, Module 11).
 
 Needs Node 24.2 or newer, which runs the TypeScript directly, so there is no build step.
 
@@ -38,6 +38,8 @@ src/
   app-users.ts The app's shop connection (/v1/app) and the admin's App Users (/v1/admin/app-users)
   catalogue.ts Products, categories, price lists and the MRP history (/v1/admin/price-history) under /v1/admin (read: all staff; change: Owner and Catalogue editor)
   customers.ts Customers (/v1/admin/customers): each app user belongs to one; notes, tags and merging
+  calculators.ts Cutlist systems, configurations and bar sections (/v1/admin/calculators, /cutlist, /bar-sections; change: Owner and Catalogue editor)
+  content.ts   Banners, installation videos, More Apps and settings (/v1/admin/content, /banners, /videos, /more-apps; /settings is Owner only)
   orders.ts    Orders from the app (numbered VSC-0001 on), and /v1/admin/orders for status changes and internal notes
   media.ts     Uploads (POST /v1/admin/media: photos up to 5 MB, PDFs up to 25 MB) and serving them at /v1/media/<id>.webp, -md.webp, -sm.webp or .pdf
   validate.ts  Checks input; a route uses jsonBody(schema)

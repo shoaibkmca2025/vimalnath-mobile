@@ -11,7 +11,7 @@ export const Text = (max: number) => z.string().trim().max(max, `Use ${max} char
 export const Required = (max: number, message: string) => Text(max).min(1, message);
 // One of the app's own photos (/media/...), or one uploaded through /v1/admin/media.
 export const Image = z.string().max(300).regex(/^(\/media\/[\w./-]+|\/v1\/media\/[a-f0-9]{24}\.webp)$/, 'Choose a JPG, PNG or WebP photo.');
-const isHttps = (url: string) => URL.canParse(url) && new URL(url).protocol === 'https:';
+export const isHttps = (url: string) => URL.canParse(url) && new URL(url).protocol === 'https:';
 
 export const distinct = <K extends string>(key: K) => (items: Record<K, string>[]) => new Set(items.map((item) => item[key])).size === items.length;
 

@@ -6,6 +6,7 @@ import { calculatorRoutes } from './calculators.ts';
 import { catalogueRoutes } from './catalogue.ts';
 import { loadConfig } from './config.ts';
 import { customerRoutes } from './customers.ts';
+import { contentRoutes } from './content.ts';
 import { connect } from './db.ts';
 import { mediaAdminRoutes, mediaRoutes } from './media.ts';
 import { orderAdminRoutes } from './orders.ts';
@@ -24,6 +25,7 @@ const admin = adminRoutes(sql, { adminOrigin: config.ADMIN_ORIGIN, production, t
 admin.route('/app-users', appUserAdminRoutes(sql));
 admin.route('/', catalogueRoutes(sql));
 admin.route('/', calculatorRoutes(sql));
+admin.route('/', contentRoutes(sql));
 admin.route('/media', mediaAdminRoutes(sql));
 admin.route('/orders', orderAdminRoutes(sql));
 admin.route('/customers', customerRoutes(sql));

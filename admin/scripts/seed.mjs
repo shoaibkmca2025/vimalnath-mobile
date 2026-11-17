@@ -115,6 +115,7 @@ const seed = {
     priceListEdition: 'Taiton · Feb 2026',
     developer: '4AM Global Media',
     appVersion: app.version,
+    minAppVersion: '',
     logo: media(path.join(ASSETS, 'images', 'logo-mark.png')),
   },
 };

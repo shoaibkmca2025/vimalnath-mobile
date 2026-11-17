@@ -1,12 +1,11 @@
 import type { Database, Order, OrderStatus } from './types';
 
-/** The parts of the admin's data that are saved on the server. Everything else is still preview data in this browser. */
-export const SERVER_KEYS = ['products', 'categories', 'catalogues', 'orders', 'cutlist', 'sections'] as const;
+/** The parts of the admin's data that are saved on the server: all of it except the activity log, which stays in this browser until Module 12. */
+export const SERVER_KEYS = ['products', 'categories', 'catalogues', 'orders', 'cutlist', 'sections', 'banners', 'videoSections', 'moreApps', 'settings'] as const;
 export type ServerKey = (typeof SERVER_KEYS)[number];
 export type Catalogue = Pick<Database, 'products' | 'categories' | 'catalogues' | 'catalogPages'>;
 export type Calculators = Pick<Database, 'cutlist' | 'sections'>;
-
-export const isServerKey = (key: keyof Database): key is ServerKey => (SERVER_KEYS as readonly string[]).includes(key);
+export type Content = Pick<Database, 'banners' | 'videoSections' | 'moreApps' | 'settings'>;
 
 type Request = { path: string; method: 'PUT' | 'DELETE' | 'POST'; body?: unknown };
 
@@ -17,6 +16,10 @@ export function serverRequests<K extends ServerKey>(key: K, before: Database[K],
   if (key === 'catalogues') return [{ path: '/price-lists', method: 'PUT', body: { priceLists: after } }];
   if (key === 'cutlist') return [{ path: '/cutlist', method: 'PUT', body: { cutlist: after } }];
   if (key === 'sections') return [{ path: '/bar-sections', method: 'PUT', body: { sections: after } }];
+  if (key === 'banners') return [{ path: '/banners', method: 'PUT', body: { banners: after } }];
+  if (key === 'videoSections') return [{ path: '/videos', method: 'PUT', body: { videoSections: after } }];
+  if (key === 'moreApps') return [{ path: '/more-apps', method: 'PUT', body: { moreApps: after } }];
+  if (key === 'settings') return [{ path: '/settings', method: 'PUT', body: { settings: after } }];
   if (key === 'orders') return orderRequests(before as Order[], after as Order[]);
 
   const old = before as Database['products'];

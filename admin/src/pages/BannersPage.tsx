@@ -63,15 +63,16 @@ export default function BannersPage() {
   };
   const shown = (key: string) => (touched.has(key) ? errors[key] : null);
 
-  const save = () => {
+  const save = async () => {
     setTouched(new Set(Object.keys(errors)));
     if (Object.values(errors).some(Boolean)) return;
     const saved = { ...draft, id: editing ?? `banner-${Date.now()}`, headline: draft.headline.trim(), kicker: draft.kicker.trim(), body: draft.body.trim() };
-    update('banners', (current) => (editing ? current.map((banner) => (banner.id === editing ? saved : banner)) : [...current, saved]), {
+    const ok = await update('banners', (current) => (editing ? current.map((banner) => (banner.id === editing ? saved : banner)) : [...current, saved]), {
       area: 'content',
       summary: editing ? `Edited the home banner “${saved.headline}”` : `Added the home banner “${saved.headline}”`,
       to: '/banners',
     });
+    if (!ok) return;
     drawer.close();
     toast({ message: editing ? 'Banner saved.' : 'Banner added to the slideshow.' });
   };
@@ -83,13 +84,13 @@ export default function BannersPage() {
       return next;
     }, { area: 'content', summary: `Moved the home banner “${banners[index]!.headline}” ${direction < 0 ? 'earlier' : 'later'}`, to: '/banners' });
 
-  const setActive = (banner: Banner, value: boolean) => {
-    update('banners', (current) => current.map((item) => (item.id === banner.id ? { ...item, active: value } : item)), {
+  const setActive = async (banner: Banner, value: boolean) => {
+    const ok = await update('banners', (current) => current.map((item) => (item.id === banner.id ? { ...item, active: value } : item)), {
       area: 'content',
       summary: `${value ? 'Showed' : 'Hid'} the home banner “${banner.headline}”`,
       to: '/banners',
     });
-    toast({ message: value ? 'Banner shown in the slideshow.' : 'Banner hidden from the slideshow.', tone: 'info' });
+    if (ok) toast({ message: value ? 'Banner shown in the slideshow.' : 'Banner hidden from the slideshow.', tone: 'info' });
   };
 
   return (
@@ -171,13 +172,12 @@ export default function BannersPage() {
         confirmLabel="Delete"
         destructive
         onCancel={() => setDeleting(null)}
-        onConfirm={() => {
-          if (deleting) {
-            const previous = banners;
-            update('banners', (current) => current.filter((banner) => banner.id !== deleting.id), { area: 'content', summary: `Deleted the home banner “${deleting.headline}”`, to: '/banners' });
-            toast({ message: 'Banner deleted.', action: { label: 'Undo', onAction: () => update('banners', () => previous, { area: 'content', summary: `Restored the home banner “${deleting.headline}”`, to: '/banners' }) } });
-          }
+        onConfirm={async () => {
+          if (!deleting) return;
+          const previous = banners;
           setDeleting(null);
+          if (!(await update('banners', (current) => current.filter((banner) => banner.id !== deleting.id), { area: 'content', summary: `Deleted the home banner “${deleting.headline}”`, to: '/banners' }))) return;
+          toast({ message: 'Banner deleted.', action: { label: 'Undo', onAction: () => update('banners', () => previous, { area: 'content', summary: `Restored the home banner “${deleting.headline}”`, to: '/banners' }) } });
         }}
       />
     </>
