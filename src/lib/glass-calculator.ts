@@ -161,7 +161,9 @@ function joinAndPack(pieces: number, length: number, stockLengths: number[]): nu
 
 /** The plan with the least total length, then the fewest bars. */
 function bestOf(plans: number[][]): number[] {
-  const total = (plan: number[]) => plan.reduce((sum, bar) => sum + bar, 0);
+  // Totals are compared to the nearest mm: feet and inch stock lengths aren't exact in mm, and a rounding
+  // difference mustn't beat a plan with fewer bars.
+  const total = (plan: number[]) => Math.round(plan.reduce((sum, bar) => sum + bar, 0));
   return [...plans].sort((a, b) => total(a) - total(b) || a.length - b.length)[0] ?? [];
 }
 
@@ -323,6 +325,35 @@ const withFixedPanel = (system: string, glasses: number): SystemSpec => ({
   connectors: 4 * glasses,
 });
 
+/**
+ * Synchro systems, following Vimalnath's 2+0 and 2+2: 600–1200 mm of opening per glass and 16 mm of overlap
+ * per sliding panel; 2 vertical profiles per glass; the connector count Vimalnath gives each system; two top tracks
+ * (one stock length) and two track caps. With no fixed panels ("+0") the shutters part into the walls, so
+ * each track is twice the opening and the results remind the user to check the wall pockets; with fixed
+ * panels at the ends ("+2") each track spans the opening.
+ */
+function synchro(system: string, connectors: number): SystemSpec {
+  const [sliding, fixed] = system.split('+').map(Number);
+  const glasses = sliding + fixed;
+  const intoWall = fixed === 0;
+  return {
+    system,
+    kit: `${system} Synchro Sliding Kit`,
+    minWidth: 600 * glasses,
+    maxWidth: 1200 * glasses,
+    overlap: 16 * sliding,
+    verticals: 2 * glasses,
+    track: intoWall
+      ? { pieces: 2, length: (openingWidth) => 2 * openingWidth, what: 'twice the opening', sameLength: true, caps: 2 }
+      : { pieces: 2, length: (openingWidth) => openingWidth, what: 'as long as the opening', sameLength: true, caps: 2 },
+    handle: '1+1',
+    connectors,
+    notice: intoWall
+      ? (cuttingWidth) => `Check the hiding space in the wall: it must be at least the shutter size, ${cuttingWidth} mm (${formatInches(cuttingWidth)}).`
+      : undefined,
+  };
+}
+
 // Formulas keyed by system ("1+0", "2+0", …), with the widest opening each allows. Any system not
 // listed here falls back to the CUTTING_ALLOWANCE_MM placeholder below until its formula is confirmed.
 const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
@@ -334,31 +365,12 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
   '3+1': vimalnathSystem(withFixedPanel('3+1', 4)),
   '4+0': vimalnathSystem(allIntoWall('4+0', 4)),
   '4+1': vimalnathSystem(withFixedPanel('4+1', 5)),
-  // 2+0 synchro: both shutters part to the walls, so each top track is twice the opening long.
-  'synchro:2+0': vimalnathSystem({
-    system: '2+0',
-    kit: '2+0 Synchro Sliding Kit',
-    minWidth: 1200,
-    maxWidth: 2400,
-    overlap: 32,
-    verticals: 4,
-    track: { pieces: 2, length: (openingWidth) => 2 * openingWidth, what: 'twice the opening', sameLength: true, caps: 2 },
-    handle: '1+1',
-    connectors: 8,
-    notice: (cuttingWidth) => `Check the hiding space in the wall: it must be at least the shutter size, ${cuttingWidth} mm (${formatInches(cuttingWidth)}).`,
-  }),
-  // 2+2 synchro: fixed panels at both ends, the two middle shutters part behind them; the tracks span the opening.
-  'synchro:2+2': vimalnathSystem({
-    system: '2+2',
-    kit: '2+2 Synchro Sliding Kit',
-    minWidth: 2400,
-    maxWidth: 4800,
-    overlap: 64,
-    verticals: 8,
-    track: { pieces: 2, length: (openingWidth) => openingWidth, what: 'as long as the opening', sameLength: true, caps: 2 },
-    handle: '1+1',
-    connectors: 12,
-  }),
+  'synchro:2+0': vimalnathSystem(synchro('2+0', 8)),
+  'synchro:2+2': vimalnathSystem(synchro('2+2', 16)),
+  'synchro:4+0': vimalnathSystem(synchro('4+0', 16)),
+  'synchro:4+2': vimalnathSystem(synchro('4+2', 24)),
+  'synchro:6+0': vimalnathSystem(synchro('6+0', 24)),
+  'synchro:6+2': vimalnathSystem(synchro('6+2', 32)),
 };
 
 export function getSystemRange(systemName: string): SizeRange | null {
