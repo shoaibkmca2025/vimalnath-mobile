@@ -380,7 +380,10 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
       caps: 2,
     }),
   ),
-  'synchro:4+2': vimalnathSystem(synchro('4+2', 24)),
+  // 4+2: three top tracks, each as long as the opening.
+  'synchro:4+2': vimalnathSystem(
+    synchro('4+2', 24, { pieces: 3, length: (openingWidth) => openingWidth, what: 'as long as the opening', sameLength: true, caps: 2 }),
+  ),
   'synchro:6+0': vimalnathSystem(synchro('6+0', 24)),
   'synchro:6+2': vimalnathSystem(synchro('6+2', 32)),
 };
