@@ -59,6 +59,8 @@ export default function RootLayout() {
               <Stack.Screen name="more-apps" />
               <Stack.Screen name="about" />
               <Stack.Screen name="videos" />
+              <Stack.Screen name="saved-pdfs" />
+              <Stack.Screen name="pdf/[id]" />
             </Stack>
           </AppUIProvider>
         </OrdersProvider>

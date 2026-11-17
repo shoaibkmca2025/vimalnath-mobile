@@ -184,6 +184,8 @@ type TrackSpec =
 
 type SystemSpec = {
   system: string;
+  /** The kit's name in the list; defaults to "<system> Telescopic Sliding Kit". */
+  kit?: string;
   minWidth: number;
   maxWidth: number;
   /** Added to the opening length before it's shared between the glasses (16 mm per overlap). */
@@ -242,7 +244,7 @@ function vimalnathSystem(spec: SystemSpec): SystemFormula {
             track,
             cap,
             { label: 'Sliding Handle / Latch Handle', value: spec.handle },
-            { label: `${spec.system} Telescopic Sliding Kit`, value: '1 nos' },
+            { label: spec.kit ?? `${spec.system} Telescopic Sliding Kit`, value: '1 nos' },
             {
               label: 'Gasket',
               value: `${spec.verticals + horizontal.bars} nos (8mm)`,
@@ -332,6 +334,31 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
   '3+1': vimalnathSystem(withFixedPanel('3+1', 4)),
   '4+0': vimalnathSystem(allIntoWall('4+0', 4)),
   '4+1': vimalnathSystem(withFixedPanel('4+1', 5)),
+  // 2+0 synchro: both shutters part to the walls, so each top track is twice the opening long.
+  'synchro:2+0': vimalnathSystem({
+    system: '2+0',
+    kit: '2+0 Synchro Sliding Kit',
+    minWidth: 1200,
+    maxWidth: 2400,
+    overlap: 32,
+    verticals: 4,
+    track: { pieces: 2, length: (openingWidth) => 2 * openingWidth, what: 'twice the opening', sameLength: true, caps: 2 },
+    handle: '1+1',
+    connectors: 8,
+    notice: (cuttingWidth) => `Check the hiding space in the wall: it must be at least the shutter size, ${cuttingWidth} mm (${formatInches(cuttingWidth)}).`,
+  }),
+  // 2+2 synchro: fixed panels at both ends, the two middle shutters part behind them; the tracks span the opening.
+  'synchro:2+2': vimalnathSystem({
+    system: '2+2',
+    kit: '2+2 Synchro Sliding Kit',
+    minWidth: 2400,
+    maxWidth: 4800,
+    overlap: 64,
+    verticals: 8,
+    track: { pieces: 2, length: (openingWidth) => openingWidth, what: 'as long as the opening', sameLength: true, caps: 2 },
+    handle: '1+1',
+    connectors: 12,
+  }),
 };
 
 export function getSystemRange(systemName: string): SizeRange | null {

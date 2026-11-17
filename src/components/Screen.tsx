@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandLockup } from '@/components/BrandLockup';
 import { CartButton } from '@/components/CartButton';
 import { MenuButton } from '@/components/MenuDrawer';
+import { SavedPdfsButton } from '@/components/SavedPdfsButton';
 import { colors, space, type } from '@/theme';
 
 const useNativeDriver = Platform.OS !== 'web';
@@ -20,7 +21,7 @@ type ScreenProps = {
   back?: { fallback: Href; label?: string };
   /** `inline` keeps the title in the navigation bar instead of showing a large title above the content. */
   titleDisplay?: 'large' | 'inline';
-  /** Trailing navigation bar items. Defaults to the cart button; pass `null` for none. */
+  /** Trailing navigation bar items. Defaults to Saved PDFs and the cart; pass `null` for none. */
   trailing?: ReactNode;
   /** Lists and forms sit on the grouped background so their white groups stand out. */
   grouped?: boolean;
@@ -30,6 +31,8 @@ type ScreenProps = {
    * near the screen; `children` then become the list's header, above the items.
    */
   list?: Omit<FlatListProps<any>, 'ListHeaderComponent' | 'onScroll' | 'contentContainerStyle'>;
+  /** The content fills the screen below the bar and scrolls itself (e.g. the PDF viewer); no large title. */
+  fill?: boolean;
   children: ReactNode;
 };
 
@@ -37,7 +40,7 @@ type ScreenProps = {
  * Screen with an iOS-style navigation bar: menu + brand + cart on tab roots, back button on pushed screens,
  * a large title that scrolls with the content, and a bar separator that appears once content scrolls under it.
  */
-export function Screen({ title, subtitle, back, titleDisplay = 'large', trailing, grouped = false, scrollRef, list, children }: ScreenProps) {
+export function Screen({ title, subtitle, back, titleDisplay = 'large', trailing, grouped = false, scrollRef, list, fill = false, children }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
   const background = grouped ? colors.groupedBackground : colors.background;
@@ -85,7 +88,16 @@ export function Screen({ title, subtitle, back, titleDisplay = 'large', trailing
               <BrandLockup />
             </View>
           )}
-          <View style={styles.trailing}>{trailing === undefined ? <CartButton /> : trailing}</View>
+          <View style={styles.trailing}>
+            {trailing === undefined ? (
+              <>
+                <SavedPdfsButton />
+                <CartButton />
+              </>
+            ) : (
+              trailing
+            )}
+          </View>
           {back && (
             <Animated.Text
               style={[styles.inlineTitle, { opacity: inlineOpacity }]}
@@ -104,7 +116,9 @@ export function Screen({ title, subtitle, back, titleDisplay = 'large', trailing
 
       {/* Android is edge-to-edge, so the window no longer resizes for the keyboard; iOS uses scroll insets instead. */}
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'android' ? 'padding' : undefined}>
-        {list ? (
+        {fill ? (
+          <View style={styles.flex}>{children}</View>
+        ) : list ? (
           <Animated.FlatList
             {...list}
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver })}
