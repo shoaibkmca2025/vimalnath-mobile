@@ -332,7 +332,8 @@ const withFixedPanel = (system: string, glasses: number): SystemSpec => ({
  * each track is twice the opening and the results remind the user to check the wall pockets; with fixed
  * panels at the ends ("+2") each track spans the opening.
  */
-function synchro(system: string, connectors: number): SystemSpec {
+/** `track` replaces the usual top track rule when Vimalnath gives a system its own. */
+function synchro(system: string, connectors: number, track?: TrackSpec): SystemSpec {
   const [sliding, fixed] = system.split('+').map(Number);
   const glasses = sliding + fixed;
   const intoWall = fixed === 0;
@@ -343,9 +344,11 @@ function synchro(system: string, connectors: number): SystemSpec {
     maxWidth: 1200 * glasses,
     overlap: 16 * sliding,
     verticals: 2 * glasses,
-    track: intoWall
-      ? { pieces: 2, length: (openingWidth) => 2 * openingWidth, what: 'twice the opening', sameLength: true, caps: 2 }
-      : { pieces: 2, length: (openingWidth) => openingWidth, what: 'as long as the opening', sameLength: true, caps: 2 },
+    track:
+      track ??
+      (intoWall
+        ? { pieces: 2, length: (openingWidth) => 2 * openingWidth, what: 'twice the opening', sameLength: true, caps: 2 }
+        : { pieces: 2, length: (openingWidth) => openingWidth, what: 'as long as the opening', sameLength: true, caps: 2 }),
     handle: '1+1',
     connectors,
     notice: intoWall
@@ -367,7 +370,16 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
   '4+1': vimalnathSystem(withFixedPanel('4+1', 5)),
   'synchro:2+0': vimalnathSystem(synchro('2+0', 8)),
   'synchro:2+2': vimalnathSystem(synchro('2+2', 16)),
-  'synchro:4+0': vimalnathSystem(synchro('4+0', 16)),
+  // 4+0: two shutters stack on each side, so each track is the opening + one shutter per side + 5″.
+  'synchro:4+0': vimalnathSystem(
+    synchro('4+0', 16, {
+      pieces: 2,
+      length: (openingWidth, cuttingWidth) => openingWidth + 2 * cuttingWidth + 5 * 25.4,
+      what: 'opening + 2 shutters + 5″',
+      sameLength: true,
+      caps: 2,
+    }),
+  ),
   'synchro:4+2': vimalnathSystem(synchro('4+2', 24)),
   'synchro:6+0': vimalnathSystem(synchro('6+0', 24)),
   'synchro:6+2': vimalnathSystem(synchro('6+2', 32)),
