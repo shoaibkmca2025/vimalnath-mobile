@@ -83,6 +83,13 @@ test('order saves: a changed or removed internal note is sent; nothing else is',
   assert.deepEqual(serverRequests('orders', [order('1')], [order('1')]), []);
 });
 
+test('order saves: the inventory note is sent the same way, and a request added to the list sends nothing (its page already sent it)', () => {
+  const noted = { ...order('1'), inventoryNote: { text: 'VRL, LR 4471', at: '2026-11-18T10:00:00Z', by: 'Imran' } };
+  assert.deepEqual(serverRequests('orders', [order('1')], [noted]), [{ path: '/orders/1/inventory-note', method: 'PUT', body: { text: 'VRL, LR 4471' } }]);
+  assert.deepEqual(serverRequests('orders', [noted], [order('1')]), [{ path: '/orders/1/inventory-note', method: 'PUT', body: { text: '' } }]);
+  assert.deepEqual(serverRequests('orders', [order('1')], [order('2', 'requested'), order('1')]), []);
+});
+
 test('calculator saves: the cutlist and the bar sections are sent whole, and only when they changed', () => {
   const cutlist = { systems: [], configurations: { telescopic: [], synchronized: [], folding: [] } };
   const edited = { ...cutlist, configurations: { ...cutlist.configurations, folding: [{ name: '2 Door', image: '/media/f.jpg' }] } };

@@ -1,4 +1,4 @@
-import { CheckCircleIcon, CheckIcon, ClockIcon, TruckIcon, XCircleIcon, type Icon } from '@phosphor-icons/react';
+import { CheckCircleIcon, CheckIcon, ClockIcon, PackageIcon, PaperPlaneTiltIcon, ProhibitIcon, TruckIcon, XCircleIcon, type Icon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { ORDER_STATUS, type Tone } from '@/data/orders';
@@ -15,8 +15,11 @@ export function Badge({ tone, icon: IconComponent, children }: { tone: Tone; ico
 }
 
 const STATUS_ICONS: Record<OrderStatus, Icon> = {
+  requested: PaperPlaneTiltIcon,
+  declined: ProhibitIcon,
   placed: ClockIcon,
   confirmed: CheckIcon,
+  packed: PackageIcon,
   dispatched: TruckIcon,
   delivered: CheckCircleIcon,
   cancelled: XCircleIcon,

@@ -13,7 +13,28 @@ export type AdminConnection = {
   allowLocalHttp: boolean;
   customerId?: string;
 };
-export type CentralOrder = { id: string; number?: string; status: string; mobileOrderId?: string; sourceId?: string; mobileEventId?: string; eventId?: string; history?: { status: string; at: string }[] };
+/** An order the shop made and sent to this phone; the phone has no copy of its own, so the shop sends the details. */
+export type ShopOrderDetails = {
+  createdAt: string;
+  customer: string;
+  phone?: string;
+  notes?: string;
+  total: number;
+  lines: { productId: string; code: string; name: string; option?: string; optionCode?: string; note?: string; qty: number; mrp?: number }[];
+};
+export type CentralOrder = {
+  id: string;
+  number?: string;
+  status: string;
+  mobileOrderId?: string;
+  sourceId?: string;
+  mobileEventId?: string;
+  eventId?: string;
+  history?: { status: string; at: string }[];
+  /** 'admin' for an order the shop sent for the customer to confirm. */
+  source?: 'app' | 'admin';
+  details?: ShopOrderDetails | null;
+};
 export type SyncStatus = {
   connection: AdminConnection;
   connected: boolean;
@@ -65,6 +86,13 @@ export function useShopOrders() {
   useEffect(() => subscribeAdminSync((status) => setOrders(status.centralOrders)), []);
   return useMemo(() => new Map(orders.map((order) => [order.mobileOrderId, order])), [orders]);
 }
+/** Orders the shop sent to this phone, newest first: requests to confirm, and what happened to them after. */
+export function useShopRequests() {
+  const [orders, setOrders] = useState(() => current.centralOrders);
+  useEffect(() => subscribeAdminSync((status) => setOrders(status.centralOrders)), []);
+  return useMemo(() => orders.filter((order): order is CentralOrder & { details: ShopOrderDetails } => order.source === 'admin' && Boolean(order.details)), [orders]);
+}
+
 export function subscribeAdminSync(listener: (status: SyncStatus) => void) {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
@@ -307,6 +335,17 @@ export function syncAdmin(): Promise<void> {
     if (connection.enabled && !current.error && outbox.events.length) void syncAdmin();
   });
   return syncing;
+}
+
+/**
+ * Confirms or declines an order the shop sent. Confirming passes it to the shop's inventory team to pack.
+ * Sent straight away rather than queued: the customer should know at once whether the shop got the answer.
+ */
+export async function respondToShopOrder(id: string, decision: 'confirm' | 'decline'): Promise<void> {
+  await initializeAdminSync();
+  if (!connection.enabled) throw new Error('Connect to the shop in Settings first.');
+  const result = await request<{ orders: CentralOrder[] }>({ ...connection }, `orders/${encodeURIComponent(id)}/respond`, { decision });
+  publish({ connected: true, centralOrders: result.orders, error: undefined, lastSyncedAt: new Date().toISOString() });
 }
 
 export function startAdminSync() {

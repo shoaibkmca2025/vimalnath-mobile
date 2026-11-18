@@ -20,10 +20,11 @@ import {
   TagIcon,
   UserGearIcon,
   UsersThreeIcon,
+  WarehouseIcon,
   type Icon,
 } from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router';
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useNavigation } from 'react-router';
 
 import { IconButton } from '@/components/Button';
 import { CommandPalette } from '@/components/CommandPalette';
@@ -51,13 +52,23 @@ export function AppShell() {
 
   const setMeta = useCallback((next: PageMeta) => setMetaState(next), []);
   const newOrders = db.orders.filter((order) => order.status === 'placed').length;
+  const toPack = db.orders.filter((order) => order.status === 'confirmed').length;
+  const inventoryItem: NavItem = { to: '/inventory', label: 'Inventory', icon: WarehouseIcon, count: toPack };
+  // The inventory team only works on its own panel (and its password, under Settings).
+  const inventoryOnly = session?.role === 'inventory';
 
-  const groups: { title: string; items: NavItem[] }[] = [
+  const groups: { title: string; items: NavItem[] }[] = inventoryOnly
+    ? [
+        { title: 'Inventory', items: [{ ...inventoryItem, label: 'Orders to Pack' }] },
+        { title: 'System', items: [{ to: '/settings', label: 'Settings', icon: GearSixIcon }] },
+      ]
+    : [
     { title: 'Overview', items: [{ to: '/', label: 'Dashboard', icon: SquaresFourIcon, end: true }] },
     {
       title: 'Sales',
       items: [
         { to: '/orders', label: 'Orders', icon: ReceiptIcon, count: newOrders },
+        ...(session?.role === 'catalogue' ? [] : [inventoryItem]),
         { to: '/customers', label: 'Customers', icon: UsersThreeIcon },
         ...(session?.role === 'catalogue' ? [] : [{ to: '/app-users', label: 'App Users', icon: DeviceMobileIcon }]),
       ],
@@ -134,6 +145,8 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  const allowed = !inventoryOnly || location.pathname.startsWith('/inventory') || location.pathname.startsWith('/settings');
+
   const signOut = async () => {
     await endSession();
     navigate('/login', { replace: true });
@@ -152,7 +165,7 @@ export function AppShell() {
               <span className="brand-name">
                 Vimalnath
               </span>
-              <span className="brand-sub">Admin</span>
+              <span className="brand-sub">{inventoryOnly ? 'Inventory' : 'Admin'}</span>
             </span>
           </Link>
 
@@ -231,7 +244,7 @@ export function AppShell() {
           </header>
 
           <main id="main" ref={mainRef} className="main" tabIndex={-1}>
-            <Outlet />
+            {allowed ? <Outlet /> : <Navigate to="/inventory" replace />}
           </main>
         </div>
       </div>

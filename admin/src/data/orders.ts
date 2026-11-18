@@ -2,29 +2,51 @@ import type { Order, OrderStatus } from './types';
 
 export type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
-/** Labels and tones for each status. New orders are amber because they're waiting on someone. */
+/** Labels and tones for each status. New orders and requests are amber because they're waiting on someone. */
 export const ORDER_STATUS: Record<OrderStatus, { label: string; tone: Tone; description: string }> = {
+  requested: { label: 'Requested', tone: 'warning', description: 'Sent to the customer’s app, waiting for them to confirm' },
   placed: { label: 'New', tone: 'warning', description: 'Waiting to be confirmed' },
-  confirmed: { label: 'Confirmed', tone: 'info', description: 'Accepted and being prepared' },
+  confirmed: { label: 'Confirmed', tone: 'info', description: 'Confirmed and pending with the inventory team' },
+  packed: { label: 'Packed', tone: 'info', description: 'Packed by the inventory team, ready to dispatch' },
   dispatched: { label: 'Dispatched', tone: 'info', description: 'On the way to the customer' },
   delivered: { label: 'Delivered', tone: 'success', description: 'Received by the customer' },
+  declined: { label: 'Declined', tone: 'neutral', description: 'The customer turned this order down in the app' },
   cancelled: { label: 'Cancelled', tone: 'neutral', description: 'Won’t be fulfilled' },
 };
 
-export const STATUS_ORDER: OrderStatus[] = ['placed', 'confirmed', 'dispatched', 'delivered', 'cancelled'];
+export const STATUS_ORDER: OrderStatus[] = ['requested', 'placed', 'confirmed', 'packed', 'dispatched', 'delivered', 'declined', 'cancelled'];
 
-/** The step that usually comes next, offered as the primary action on an order. */
+/** What the inventory team works through: a confirmed order is Pending until it's packed. */
+export const INVENTORY_STAGES = ['confirmed', 'packed', 'dispatched'] as const satisfies OrderStatus[];
+export type InventoryStage = (typeof INVENTORY_STAGES)[number];
+export const INVENTORY_LABEL: Record<InventoryStage, string> = { confirmed: 'Pending', packed: 'Packed', dispatched: 'Dispatched' };
+
+/** The steps an order goes through, shown as the progress bar. */
+export const stepsOf = (order: Pick<Order, 'source'>): OrderStatus[] =>
+  order.source === 'admin' ? ['requested', 'confirmed', 'packed', 'dispatched', 'delivered'] : ['placed', 'confirmed', 'packed', 'dispatched', 'delivered'];
+
+/** The step that usually comes next, offered as the primary action on an order. A request waits for the customer. */
 export function nextStatus(status: OrderStatus): OrderStatus | null {
-  const flow: OrderStatus[] = ['placed', 'confirmed', 'dispatched', 'delivered'];
+  const flow: OrderStatus[] = ['placed', 'confirmed', 'packed', 'dispatched', 'delivered'];
   const index = flow.indexOf(status);
   return index >= 0 && index < flow.length - 1 ? flow[index + 1]! : null;
 }
 
 export const NEXT_ACTION_LABEL: Partial<Record<OrderStatus, string>> = {
   confirmed: 'Confirm Order',
+  packed: 'Mark as Packed',
   dispatched: 'Mark as Dispatched',
   delivered: 'Mark as Delivered',
 };
+
+/** How a history step reads: who did what, in words. */
+export function stepLabel(status: OrderStatus, by: string) {
+  if (status === 'placed') return 'Placed in the app';
+  if (status === 'requested') return 'Sent to the customer';
+  if (status === 'confirmed' && by === 'App') return 'Confirmed by the customer';
+  if (status === 'declined') return 'Declined by the customer';
+  return ORDER_STATUS[status].label;
+}
 
 export type Customer = {
   /** URL-safe id made from the name, e.g. crystal-interiors. */
@@ -33,7 +55,7 @@ export type Customer = {
   /** The latest phone number they gave, if any. */
   phone?: string;
   orders: number;
-  /** MRP of priced lines, cancelled orders left out. */
+  /** MRP of priced lines, counted orders only (see isCounted). */
   spent: number;
   firstOrder: string;
   lastOrder: string;
@@ -50,18 +72,21 @@ export const customerKey = (name: string) =>
 /** The customer an order belongs to: its customer record (Module 7), or the name typed on it for an order without one. */
 export const customerOf = (order: Order) => (order.customerRecord ? { key: String(order.customerRecord.id), name: order.customerRecord.name } : { key: customerKey(order.customer), name: order.customer });
 
-export const isOpen = (status: OrderStatus) => status === 'placed' || status === 'confirmed' || status === 'dispatched';
+export const isOpen = (status: OrderStatus) => status === 'requested' || status === 'placed' || status === 'confirmed' || status === 'packed' || status === 'dispatched';
+
+/** Whether an order counts towards sales: not cancelled, not declined, and not a request the customer hasn't confirmed yet. */
+export const isCounted = (status: OrderStatus) => status !== 'cancelled' && status !== 'declined' && status !== 'requested';
 
 export const itemCount = (order: Order) => order.lines.reduce((sum, line) => sum + line.qty, 0);
 
-/** Order figures per customer (see customerOf), worked out from the orders this admin has loaded. Cancelled orders are not counted as spent. */
+/** Order figures per customer (see customerOf), worked out from the orders this admin has loaded. Only counted orders (isCounted) add to spent. */
 export function customersFromOrders(orders: Order[]): Customer[] {
   const byKey = new Map<string, Customer>();
   for (const order of orders) {
     const { key, name } = customerOf(order);
     const current = byKey.get(key) ?? { key, name, orders: 0, spent: 0, firstOrder: order.createdAt, lastOrder: order.createdAt, open: 0 };
     current.orders += 1;
-    if (order.status !== 'cancelled') current.spent += order.total;
+    if (isCounted(order.status)) current.spent += order.total;
     if (isOpen(order.status)) current.open += 1;
     if (order.createdAt < current.firstOrder) current.firstOrder = order.createdAt;
     if (order.createdAt >= current.lastOrder) {

@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 
-export type Role = 'owner' | 'sales' | 'catalogue';
+export type Role = 'owner' | 'sales' | 'catalogue' | 'inventory';
 export type Session = { id: number; name: string; email: string; role: Role };
 
 // Filled from the server before any signed-in page renders, so screens can read it without waiting.

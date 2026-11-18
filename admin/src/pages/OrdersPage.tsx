@@ -1,16 +1,16 @@
-import { CheckCircleIcon, CheckIcon, DownloadSimpleIcon, PackageIcon, ReceiptIcon, TruckIcon, XIcon } from '@phosphor-icons/react';
+import { CheckCircleIcon, CheckIcon, DownloadSimpleIcon, PackageIcon, PlusIcon, ReceiptIcon, TruckIcon, XIcon } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
 import { OrderStatusBadge } from '@/components/Badge';
-import { Button } from '@/components/Button';
+import { Button, ButtonLink } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
 import { EmptyState } from '@/components/EmptyState';
 import { SearchInput, Segmented } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/useToast';
-import { ORDER_STATUS, STATUS_ORDER, itemCount } from '@/data/orders';
+import { ORDER_STATUS, STATUS_ORDER, isCounted, itemCount } from '@/data/orders';
 import { productTitle } from '@/data/products';
 import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
@@ -60,7 +60,7 @@ export default function OrdersPage() {
     );
   }, [db.orders, status, query, productId]);
 
-  const shownValue = rows.filter((order) => order.status !== 'cancelled').reduce((sum, order) => sum + order.total, 0);
+  const shownValue = rows.filter((order) => isCounted(order.status)).reduce((sum, order) => sum + order.total, 0);
 
   const exportRows = () =>
     downloadCsv(
@@ -69,13 +69,15 @@ export default function OrdersPage() {
       rows.map((order) => [order.number, order.createdAt.slice(0, 16).replace('T', ' '), order.customer, order.phone, ORDER_STATUS[order.status].label, order.lines.length, itemCount(order), order.total, order.notes]),
     );
 
-  const move = async (ids: string[], from: OrderStatus, to: OrderStatus) => {
-    const eligible = ids.filter((id) => db.orders.find((order) => order.id === id)?.status === from);
+  const move = async (ids: string[], from: OrderStatus[], to: OrderStatus) => {
+    const statuses = new Map(db.orders.map((order) => [order.id, order.status]));
+    const eligible = ids.filter((id) => from.includes(statuses.get(id)!));
     if (!eligible.length) {
-      toast({ message: `None of the selected orders are ${ORDER_STATUS[from].label.toLowerCase()}.`, tone: 'info' });
+      toast({ message: `None of the selected orders are ${from.map((status) => ORDER_STATUS[status].label.toLowerCase()).join(' or ')}.`, tone: 'info' });
       return;
     }
     const previous = db.orders;
+    const was = statuses.get(eligible[0]!)!;
     const at = new Date().toISOString();
     const by = readSession()?.name ?? 'Admin';
     const numbers = eligible.map((id) => db.orders.find((order) => order.id === id)!.number);
@@ -94,7 +96,7 @@ export default function OrdersPage() {
       message: `${plural(eligible.length, 'order')} marked ${ORDER_STATUS[to].label.toLowerCase()}.`,
       action: {
         label: 'Undo',
-        onAction: () => update('orders', () => previous, { area: 'orders', summary: `Undid: ${plural(eligible.length, 'order')} back to ${ORDER_STATUS[from].label.toLowerCase()}`, to: '/orders' }),
+        onAction: () => update('orders', () => previous, { area: 'orders', summary: `Undid: ${plural(eligible.length, 'order')} back to ${ORDER_STATUS[was].label.toLowerCase()}`, to: '/orders' }),
       },
     });
   };
@@ -145,11 +147,18 @@ export default function OrdersPage() {
     <>
       <PageHeader
         title="Orders"
-        description="Orders placed from the app’s cart. Confirm new ones, then move each along as it’s dispatched and delivered."
+        description="Orders placed from the app’s cart, and requests you send for customers to confirm. Confirmed orders go to the inventory team, whose packing and dispatch show here."
         actions={
-          <Button icon={DownloadSimpleIcon} onClick={exportRows} disabled={!rows.length}>
-            Export CSV
-          </Button>
+          <>
+            <Button icon={DownloadSimpleIcon} onClick={exportRows} disabled={!rows.length}>
+              Export CSV
+            </Button>
+            {readSession()?.role !== 'inventory' && (
+              <ButtonLink to="/orders/new" variant="primary" icon={PlusIcon}>
+                New Order Request
+              </ButtonLink>
+            )}
+          </>
         }
       />
 
@@ -192,13 +201,16 @@ export default function OrdersPage() {
           initialSort={{ key: 'date', direction: 'desc' }}
           bulkActions={(ids) => (
             <>
-              <Button size="sm" icon={CheckIcon} onClick={() => move(ids, 'placed', 'confirmed')}>
+              <Button size="sm" icon={CheckIcon} onClick={() => move(ids, ['placed'], 'confirmed')}>
                 Confirm
               </Button>
-              <Button size="sm" icon={TruckIcon} onClick={() => move(ids, 'confirmed', 'dispatched')}>
+              <Button size="sm" icon={PackageIcon} onClick={() => move(ids, ['confirmed'], 'packed')}>
+                Mark Packed
+              </Button>
+              <Button size="sm" icon={TruckIcon} onClick={() => move(ids, ['confirmed', 'packed'], 'dispatched')}>
                 Mark Dispatched
               </Button>
-              <Button size="sm" icon={CheckCircleIcon} onClick={() => move(ids, 'dispatched', 'delivered')}>
+              <Button size="sm" icon={CheckCircleIcon} onClick={() => move(ids, ['dispatched'], 'delivered')}>
                 Mark Delivered
               </Button>
             </>
@@ -220,7 +232,7 @@ export default function OrdersPage() {
                 )
               }
             >
-              {db.orders.length ? 'Try a different status or search.' : 'Orders placed in the app will appear here.'}
+              {db.orders.length ? 'Try a different status or search.' : 'Orders placed in the app, and requests you send, will appear here.'}
             </EmptyState>
           }
         />
