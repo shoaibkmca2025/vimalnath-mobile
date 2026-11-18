@@ -1,44 +1,14 @@
 import { serve } from '@hono/node-server';
 
-import { activityRoutes } from './activity.ts';
-import { createApp } from './app.ts';
-import { appRoutes, appUserAdminRoutes } from './app-users.ts';
-import { calculatorRoutes } from './calculators.ts';
-import { catalogueRoutes } from './catalogue.ts';
+import { buildApi } from './api.ts';
 import { loadConfig } from './config.ts';
-import { customerRoutes } from './customers.ts';
-import { contentRoutes } from './content.ts';
 import { connect } from './db.ts';
-import { mediaAdminRoutes, mediaRoutes } from './media.ts';
-import { notificationRoutes, realSenders, startNotifier } from './notifications.ts';
-import { orderAdminRoutes } from './orders.ts';
-import { adminRoutes } from './staff.ts';
-import { versionRoutes } from './versions.ts';
+import { realSenders, startNotifier } from './notifications.ts';
 
+/** The API as a long-running Node server (Docker, Render). On Neon Functions, function.ts serves it instead. */
 const config = loadConfig();
 const sql = connect(config.DATABASE_URL);
-const production = config.NODE_ENV === 'production';
-const app = createApp({
-  adminOrigin: config.ADMIN_ORIGIN,
-  production,
-  trustProxy: config.TRUST_PROXY,
-  proxySecret: config.PROXY_SECRET,
-  checkDatabase: () => sql`select 1`,
-});
-const admin = adminRoutes(sql, { adminOrigin: config.ADMIN_ORIGIN, production, trustProxy: config.TRUST_PROXY });
-admin.route('/app-users', appUserAdminRoutes(sql));
-admin.route('/', catalogueRoutes(sql));
-admin.route('/', calculatorRoutes(sql));
-admin.route('/', contentRoutes(sql));
-admin.route('/', versionRoutes(sql));
-admin.route('/', activityRoutes(sql));
-admin.route('/notifications', notificationRoutes(sql, { email: Boolean(config.SMTP_URL) }));
-admin.route('/media', mediaAdminRoutes(sql));
-admin.route('/orders', orderAdminRoutes(sql));
-admin.route('/customers', customerRoutes(sql));
-app.route('/v1/admin', admin);
-app.route('/v1/app', appRoutes(sql));
-app.route('/v1/media', mediaRoutes(sql));
+const app = buildApi(sql, config);
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => console.log(`API listening on port ${port}`));
 const stopNotifier = startNotifier(sql, realSenders(config));

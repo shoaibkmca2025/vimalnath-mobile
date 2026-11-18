@@ -26,8 +26,16 @@ declare module 'hono' {
 }
 
 /** Behind a proxy, the last X-Forwarded-For entry is the one the proxy added; earlier ones can be faked. */
-export const clientOf = (c: Context, trustProxy: boolean) =>
-  c.get('client') || (trustProxy && c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim()) || getConnInfo(c).remote.address || 'unknown';
+export const clientOf = (c: Context, trustProxy: boolean) => c.get('client') || (trustProxy && c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim()) || socketAddress(c) || 'unknown';
+
+/** Only the Node server has a socket to read; serverless runtimes (Neon Functions) don't. */
+const socketAddress = (c: Context) => {
+  try {
+    return getConnInfo(c).remote.address;
+  } catch {
+    return undefined;
+  }
+};
 
 const sameSecret = (given: string, secret: string) => timingSafeEqual(createHash('sha256').update(given).digest(), createHash('sha256').update(secret).digest());
 

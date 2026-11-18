@@ -3,7 +3,6 @@ import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { Sql } from 'postgres';
-import sharp from 'sharp';
 
 import { only, type Env } from './staff.ts';
 
@@ -14,8 +13,9 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const SIZES = { data: 2400, medium: 800, small: 240 } as const;
 // A file can be small yet decode huge (a blank 0.4 MB PNG scan took 310 MB). 150 MP still fits an A4 page scanned at 1200 dpi.
 const MAX_PIXELS = 150_000_000;
-const toWebp = (input: Buffer, side: number) =>
-  sharp(input, { limitInputPixels: MAX_PIXELS }).rotate().resize({ width: side, height: side, fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer({ resolveWithObject: true });
+// Loaded on the first upload, not at startup: on Neon Functions it is the WebAssembly build, slower to load than to use.
+const toWebp = async (input: Buffer, side: number) =>
+  (await import('sharp')).default(input, { limitInputPixels: MAX_PIXELS }).rotate().resize({ width: side, height: side, fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer({ resolveWithObject: true });
 
 /** POST /v1/admin/media: the file itself as the body, its type as Content-Type, its name in X-File-Name. */
 export function mediaAdminRoutes(sql: Sql) {

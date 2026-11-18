@@ -10,7 +10,7 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/v1/*"]
   },
-  "vars": { "API_ORIGIN": "https://vimalnath-api.onrender.com" },
+  "vars": { "API_ORIGIN": "https://br-steep-morning-bi42869c-api.compute.c-5.ap-southeast-1.aws.neon.tech" },
   // An earlier Containers attempt registered an `Api` Durable Object class (it never ran or stored anything); v2 removes it.
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Api"] },
