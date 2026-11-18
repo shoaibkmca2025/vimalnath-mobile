@@ -6,6 +6,7 @@ import {
   ClockIcon,
   CurrencyInrIcon,
   ImageSquareIcon,
+  PaperPlaneTiltIcon,
   ReceiptIcon,
   ShoppingCartIcon,
   TagIcon,
@@ -23,6 +24,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Stat } from '@/components/Stat';
 import { DAY, averageStepHours, bucket, change, dailySeries, ordersBetween, salesByCategory, topCustomers, topProducts, totals, type Ranked } from '@/data/analytics';
 import { ORDER_STATUS } from '@/data/orders';
+import { isRequest, requestState } from '@/data/requests';
 import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import type { OrderStatus } from '@/data/types';
@@ -39,7 +41,8 @@ function greeting(hour: number) {
   return 'Good evening';
 }
 
-const PIPELINE: OrderStatus[] = ['requested', 'placed', 'confirmed', 'packed', 'dispatched'];
+// Requests the customer hasn't confirmed are counted under Order Requests, in Needs attention.
+const PIPELINE: OrderStatus[] = ['placed', 'confirmed', 'packed', 'dispatched'];
 
 export default function DashboardPage() {
   const { db } = useData();
@@ -106,6 +109,13 @@ export default function DashboardPage() {
       detail: stats.oldestWaiting ? `Oldest placed ${relativePhrase(formatRelativeTime(stats.oldestWaiting, now))}` : 'Customers are waiting to hear back',
       to: '/orders?status=placed',
       count: stats.waiting,
+    },
+    {
+      icon: PaperPlaneTiltIcon,
+      title: 'Order requests waiting',
+      detail: 'Sent to customers’ apps, not confirmed yet',
+      to: '/order-requests?state=waiting',
+      count: db.orders.filter((order) => isRequest(order) && requestState(order) === 'waiting').length,
     },
     { icon: CalculatorIcon, title: 'Glass sizes on a placeholder formula', detail: 'Folding: opening − 20 mm until confirmed', to: '/formulas', count: placeholderFormulas },
     { icon: CurrencyInrIcon, title: 'Products without a price', detail: 'Shown as “price in catalogue” in the app', to: '/products?view=missing-price', count: health.total - health.priced },

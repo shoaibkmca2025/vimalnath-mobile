@@ -1,4 +1,4 @@
-import { CheckCircleIcon, CheckIcon, DownloadSimpleIcon, PackageIcon, PlusIcon, ReceiptIcon, TruckIcon, XIcon } from '@phosphor-icons/react';
+import { CheckCircleIcon, CheckIcon, DownloadSimpleIcon, PackageIcon, PaperPlaneTiltIcon, ReceiptIcon, TruckIcon, XIcon } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/useToast';
 import { ORDER_STATUS, STATUS_ORDER, isCounted, itemCount } from '@/data/orders';
 import { productTitle } from '@/data/products';
+import { inOrders } from '@/data/requests';
 import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import type { Order, OrderStatus } from '@/data/types';
@@ -28,7 +29,10 @@ export default function OrdersPage() {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const status = (STATUS_ORDER as string[]).includes(params.get('status') ?? '') ? (params.get('status') as OrderStatus) : 'all';
+  // Requests the customer hasn't confirmed are in Order Requests, not here.
+  const all = useMemo(() => db.orders.filter(inOrders), [db.orders]);
+  const statuses = STATUS_ORDER.filter((value) => value !== 'requested' && value !== 'declined');
+  const status = (statuses as string[]).includes(params.get('status') ?? '') ? (params.get('status') as OrderStatus) : 'all';
   const productId = params.get('product');
   const product = productId ? db.products.find((item) => item.id === productId) : undefined;
   const setFilters = (next: { status?: Filter; product?: string | null }) => {
@@ -40,17 +44,17 @@ export default function OrdersPage() {
   const setStatus = (next: Filter) => setFilters({ status: next });
 
   const counts = useMemo(() => {
-    const scoped = productId ? db.orders.filter((order) => order.lines.some((line) => line.productId === productId)) : db.orders;
+    const scoped = productId ? all.filter((order) => order.lines.some((line) => line.productId === productId)) : all;
     const map: Record<string, number> = { all: scoped.length };
     for (const order of scoped) map[order.status] = (map[order.status] ?? 0) + 1;
     return map;
-  }, [db.orders, productId]);
+  }, [all, productId]);
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     // Phone numbers match on digits alone, so "98220" finds "+91 98220 …".
     const digits = needle.replace(/\D/g, '');
-    return db.orders.filter(
+    return all.filter(
       (order) =>
         (status === 'all' || order.status === status) &&
         (!productId || order.lines.some((line) => line.productId === productId)) &&
@@ -58,7 +62,7 @@ export default function OrdersPage() {
           [order.number, order.customer, order.notes ?? '', ...order.lines.flatMap((line) => [line.code, line.optionCode ?? ''])].some((field) => field.toLowerCase().includes(needle)) ||
           (digits.length >= 4 && (order.phone ?? '').replace(/\D/g, '').includes(digits))),
     );
-  }, [db.orders, status, query, productId]);
+  }, [all, status, query, productId]);
 
   const shownValue = rows.filter((order) => isCounted(order.status)).reduce((sum, order) => sum + order.total, 0);
 
@@ -147,17 +151,15 @@ export default function OrdersPage() {
     <>
       <PageHeader
         title="Orders"
-        description="Orders placed from the app’s cart, and requests you send for customers to confirm. Confirmed orders go to the inventory team, whose packing and dispatch show here."
+        description="Orders placed from the app’s cart, and order requests once the customer confirms them. Confirmed orders go to the inventory team, whose packing and dispatch show here."
         actions={
           <>
             <Button icon={DownloadSimpleIcon} onClick={exportRows} disabled={!rows.length}>
               Export CSV
             </Button>
-            {readSession()?.role !== 'inventory' && (
-              <ButtonLink to="/orders/new" variant="primary" icon={PlusIcon}>
-                New Order Request
-              </ButtonLink>
-            )}
+            <ButtonLink to="/order-requests" icon={PaperPlaneTiltIcon}>
+              Order Requests
+            </ButtonLink>
           </>
         }
       />
@@ -167,7 +169,7 @@ export default function OrdersPage() {
           label="Filter by status"
           value={status}
           onChange={setStatus}
-          options={[{ value: 'all', label: 'All', count: counts.all }, ...STATUS_ORDER.map((value) => ({ value, label: ORDER_STATUS[value].label, count: counts[value] ?? 0 }))]}
+          options={[{ value: 'all', label: 'All', count: counts.all }, ...statuses.map((value) => ({ value, label: ORDER_STATUS[value].label, count: counts[value] ?? 0 }))]}
         />
         <SearchInput label="Search orders" placeholder="Order, customer, phone or product code" value={query} onChange={setQuery} />
       </div>
@@ -218,7 +220,7 @@ export default function OrdersPage() {
           empty={
             <EmptyState
               icon={ReceiptIcon}
-              title={db.orders.length ? 'No orders match' : 'No orders yet'}
+              title={all.length ? 'No orders match' : 'No orders yet'}
               action={
                 (query || status !== 'all' || productId) && (
                   <Button
@@ -232,7 +234,7 @@ export default function OrdersPage() {
                 )
               }
             >
-              {db.orders.length ? 'Try a different status or search.' : 'Orders placed in the app, and requests you send, will appear here.'}
+              {all.length ? 'Try a different status or search.' : 'Orders placed in the app, and requests customers confirm, will appear here.'}
             </EmptyState>
           }
         />

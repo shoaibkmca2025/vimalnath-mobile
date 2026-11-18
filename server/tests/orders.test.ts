@@ -211,7 +211,13 @@ test('request: staff send an order; the customer sees its details and confirms i
   const inventory = await staff('inventory');
   assert.equal((await adminOrders(inventory.headers)).some((order) => order.id === sent!.id), false);
 
+  // Not received until the phone syncs; then the first time is kept.
+  assert.equal(sent!.customerSeenAt, undefined);
   const [seen] = (await ravi.orders()).orders as ShopOrder[];
+  const received = (await adminOrders(desk.headers)).find((order) => order.id === sent!.id)!.customerSeenAt;
+  assert.ok(received);
+  await ravi.orders();
+  assert.equal((await adminOrders(desk.headers)).find((order) => order.id === sent!.id)!.customerSeenAt, received);
   assert.deepEqual([seen!.status, seen!.source, seen!.details?.customer, seen!.details?.total, seen!.details?.lines.length], ['Requested', 'admin', 'Site B', 3000, 2]);
   assert.match(seen!.mobileEventId, /^admin:/);
 

@@ -110,8 +110,14 @@ export async function placeOrder(sql: Sql, deviceId: number, eventId: string, or
 /**
  * One phone's orders for GET /v1/app/orders: the shop's number, status and history. Internal and inventory notes stay out.
  * An order the shop sent ('admin') isn't on the phone yet, so it also carries its details, for the customer to confirm.
+ * The first time a request reaches the phone is recorded, so staff can see it arrived.
  */
-export const appOrders = (sql: Sql, deviceId: number) => sql`
+export async function appOrders(sql: Sql, deviceId: number) {
+  await sql`update orders set customer_seen_at = now() where device_id = ${deviceId} and source = 'admin' and customer_seen_at is null`;
+  return phoneOrders(sql, deviceId);
+}
+
+const phoneOrders = (sql: Sql, deviceId: number) => sql`
   select o.id::text as id, o.number, initcap(o.status) as status, o.client_order_id as "mobileOrderId", o.client_event_id as "mobileEventId", o.source,
     (select json_agg(json_build_object('status', initcap(e.status), 'at', e.at) order by e.at) from order_events e where e.order_id = o.id) as history,
     case when o.source = 'admin' then json_strip_nulls(json_build_object(
@@ -171,6 +177,7 @@ export function orderAdminRoutes(sql: Sql) {
             from order_lines l where l.order_id = o.id),
           'history', (select json_agg(json_build_object('status', e.status, 'at', e.at, 'by', e.by) order by e.at) from order_events e where e.order_id = o.id),
           'source', o.source,
+          'customerSeenAt', o.customer_seen_at,
           'internalNote', case when o.internal_note is not null then json_build_object('text', o.internal_note, 'at', o.internal_note_at, 'by', o.internal_note_by) end,
           'inventoryNote', case when o.inventory_note is not null then json_build_object('text', o.inventory_note, 'at', o.inventory_note_at, 'by', o.inventory_note_by) end,
           'appUser', json_build_object('id', d.id, 'label', d.label),

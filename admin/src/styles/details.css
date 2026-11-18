@@ -1033,3 +1033,125 @@
 .table-scroll .table--packing {
   min-width: 0;
 }
+
+/* ---------- Order Requests: a red badge for new customer updates ---------- */
+
+.nav-link__icon {
+  position: relative;
+  display: inline-flex;
+}
+
+.alert-badge {
+  position: absolute;
+  top: -8px;
+  right: -10px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 2px solid var(--surface);
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.topbar__menu-wrap {
+  position: relative;
+  display: contents;
+}
+
+.alert-dot {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .topbar__menu-wrap {
+    display: inline-flex;
+  }
+
+  .alert-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: block;
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--surface);
+    border-radius: 50%;
+    background: var(--danger);
+    pointer-events: none;
+  }
+}
+
+.new-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  color: #fff;
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.request-updates {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+  margin: 0;
+  padding: 0 0 0 14px;
+  list-style: none;
+  border-left: 2px solid var(--border);
+}
+
+.request-updates li {
+  position: relative;
+  display: grid;
+}
+
+.request-updates li::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: -20px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.request-updates li[data-kind='received']::before,
+.request-updates li[data-kind='sent']::before,
+.request-updates li[data-kind='resent']::before {
+  background: var(--tint);
+}
+
+.request-updates li[data-kind='confirmed']::before {
+  background: var(--success);
+}
+
+.request-updates li[data-kind='declined']::before,
+.request-updates li[data-kind='cancelled']::before {
+  background: var(--danger);
+}
+
+.request-updates li[data-kind='link']::before {
+  display: none;
+}
+
+.request-updates li[data-new] .request-updates__label {
+  color: var(--danger);
+}
+
+.request-updates li[data-new] .request-updates__label::after {
+  content: ' · new';
+  font-weight: 700;
+}
+
+.request-updates__label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
