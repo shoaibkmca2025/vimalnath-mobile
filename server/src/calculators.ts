@@ -38,20 +38,23 @@ const Sections = z
   // "s-101" and "S-101" are the same section to the people choosing one in the app.
   .refine((sections) => new Set(sections.map((section) => section.code.toLowerCase())).size === sections.length, 'Two sections have the same code.');
 
+/** The cutlist and the bar sections, in the order people see them: what the admin edits and what phones download. */
+export async function readCalculators(sql: Sql) {
+  const [systems, configurations, sections] = await Promise.all([
+    sql`select id, name, subtitle, photo from cutlist_systems order by sort_order`,
+    sql`select system_id, name, image from cutlist_configurations order by system_id, sort_order`,
+    sql`select code, name, system, bar_mm as bar, dimensions, description from bar_sections order by sort_order`,
+  ]);
+  const bySystem = Object.fromEntries(SYSTEM_IDS.map((id) => [id, configurations.filter((row) => row.system_id === id).map(({ name, image }) => ({ name, image }))]));
+  return { cutlist: { systems, configurations: bySystem }, sections };
+}
+
 /** Module 8: the cutlist cards and configurations, and the bar sections. Every signed-in person reads them; Owners and Catalogue editors change them. */
 export function calculatorRoutes(sql: Sql) {
   const calculators = new Hono<Env>();
   const editors = only('owner', 'catalogue');
 
-  calculators.get('/calculators', async (c) => {
-    const [systems, configurations, sections] = await Promise.all([
-      sql`select id, name, subtitle, photo from cutlist_systems order by sort_order`,
-      sql`select system_id, name, image from cutlist_configurations order by system_id, sort_order`,
-      sql`select code, name, system, bar_mm as bar, dimensions, description from bar_sections order by sort_order`,
-    ]);
-    const bySystem = Object.fromEntries(SYSTEM_IDS.map((id) => [id, configurations.filter((row) => row.system_id === id).map(({ name, image }) => ({ name, image }))]));
-    return c.json({ cutlist: { systems, configurations: bySystem }, sections });
-  });
+  calculators.get('/calculators', async (c) => c.json(await readCalculators(sql)));
 
   // The whole cutlist at once: three cards and a couple of dozen configurations, in the order the app shows them.
   calculators.put('/cutlist', editors, jsonBody(z.object({ cutlist: Cutlist, version: Seen })), async (c) => {

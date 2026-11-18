@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { serverRequests } from '../src/data/server.ts';
+import { changed, serverRequests } from '../src/data/server.ts';
 import type { Category, Order, Product } from '../src/data/types.ts';
 
 const product = (id: string, mrp = 1500): Product => ({
@@ -97,4 +97,11 @@ test('calculator saves: the cutlist and the bar sections are sent whole, and onl
   assert.deepEqual(serverRequests('cutlist', cutlist, cutlist), []);
   const sections = [{ code: 'S-101', name: 'Frame', system: 'Sliding', bar: 6000, dimensions: '', description: '' }];
   assert.deepEqual(serverRequests('sections', sections, []), [{ path: '/bar-sections', method: 'PUT', body: { sections: [] } }]);
+});
+
+test('the activity log keeps only what changed: list items that differ, or the fields of an object', () => {
+  const [a, b, c] = [product('a'), product('b'), product('c')];
+  assert.deepEqual(changed([a, b], [a, product('b', 1600), c]), { before: [b], after: [product('b', 1600), c] });
+  assert.deepEqual(changed([a, b], [b, a]), { before: [], after: [] });
+  assert.deepEqual(changed({ phone: '', email: 'x@y.in', logo: '/l.png' }, { phone: '+91 22', email: 'x@y.in', logo: '/l.png' }), { before: { phone: '' }, after: { phone: '+91 22' } });
 });

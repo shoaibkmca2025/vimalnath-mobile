@@ -122,10 +122,16 @@ export const shopCategories: ShopCategory[] = [
   product('Sliding & Swing Doors', 'doors', 'hardware-tsl-11-kit'),
 ];
 
-const byId = new Map(shopProducts.map((product) => [product.id, product]));
+const builtInById = new Map(shopProducts.map((product) => [product.id, product]));
+let byId = builtInById;
+
+/** Module 11: lookups (cart, orders) use the shop's latest download. A product it no longer lists still shows as it was. */
+export function setShopProducts(products: ShopProduct[]) {
+  byId = new Map(products.map((product) => [product.id, product]));
+}
 
 export function findShopProduct(id: string): ShopProduct | undefined {
-  return byId.get(id);
+  return byId.get(id) ?? builtInById.get(id);
 }
 
 export function productTitle(product: ShopProduct): string {

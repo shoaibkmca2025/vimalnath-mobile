@@ -11,8 +11,9 @@ import { InsetGroup, ValueRow } from '@/components/InsetGroup';
 import { QtyStepper } from '@/components/QtyStepper';
 import { Screen } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
-import { catalogPages, findShopProduct, formatINR, productTitle } from '@/data/shop';
+import { findShopProduct, formatINR, productTitle } from '@/data/shop';
 import { trackAdminActivity } from '@/lib/admin-sync';
+import { useAppContent } from '@/lib/content-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { useCart } from '@/providers/CartProvider';
 import { colors, radius, tabularNums, type } from '@/theme';
@@ -24,6 +25,8 @@ const SOURCE_NAMES = { master: 'Master Catalogue', office: 'Office Partition Pri
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  // Subscribing also re-reads the product when a download from the shop lands.
+  const { catalogPages } = useAppContent();
   const product = findShopProduct(id ?? '');
   const { showToast } = useAppUI();
   const { add } = useCart();
@@ -68,7 +71,7 @@ export default function ProductScreen() {
     <Screen title={product.code} titleDisplay="inline" back={{ fallback: '/' }} grouped>
       <View style={styles.media}>
         {product.image ? (
-          <Image cachePolicy="memory" source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" transition={150} />
+          <Image cachePolicy="memory-disk" source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" transition={150} />
         ) : (
           <Ionicons name="cube-outline" size={56} color={colors.tertiaryLabel} />
         )}
@@ -152,7 +155,7 @@ export default function ProductScreen() {
             accessibilityLabel={`Open ${pageTitle}`}
             style={({ pressed }) => [styles.pageRow, pressed && styles.rowPressed]}
           >
-            <Image cachePolicy="memory" source={pageImage} style={styles.pageThumb} contentFit="cover" contentPosition="top" />
+            <Image cachePolicy="memory-disk" source={pageImage} style={styles.pageThumb} contentFit="cover" contentPosition="top" />
             <View style={{ flex: 1 }}>
               <Text style={type.subheadline}>{pageTitle}</Text>
               <Text style={styles.pageHint}>All sizes, finishes and MRP</Text>

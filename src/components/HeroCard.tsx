@@ -5,19 +5,14 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 
 import { useReduceMotion } from '@/hooks/useReduceMotion';
+import { useAppContent, type Banner } from '@/lib/content-sync';
 import { colors, radius, type } from '@/theme';
-
-const SLIDES = [
-  { image: require('../../assets/images/hero/hero-slide-1.webp') },
-  { image: require('../../assets/images/hero/hero-slide-2.webp') },
-  { image: require('../../assets/images/hero/hero-slide-3.webp') },
-  { image: require('../../assets/images/hero/hero-slide-4.webp') },
-];
 
 const AUTO_ADVANCE_MS = 5000;
 
-/** Memoized: it has no props, so typing or picking a category on the shop never re-renders it. */
+/** Memoized: it has no props, so typing or picking a category on the shop never re-renders it. The slides are the shop's home banners. */
 export const HeroCard = memo(function HeroCard() {
+  const { banners } = useAppContent();
   const [cardWidth, setCardWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   // Auto-advance stops for good once someone swipes, and never runs with Reduce Motion on.
@@ -31,18 +26,21 @@ export const HeroCard = memo(function HeroCard() {
     if (!cardWidth || reduceMotion || userControlled || !focused) return;
     const timer = setInterval(() => {
       setActiveIndex((current) => {
-        const next = (current + 1) % SLIDES.length;
+        const next = (current + 1) % banners.length;
         scrollRef.current?.scrollTo({ x: next * cardWidth, animated: true });
         return next;
       });
     }, AUTO_ADVANCE_MS);
     return () => clearInterval(timer);
-  }, [cardWidth, reduceMotion, userControlled, focused]);
+  }, [cardWidth, reduceMotion, userControlled, focused, banners.length]);
 
   const onMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!cardWidth) return;
     setActiveIndex(Math.round(event.nativeEvent.contentOffset.x / cardWidth));
   };
+
+  // Staff can switch every banner off.
+  if (!banners.length) return null;
 
   return (
     <View style={styles.card} onLayout={(event) => setCardWidth(event.nativeEvent.layout.width)}>
@@ -57,9 +55,9 @@ export const HeroCard = memo(function HeroCard() {
           onMomentumScrollEnd={onMomentumScrollEnd}
           scrollEventThrottle={16}
         >
-          {SLIDES.map((slide, index) => (
-            <View key={index} style={{ width: cardWidth }}>
-              <Slide image={slide.image} position={index + 1} />
+          {banners.map((banner, index) => (
+            <View key={banner.id} style={{ width: cardWidth }}>
+              <Slide banner={banner} position={index + 1} count={banners.length} />
             </View>
           ))}
         </ScrollView>
@@ -67,22 +65,22 @@ export const HeroCard = memo(function HeroCard() {
 
       {/* Page indicator, as in iOS: swiping changes the page; the dots only show where you are. */}
       <View style={styles.dots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        {SLIDES.map((_, index) => (
-          <View key={index} style={[styles.dot, index === activeIndex && styles.dotActive]} />
+        {banners.map((banner, index) => (
+          <View key={banner.id} style={[styles.dot, index === activeIndex && styles.dotActive]} />
         ))}
       </View>
     </View>
   );
 });
 
-function Slide({ image, position }: { image: number; position: number }) {
+function Slide({ banner, position, count }: { banner: Banner; position: number; count: number }) {
   return (
     <View
       style={styles.slide}
       accessible
-      accessibilityLabel={`New collection 2026. Systems that move with you. Sliding, folding and slim partition solutions. Slide ${position} of ${SLIDES.length}.`}
+      accessibilityLabel={`${[banner.kicker, banner.headline, banner.body].filter(Boolean).join('. ')}. Slide ${position} of ${count}.`}
     >
-      <Image cachePolicy="memory" source={image} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+      <Image cachePolicy="memory-disk" source={banner.image} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
       <LinearGradient
         colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.62)']}
         locations={[0, 0.45, 1]}
@@ -90,9 +88,9 @@ function Slide({ image, position }: { image: number; position: number }) {
       />
 
       <View style={styles.copy}>
-        <Text style={styles.kicker}>NEW COLLECTION · 2026</Text>
-        <Text style={styles.headline}>Systems that move with you.</Text>
-        <Text style={styles.body}>Sliding, folding and slim partition solutions.</Text>
+        {banner.kicker ? <Text style={styles.kicker}>{banner.kicker.toUpperCase()}</Text> : null}
+        <Text style={styles.headline}>{banner.headline}</Text>
+        {banner.body ? <Text style={styles.body}>{banner.body}</Text> : null}
       </View>
     </View>
   );

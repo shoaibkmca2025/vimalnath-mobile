@@ -1,3 +1,5 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
+
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -12,10 +14,22 @@ type Options = {
   trustProxy: boolean;
   checkDatabase: () => Promise<unknown>;
   requestsPerMinute?: number;
+  /** Set on a host anyone can reach (e.g. Render free): only our Cloudflare Worker knows it, and it says who the visitor is. */
+  proxySecret?: string;
 };
 
+declare module 'hono' {
+  interface ContextVariableMap {
+    /** The visitor's address, as our own Worker reported it (only with a proxy secret). */
+    client?: string;
+  }
+}
+
 /** Behind a proxy, the last X-Forwarded-For entry is the one the proxy added; earlier ones can be faked. */
-export const clientOf = (c: Context, trustProxy: boolean) => (trustProxy && c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim()) || getConnInfo(c).remote.address || 'unknown';
+export const clientOf = (c: Context, trustProxy: boolean) =>
+  c.get('client') || (trustProxy && c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim()) || getConnInfo(c).remote.address || 'unknown';
+
+const sameSecret = (given: string, secret: string) => timingSafeEqual(createHash('sha256').update(given).digest(), createHash('sha256').update(secret).digest());
 
 // shortcut: counts live in this process, so they reset on restart. Move them to the database when the API runs on more than one server.
 function rateLimit(limit: number, keyOf: (c: Context) => string): MiddlewareHandler {
@@ -39,7 +53,7 @@ function rateLimit(limit: number, keyOf: (c: Context) => string): MiddlewareHand
   };
 }
 
-export function createApp({ adminOrigin, production, trustProxy, checkDatabase, requestsPerMinute = 300 }: Options) {
+export function createApp({ adminOrigin, production, trustProxy, checkDatabase, requestsPerMinute = 300, proxySecret }: Options) {
   const app = new Hono();
 
   const limit = rateLimit(requestsPerMinute, (c) => clientOf(c, trustProxy));
@@ -49,6 +63,16 @@ export function createApp({ adminOrigin, production, trustProxy, checkDatabase, 
   // The app and its web version show media from other addresses, so other sites may embed it.
   const mediaHeaders = secureHeaders({ crossOriginResourcePolicy: 'cross-origin' });
   app.use((c, next) => (c.req.path.startsWith('/v1/media/') ? mediaHeaders : pageHeaders)(c, next));
+  if (proxySecret) {
+    // Calls that skip our Worker are refused; the host's health check stays open.
+    app.use('/v1/*', async (c, next) => {
+      if (c.req.path !== '/v1/health') {
+        if (!sameSecret(c.req.header('x-proxy-secret') ?? '', proxySecret)) throw new HTTPException(403, { message: 'Use the shop’s address for this.' });
+        c.set('client', c.req.header('x-client-ip') || undefined);
+      }
+      await next();
+    });
+  }
   if (production && trustProxy) {
     app.use(async (c, next) => {
       if (c.req.header('x-forwarded-proto') === 'http') throw new HTTPException(403, { message: 'This API only works over https.' });

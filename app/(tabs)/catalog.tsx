@@ -3,11 +3,13 @@ import * as WebBrowser from 'expo-web-browser';
 import { CatalogueCard } from '@/components/CatalogueCard';
 import { InsetGroup } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
-import { catalogues, type Catalogue } from '@/data/catalogues';
+import type { Catalogue } from '@/data/catalogues';
+import { useAppContent } from '@/lib/content-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors } from '@/theme';
 
 export default function CatalogScreen() {
+  const { catalogues } = useAppContent();
   const { showToast } = useAppUI();
 
   const open = async (catalogue: Catalogue) => {

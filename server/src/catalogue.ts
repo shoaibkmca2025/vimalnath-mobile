@@ -58,29 +58,32 @@ const PriceList = z.object({
 });
 
 
+/** Everything in the catalogue, in the order people see it: what the admin edits and what phones download. */
+export async function readCatalogue(sql: Sql) {
+  const [products, categories, catalogues, pages] = await Promise.all([
+    sql`
+      select p.id, p.code, p.name, p.category_id as category, p.section, p.image,
+        json_build_object('source', p.catalogue_source, 'page', p.catalogue_page) as "catalogPage",
+        coalesce((select json_agg(json_strip_nulls(json_build_object('label', o.label, 'code', o.code, 'mrp', o.mrp)) order by o.sort_order)
+          from product_options o where o.product_id = p.id), '[]') as options,
+        coalesce((select json_agg(json_build_object('label', s.label, 'value', s.value) order by s.sort_order)
+          from product_specs s where s.product_id = p.id), '[]') as specs,
+        p.featured, p.visible
+      from products p order by p.sort_order, p.id`,
+    sql`select id, label, image, image_fit as fit, visible from categories order by sort_order`,
+    sql`select number, kicker, title, meta, tone, url from price_lists order by sort_order`,
+    sql`select source || '-' || page as key, image from catalogue_pages order by source, page`,
+  ]);
+  return { products, categories, catalogues, catalogPages: Object.fromEntries(pages.map((page) => [page.key, page.image])) };
+}
+
 /** The catalogue under /v1/admin: every signed-in staff member reads it; Owners and Catalogue editors change it. */
 export function catalogueRoutes(sql: Sql) {
   const catalogue = new Hono<Env>();
   const editors = only('owner', 'catalogue');
 
   // The whole catalogue in the admin's shape (about 250 KB for the real one), so its pages search and filter it themselves.
-  catalogue.get('/catalogue', async (c) => {
-    const [products, categories, catalogues, pages] = await Promise.all([
-      sql`
-        select p.id, p.code, p.name, p.category_id as category, p.section, p.image,
-          json_build_object('source', p.catalogue_source, 'page', p.catalogue_page) as "catalogPage",
-          coalesce((select json_agg(json_strip_nulls(json_build_object('label', o.label, 'code', o.code, 'mrp', o.mrp)) order by o.sort_order)
-            from product_options o where o.product_id = p.id), '[]') as options,
-          coalesce((select json_agg(json_build_object('label', s.label, 'value', s.value) order by s.sort_order)
-            from product_specs s where s.product_id = p.id), '[]') as specs,
-          p.featured, p.visible
-        from products p order by p.sort_order, p.id`,
-      sql`select id, label, image, image_fit as fit, visible from categories order by sort_order`,
-      sql`select number, kicker, title, meta, tone, url from price_lists order by sort_order`,
-      sql`select source || '-' || page as key, image from catalogue_pages`,
-    ]);
-    return c.json({ products, categories, catalogues, catalogPages: Object.fromEntries(pages.map((page) => [page.key, page.image])) });
-  });
+  catalogue.get('/catalogue', async (c) => c.json(await readCatalogue(sql)));
 
   // Saves whole products, new or changed, with their options and specs. Five queries however many products, so hiding 650 at once stays quick.
   const ProductsSave = z.object({

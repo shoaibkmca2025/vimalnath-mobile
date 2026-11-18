@@ -1,10 +1,12 @@
 import {
+  BellIcon,
   BookOpenIcon,
   CalculatorIcon,
   CaretRightIcon,
   ClockCounterClockwiseIcon,
   CurrencyInrIcon,
   DeviceMobileIcon,
+  FolderSimpleIcon,
   GearSixIcon,
   GridFourIcon,
   ImagesIcon,
@@ -101,13 +103,20 @@ export function AppShell() {
         { to: '/banners', label: 'Home Banners', icon: ImagesIcon },
         { to: '/videos', label: 'Installation Videos', icon: PlayCircleIcon },
         { to: '/more-apps', label: 'More Apps', icon: GridFourIcon },
+        // Uploading is for Owners and Catalogue editors, so the library is too.
+        ...(session?.role === 'sales' ? [] : [{ to: '/media', label: 'Media Library', icon: FolderSimpleIcon }]),
       ],
     },
     {
       title: 'System',
       items: [
         { to: '/activity', label: 'Activity', icon: ClockCounterClockwiseIcon },
-        ...(session?.role === 'owner' ? [{ to: '/staff', label: 'Staff', icon: UserGearIcon }] : []),
+        ...(session?.role === 'owner'
+          ? [
+              { to: '/staff', label: 'Staff', icon: UserGearIcon },
+              { to: '/notifications', label: 'Notifications', icon: BellIcon },
+            ]
+          : []),
         { to: '/settings', label: 'Settings', icon: GearSixIcon },
       ],
     },

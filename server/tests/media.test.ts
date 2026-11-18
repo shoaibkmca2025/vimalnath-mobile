@@ -109,3 +109,39 @@ test('access: only Owners and Catalogue editors upload; anyone can view', { skip
   assert.equal((await get('/v1/media/0123456789abcdef01234567.webp')).status, 404);
   assert.equal((await get('/v1/media/../../etc/passwd')).status, 404);
 });
+
+type LibraryFile = { id: string; name: string; url: string; usedBy: { label: string; to: string }[] };
+const library = async (cookie: string) => (await (await app.request('/v1/admin/media', { headers: { ...headers, Cookie: cookie } })).json()) as LibraryFile[];
+const remove = (path: string, cookie: string, method = 'DELETE') => app.request(`/v1/admin/media${path}`, { method, headers: { ...headers, Cookie: cookie } });
+const uploaded = async (cookie: string, name: string) => (await (await upload(await photo(400, 300).png().toBuffer(), 'image/png', cookie, name)).json()) as { id: string; url: string };
+
+test('library: every upload with where it is used; a used file can’t be deleted, an unused one can', { skip }, async () => {
+  const owner = await staff('owner');
+  const [used, spare] = [await uploaded(owner, 'banner.png'), await uploaded(owner, 'spare.png')];
+  await sql`insert into banners ${sql({ id: 'b-media', image: used.url, kicker: '', headline: 'Monsoon sale', body: '', active: true, sort_order: 0 })}`;
+
+  const files = await library(owner);
+  assert.deepEqual(files.find((file) => file.id === used.id)!.usedBy, [{ label: 'Home banner: Monsoon sale', to: '/banners' }]);
+  assert.deepEqual(files.find((file) => file.id === spare.id)!.usedBy, []);
+  assert.equal(files.find((file) => file.id === spare.id)!.name, 'spare.png');
+
+  const refused = await remove(`/${used.id}`, owner);
+  assert.equal(refused.status, 409);
+  assert.match(((await refused.json()) as { error: { message: string } }).error.message, /Home banner: Monsoon sale/);
+  assert.equal((await get(used.url)).status, 200);
+  assert.equal((await remove(`/${spare.id}`, owner)).status, 204);
+  assert.equal((await get(spare.url)).status, 404);
+  assert.equal((await library(await staff('sales'))).length, undefined);
+});
+
+test('cleanup: only Owners; removes unused files older than a day, keeps used and new ones', { skip }, async () => {
+  const owner = await staff('owner');
+  const [old, fresh, logo] = [await uploaded(owner, 'old.png'), await uploaded(owner, 'fresh.png'), await uploaded(owner, 'logo.png')];
+  await sql`insert into settings (key, value) values ('logo', ${logo.url}) on conflict (key) do update set value = excluded.value`;
+  await sql`update media_files set uploaded_at = now() - interval '2 days' where id in ${sql([old.id, logo.id])}`;
+
+  assert.equal((await remove('/cleanup', await staff('catalogue'), 'POST')).status, 403);
+  const res = await remove('/cleanup', owner, 'POST');
+  assert.deepEqual(await res.json(), { removed: 1 });
+  assert.deepEqual([(await get(old.url)).status, (await get(fresh.url)).status, (await get(logo.url)).status], [404, 200, 200]);
+});

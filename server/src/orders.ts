@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql } from 'postgres';
 import { z } from 'zod';
 
+import { queueOrderEvent } from './notifications.ts';
 import { only, type Env } from './staff.ts';
 import { jsonBody, parse } from './validate.ts';
 
@@ -80,10 +81,11 @@ export async function placeOrder(sql: Sql, deviceId: number, eventId: string, or
     const placed = Date.parse(order.createdAt);
     const placedAt = Number.isFinite(placed) && placed <= Date.now() + DAY ? new Date(placed) : new Date();
     const [{ next }] = (await tx`select nextval('order_numbers')::int as next`) as unknown as [{ next: number }];
+    // padStart never cuts, so number 10000 becomes VSC-10000.
+    const number = `VSC-${String(next).padStart(4, '0')}`;
     const [row] = await tx`
       insert into orders ${tx({
-        // padStart never cuts, so number 10000 becomes VSC-10000.
-        number: `VSC-${String(next).padStart(4, '0')}`,
+        number,
         device_id: deviceId,
         client_event_id: eventId,
         client_order_id: order.id,
@@ -99,6 +101,9 @@ export async function placeOrder(sql: Sql, deviceId: number, eventId: string, or
     if (!row) return;
     await tx`insert into order_lines ${tx(lines.map((line) => ({ order_id: row.id, ...line })))}`;
     await tx`insert into order_events ${tx({ order_id: row.id, status: 'placed', at: placedAt, by: 'App' })}`;
+    await queueOrderEvent(tx, row.id, 'placed');
+    // Module 12: listed on the Activity page beside staff changes.
+    await tx`insert into activity_log ${tx({ by: 'App', area: 'orders', summary: `Order ${number} placed in the app for ${order.customer}`, to_path: `/orders/${row.id}` })}`;
   });
 }
 
@@ -256,6 +261,8 @@ export function orderAdminRoutes(sql: Sql) {
       const allowed = inventory(role) ? tx`and status in ${tx([...INVENTORY_STATUSES])}` : tx``;
       const changed = await tx`update orders set status = ${status} where id in ${tx(ids)} and status <> ${status} ${allowed} returning id`;
       if (changed.length) await tx`insert into order_events ${tx(changed.map((row) => ({ order_id: row.id, status, by })))}`;
+      // Module 10: the customer hears about it (if their phone takes notifications); sent after this commits.
+      for (const row of changed) await queueOrderEvent(tx, row.id, status);
     });
     return c.json({ orders: await orders(sql`o.id in ${sql(ids)}`) });
   });

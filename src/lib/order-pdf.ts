@@ -1,9 +1,11 @@
 import { formatINR } from '@/data/shop';
+import type { ShopSettings } from '@/lib/content-sync';
 import { escapeHtml } from '@/lib/pdf-html';
 import { orderLineTotal, type Order } from '@/providers/OrdersProvider';
 
-/** Builds the printable HTML for an order — handed to expo-print to render as an A4 PDF. */
-export function buildOrderHtml(order: Order): string {
+/** Builds the printable HTML for an order — handed to expo-print to render as an A4 PDF. `company` is the shop's latest details (Module 11). */
+export function buildOrderHtml(order: Order, company: ShopSettings): string {
+  const contact = [company.address, company.phone, company.email, company.website].filter(Boolean).join(' · ');
   const dateStyle = { year: 'numeric', month: 'long', day: 'numeric' } as const;
   const placedOn = new Date(order.createdAt).toLocaleDateString(undefined, dateStyle);
   const generatedOn = new Date().toLocaleDateString(undefined, dateStyle);
@@ -34,6 +36,7 @@ export function buildOrderHtml(order: Order): string {
           .header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 2px solid #0b1f4d; padding-bottom: 14px; margin-bottom: 18px; }
           .brand { font-size: 12px; letter-spacing: 1.5px; color: #5a6b8c; text-transform: uppercase; }
           .title { font-size: 24px; font-weight: 700; margin-top: 4px; }
+          .contact { margin-top: 4px; font-size: 11px; color: #5a6b8c; }
           .meta { text-align: right; font-size: 12px; color: #5a6b8c; line-height: 1.6; }
           .meta b { color: #0b1f4d; }
           .party { margin-bottom: 16px; padding: 12px 14px; background: #f5f8ff; border-radius: 10px; font-size: 12px; line-height: 1.6; }
@@ -55,8 +58,9 @@ export function buildOrderHtml(order: Order): string {
       <body>
         <div class="header">
           <div>
-            <div class="brand">Vimalnath Sales Corporation</div>
+            <div class="brand">${escapeHtml(company.companyName)}</div>
             <div class="title">Purchase Order</div>
+            ${contact ? `<div class="contact">${escapeHtml(contact)}</div>` : ''}
           </div>
           <div class="meta">
             <div><b>Order</b> ${escapeHtml(order.number)}</div>
@@ -80,9 +84,9 @@ export function buildOrderHtml(order: Order): string {
           <div class="grand"><span>Total (MRP)</span><span>${escapeHtml(formatINR(order.total))}</span></div>
         </div>
         ${unpriced ? `<div class="note">${unpriced} item${unpriced > 1 ? 's are' : ' is'} priced as per the Taiton catalogue and not included in the total.</div>` : ''}
-        <div class="note">Prices are MRP as per the Taiton price list, Feb-2026.</div>
+        <div class="note">Prices are MRP from the price list ${escapeHtml(company.priceListEdition)}.</div>
 
-        <div class="footer">Vimalnath Sales Corporation · ${escapeHtml(order.number)} · Generated on ${escapeHtml(generatedOn)}</div>
+        <div class="footer">${escapeHtml(company.companyName)} · ${escapeHtml(order.number)} · Generated on ${escapeHtml(generatedOn)}</div>
       </body>
     </html>
   `;

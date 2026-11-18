@@ -1,6 +1,6 @@
 # Vimalnath API
 
-The backend for the mobile app and admin panel, following the plan in `docs/Vimalnath-Backend-Modules.pdf`. Built so far: Module 1 (API server, database, security, deployment), Module 2 (staff sign-in and roles), Module 3 (app users), Module 4 (catalogue: products, categories and price lists, edited in the admin), Module 5 (photo and PDF uploads), Module 6 (orders), Module 7 (customers), Module 8 (calculator settings: 8.1, 8.2 and 8.5) and Module 9 (app content and settings: 9.1 to 9.6, saved and edited in the admin; phones get them with app sync, Module 11).
+The backend for the mobile app and admin panel, following the plan in `docs/Vimalnath-Backend-Modules.pdf`. Built: Modules 1 to 12. The parts left are the glass formula numbers and material rules (8.3, 8.4), which stay in the app's code while Vimalnath confirms them; optional phone sign-in (3.3); and WhatsApp alerts (10.2). Push and email are built but only send once the accounts are set up (see Notifications below).
 
 Needs Node 24.2 or newer, which runs the TypeScript directly, so there is no build step.
 
@@ -35,14 +35,18 @@ src/
   server.ts    Starts the API and shuts it down cleanly
   app.ts       Routes, security, request limits and the one error format
   staff.ts     Staff sign-in, roles and everything under /v1/admin
-  app-users.ts The app's shop connection (/v1/app) and the admin's App Users (/v1/admin/app-users)
+  app-users.ts The app's shop connection (/v1/app, including GET /v1/app/content for app sync) and the admin's App Users (/v1/admin/app-users)
   catalogue.ts Products, categories, price lists and the MRP history (/v1/admin/price-history) under /v1/admin (read: all staff; change: Owner and Catalogue editor)
   customers.ts Customers (/v1/admin/customers): each app user belongs to one; notes, tags and merging
   calculators.ts Cutlist systems, configurations and bar sections (/v1/admin/calculators, /cutlist, /bar-sections; change: Owner and Catalogue editor)
   content.ts   Banners, installation videos, More Apps and settings (/v1/admin/content, /banners, /videos, /more-apps; /settings is Owner only)
+  activity.ts  The activity log (/v1/admin/activity): who changed what and when; Owners see everyone's, others their own; nothing edits or deletes it
   versions.ts  A save counter per whole list (/v1/admin/versions): a save from an out-of-date admin tab is refused (409) instead of replacing a newer change
   orders.ts    Orders from the app (numbered VSC-0001 on), and /v1/admin/orders for order requests staff send to a customer's app, status changes, and internal and inventory notes. The Inventory manager role sees only confirmed, packed, dispatched and delivered orders, and moves them between Pending (confirmed), Packed and Dispatched
-  media.ts     Uploads (POST /v1/admin/media: photos up to 5 MB, PDFs up to 25 MB) and serving them at /v1/media/<id>.webp, -md.webp, -sm.webp or .pdf
+  media.ts     Uploads (POST /v1/admin/media: photos up to 5 MB, PDFs up to 25 MB), serving them at /v1/media/<id>.webp, -md.webp, -sm.webp or .pdf,
+               and the media library: where each file is used, delete one nothing uses, and Owner cleanup of unused files over a day old
+  notifications.ts  New-order emails to staff and order updates pushed to customers: queued with the change, sent every 10 seconds, three tries,
+               logged; wording, recipients and broadcasts under /v1/admin/notifications (Owner only)
   validate.ts  Checks input; a route uses jsonBody(schema)
   config.ts    Reads and checks the settings at startup
   migrate.ts   Applies new migrations
@@ -77,3 +81,13 @@ These depend on where it's hosted:
 - Point an uptime monitor at `/v1/health`. It returns 503 when the database is down.
 - The `Dockerfile` here is the API image. The repo-root `docker-compose.yml` is for one computer, over plain http.
 - Set up a staging copy and automatic deploys. `.github/workflows/server.yml` already runs the checks.
+
+## Notifications (Module 10)
+
+Everything is built; sending needs two accounts only the shop can set up:
+
+- **Staff emails:** add `SMTP_URL` (and optionally `MAIL_FROM`) to the server's settings, e.g. a Gmail app password:
+  `smtps://you%40gmail.com:app-password@smtp.gmail.com`. Until then each email shows as "Not set up" in the delivery log.
+- **Push to customers:** build the app with an Expo (EAS) project that has Firebase (Android) and Apple push credentials,
+  so phones can get a push address. Expo Go can't receive push on Android. The server needs nothing for push unless
+  enhanced push security is on in the Expo dashboard (then set `EXPO_ACCESS_TOKEN`).

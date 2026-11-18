@@ -1,8 +1,12 @@
 import { Hono } from 'hono';
+import { compress } from 'hono/compress';
 import { HTTPException } from 'hono/http-exception';
 import type { Sql } from 'postgres';
 import { z } from 'zod';
 
+import { readCalculators } from './calculators.ts';
+import { readCatalogue } from './catalogue.ts';
+import { readContent } from './content.ts';
 import { AppOrder, appOrders, placeOrder, respondToRequest } from './orders.ts';
 import { newToken, only, sha256, type Env } from './staff.ts';
 import { jsonBody, parse } from './validate.ts';
@@ -26,6 +30,26 @@ const ActivityEvent = z.object({
   optionLabel: z.string().max(500).optional(),
   price: z.number().optional(),
 });
+
+/**
+ * Module 11: everything the app shows, as people in the app see it. Hidden products and categories, and banners
+ * switched off, stay in the admin.
+ */
+export async function appContent(sql: Sql) {
+  const [{ products, categories, catalogues, catalogPages }, { cutlist, sections }, { banners, videoSections, moreApps, settings }] = await Promise.all([readCatalogue(sql), readCalculators(sql), readContent(sql)]);
+  return {
+    products: products.filter((product) => product.visible).map(({ visible: _, ...product }) => product),
+    categories: categories.filter((category) => category.visible).map(({ visible: _, ...category }) => category),
+    catalogPages,
+    priceLists: catalogues,
+    cutlist,
+    sections,
+    banners: banners.filter((banner) => banner.active).map(({ active: _, ...banner }) => banner),
+    videoSections,
+    moreApps,
+    settings,
+  };
+}
 
 /** Everything under /v1/app: the customer's phone, signed in with the token the shop gave them. */
 export function appRoutes(sql: Sql) {
@@ -61,6 +85,21 @@ export function appRoutes(sql: Sql) {
   app.post('/activity', jsonBody(ActivityEvent), async (c) => {
     const { eventId, ...activity } = c.req.valid('json');
     await sql`insert into app_events (device_id, event_id, kind, body) values (${c.get('deviceId')}, ${eventId}, 'activity', ${sql.json(activity)}) on conflict do nothing`;
+    return c.json({ received: true });
+  });
+
+  // The phone sends the version it has (11.2): if nothing changed it gets only the version back; otherwise everything, about 40 KB gzipped.
+  // shortcut: builds and fingerprints the whole catalogue on every check, and sends all of it when anything changed. Store a version
+  // that each save moves on, and send only changed rows, once checks pass a few a second or the catalogue passes a few MB.
+  app.get('/content', compress(), async (c) => {
+    const content = await appContent(sql);
+    const version = sha256(JSON.stringify(content)).slice(0, 16);
+    return c.json(c.req.query('have') === version ? { version } : { version, content });
+  });
+
+  // Module 3.5: where Expo should send this phone's notifications; null when the person turns them off.
+  app.post('/push-token', jsonBody(z.object({ token: z.string().regex(/^Expo(nent)?PushToken\[[\w-]+\]$/, 'That is not an Expo push token.').nullable() })), async (c) => {
+    await sql`update app_devices set push_token = ${c.req.valid('json').token} where id = ${c.get('deviceId')}`;
     return c.json({ received: true });
   });
 

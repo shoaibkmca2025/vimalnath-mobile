@@ -1,7 +1,8 @@
 import { ConfigurationGridScreen } from '@/components/ConfigurationGridScreen';
-import { synchronizedConfigurations } from '@/data/cutlist';
+import { useAppContent } from '@/lib/content-sync';
 
 export default function SynchronizedScreen() {
+  const { configurations } = useAppContent();
   return (
     <ConfigurationGridScreen
       title="Synchronized System"
@@ -9,7 +10,7 @@ export default function SynchronizedScreen() {
       backLabel="Cutlist"
       backRoute="/cutlist"
       ownRoute="/synchronized"
-      configurations={synchronizedConfigurations}
+      configurations={configurations.synchronized}
     />
   );
 }

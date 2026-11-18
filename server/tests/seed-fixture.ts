@@ -37,5 +37,5 @@ export const seed: Seed = {
     configurations: { telescopic: [{ name: '1+0', image: '/media/c.jpg' }], synchronized: [], folding: [] },
   },
   banners: [{ id: 'hero-1', image: '/media/h.webp', kicker: 'New', headline: 'Move', body: 'Text', active: true }],
-  settings: { companyName: 'Vimalnath', tagline: 't', phone: '', email: '', website: '', address: '', defaultUnit: 'mm', priceListEdition: 'Feb 2026', developer: '4AM', appVersion: '1.0.0', minAppVersion: '', logo: '/media/l.png' },
+  settings: { companyName: 'Vimalnath', tagline: 't', phone: '', email: '', website: '', address: '', defaultUnit: 'mm', priceListEdition: 'Feb 2026', developer: '4AM', appVersion: '1.0.0', minAppVersion: '', kerfMm: '0', announcement: '', announcementFrom: '', announcementTo: '', logo: '/media/l.png' },
 };

@@ -5,10 +5,12 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FoldingIllustration } from '@/components/FoldingIllustration';
 import { Screen } from '@/components/Screen';
-import { cutlistSystems, type CutlistSystem } from '@/data/cutlist';
+import type { CutlistSystem } from '@/data/cutlist';
+import { useAppContent } from '@/lib/content-sync';
 import { colors, radius, type } from '@/theme';
 
 export default function CutlistScreen() {
+  const { cutlistSystems } = useAppContent();
   const open = (system: CutlistSystem) => {
     if (system.id === 'telescopic') router.push('/telescopic');
     else if (system.id === 'synchronized') router.push('/synchronized');
@@ -28,7 +30,7 @@ export default function CutlistScreen() {
           >
             <View style={styles.media}>
               {system.photo ? (
-                <Image cachePolicy="memory" source={system.photo} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+                <Image cachePolicy="memory-disk" source={system.photo} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
               ) : (
                 <FoldingIllustration />
               )}

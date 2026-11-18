@@ -1,4 +1,4 @@
-import { EyeIcon, EyeSlashIcon, PackageIcon, PlusIcon, StarIcon } from '@phosphor-icons/react';
+import { DownloadSimpleIcon, EyeIcon, EyeSlashIcon, PackageIcon, PlusIcon, StarIcon } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
@@ -14,6 +14,7 @@ import { useToast } from '@/components/useToast';
 import { lowestPrice, productTitle } from '@/data/products';
 import { useData } from '@/data/useData';
 import type { Product } from '@/data/types';
+import { downloadCsv } from '@/lib/csv';
 import { formatINR, formatNumber, plural } from '@/lib/format';
 
 const VIEWS = {
@@ -167,9 +168,29 @@ export default function ProductsPage() {
         title="Products"
         description={`Everything in the app’s Shop: ${plural(db.products.length, 'product')} across ${plural(db.categories.length, 'category', 'categories')}.`}
         actions={
-          <ButtonLink to="/products/new" variant="primary" icon={PlusIcon}>
-            New Product
-          </ButtonLink>
+          <>
+            {/* Module 12.3: products and prices, one row per option, as filtered here. */}
+            <Button
+              icon={DownloadSimpleIcon}
+              disabled={!rows.length}
+              onClick={() =>
+                downloadCsv(
+                  'vimalnath-products',
+                  ['Code', 'Name', 'Category', 'Section', 'Option', 'Option code', 'MRP', 'Shown in app'],
+                  rows.flatMap((product) => {
+                    const base = [product.code, productTitle(product), product.category, product.section];
+                    const shown = product.visible ? 'Yes' : 'No';
+                    return product.options.length ? product.options.map((option) => [...base, option.label, option.code ?? '', option.mrp, shown]) : [[...base, '', '', '', shown]];
+                  }),
+                )
+              }
+            >
+              Export CSV
+            </Button>
+            <ButtonLink to="/products/new" variant="primary" icon={PlusIcon}>
+              New Product
+            </ButtonLink>
+          </>
         }
       />
 

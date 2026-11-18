@@ -1,4 +1,4 @@
-import { CurrencyInrIcon, PercentIcon } from '@phosphor-icons/react';
+import { CurrencyInrIcon, DownloadSimpleIcon, PercentIcon } from '@phosphor-icons/react';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { Link, useBlocker, useSearchParams } from 'react-router';
 
@@ -16,6 +16,7 @@ import { readSession } from '@/data/session';
 import type { CatalogSource } from '@/data/types';
 import { useData } from '@/data/useData';
 import { api } from '@/lib/api';
+import { downloadCsv } from '@/lib/csv';
 import { cx } from '@/lib/cx';
 import { formatDateTime, formatINR, formatNumber, plural } from '@/lib/format';
 
@@ -192,10 +193,27 @@ export default function PricesPage() {
         title="Prices"
         description="The MRP of every option in the Shop. Change one by typing over it, or many at once when a new price list arrives. Nothing changes until you save, and every change is kept in History."
         actions={
-          canEdit && (
-            <Button icon={PercentIcon} onClick={() => setBulkOpen(true)} disabled={!inScope.length}>
-              Change Prices in Bulk
+          view === 'history' ? (
+            // Module 12.3: the price history as shown, newest first.
+            <Button
+              icon={DownloadSimpleIcon}
+              disabled={!history?.length}
+              onClick={() =>
+                downloadCsv(
+                  'vimalnath-price-history',
+                  ['When', 'Code', 'Product', 'Option', 'Old MRP', 'New MRP', 'By', 'Reason'],
+                  (history ?? []).map((change) => [change.at.slice(0, 16).replace('T', ' '), change.code, change.product, change.option, change.oldMrp ?? '', change.newMrp ?? '', change.by, change.reason]),
+                )
+              }
+            >
+              Export CSV
             </Button>
+          ) : (
+            canEdit && (
+              <Button icon={PercentIcon} onClick={() => setBulkOpen(true)} disabled={!inScope.length}>
+                Change Prices in Bulk
+              </Button>
+            )
           )
         }
       />

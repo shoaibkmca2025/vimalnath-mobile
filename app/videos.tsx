@@ -3,13 +3,15 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { InsetGroup } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
-import { installationVideoSections, type InstallationVideo } from '@/data/videos';
+import type { InstallationVideo } from '@/data/videos';
+import { useAppContent } from '@/lib/content-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, type } from '@/theme';
 
 const YOUTUBE_RED = '#ff0000';
 
 export default function InstallationVideosScreen() {
+  const { videoSections: installationVideoSections } = useAppContent();
   const { showToast } = useAppUI();
 
   // Linking hands YouTube links to the YouTube app when it's installed, otherwise to the browser.

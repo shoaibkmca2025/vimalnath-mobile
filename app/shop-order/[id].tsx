@@ -10,6 +10,7 @@ import { Screen } from '@/components/Screen';
 import { formatINR } from '@/data/shop';
 import { respondToShopOrder, useShopRequests } from '@/lib/admin-sync';
 import { confirmDestructive } from '@/lib/confirm';
+import { useAppContent } from '@/lib/content-sync';
 import { formatOrderDate } from '@/lib/format';
 import { buildOrderHtml } from '@/lib/order-pdf';
 import { pdfFileName, sharePdf } from '@/lib/pdf-export';
@@ -22,6 +23,7 @@ export default function ShopOrderScreen() {
   const order = useShopRequests().find((item) => item.id === id);
   const { showToast } = useAppUI();
   const [busy, setBusy] = useState<'confirm' | 'decline' | 'share' | null>(null);
+  const { settings } = useAppContent();
 
   if (!order) {
     return (
@@ -54,7 +56,7 @@ export default function ShopOrderScreen() {
   const share = async () => {
     setBusy('share');
     try {
-      const html = buildOrderHtml({ id: order.id, number, status: order.status, ...details });
+      const html = buildOrderHtml({ id: order.id, number, status: order.status, ...details }, settings);
       await sharePdf(html, pdfFileName(`${number} ${details.customer}`), `Share order ${number}`);
     } catch (err) {
       const reason = err instanceof Error && err.message ? err.message : 'Unknown error';

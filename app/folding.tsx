@@ -1,7 +1,8 @@
 import { ConfigurationGridScreen } from '@/components/ConfigurationGridScreen';
-import { foldingConfigurations } from '@/data/cutlist';
+import { useAppContent } from '@/lib/content-sync';
 
 export default function FoldingScreen() {
+  const { configurations } = useAppContent();
   return (
     <ConfigurationGridScreen
       title="Sliding Folding System"
@@ -9,7 +10,7 @@ export default function FoldingScreen() {
       backLabel="Cutlist"
       backRoute="/cutlist"
       ownRoute="/folding"
-      configurations={foldingConfigurations}
+      configurations={configurations.folding}
     />
   );
 }
