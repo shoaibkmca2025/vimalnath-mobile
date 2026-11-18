@@ -22,6 +22,7 @@ const app = createApp({
   adminOrigin: config.ADMIN_ORIGIN,
   production,
   trustProxy: config.TRUST_PROXY,
+  proxySecret: config.PROXY_SECRET,
   checkDatabase: () => sql`select 1`,
 });
 const admin = adminRoutes(sql, { adminOrigin: config.ADMIN_ORIGIN, production, trustProxy: config.TRUST_PROXY });

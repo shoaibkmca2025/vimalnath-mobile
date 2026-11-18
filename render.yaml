@@ -1,0 +1,28 @@
+# The API on Render's free plan (New → Blueprint, pick this repo). The admin's Cloudflare Worker passes /v1 to it.
+# Free services sleep after 15 minutes without visits and take about a minute to wake; they can't send SMTP email.
+services:
+  - type: web
+    name: vimalnath-api
+    runtime: docker
+    plan: free
+    region: singapore
+    rootDir: server
+    dockerfilePath: ./server/Dockerfile
+    dockerContext: ./server
+    healthCheckPath: /v1/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '10000'
+      - key: TRUST_PROXY
+        value: 'true'
+      - key: ADMIN_ORIGIN
+        value: https://vimalnath-admin.shoaibk-mca2024.workers.dev
+      # Entered once in Render: Neon's direct connection string (see deploy/README.md).
+      - key: DATABASE_URL
+        sync: false
+      # Entered once in Render: the same secret as the Worker's PROXY_SECRET.
+      - key: PROXY_SECRET
+        sync: false

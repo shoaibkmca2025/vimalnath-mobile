@@ -1,0 +1,14 @@
+{
+  "name": "vimalnath-deploy",
+  "private": true,
+  "description": "Cloudflare deployment: the admin and the API (as a container) on one Worker, and the app's web version on another.",
+  "scripts": {
+    "deploy:admin": "npm --prefix ../admin run build && wrangler deploy --config admin.jsonc",
+    "deploy:app": "cd .. && npx expo export -p web --output-dir dist && cd deploy && wrangler deploy --config app.jsonc"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261118.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.164.0"
+  }
+}

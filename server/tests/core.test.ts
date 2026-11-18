@@ -146,3 +146,22 @@ test('security: responses carry the protective headers', async () => {
   assert.ok(res.headers.get('Strict-Transport-Security'));
   assert.equal(res.headers.get('X-Content-Type-Options'), 'nosniff');
 });
+
+test('proxy secret: calls that skip the Worker are refused; health stays open; each visitor is counted on their own', async () => {
+  const SECRET = 'a-long-shared-secret-for-the-worker-0123456789';
+  const app = makeApp({ proxySecret: SECRET, requestsPerMinute: 1 });
+  app.get('/v1/app/ping', (c) => c.text('pong'));
+  const viaWorker = (client: string, secret = SECRET) => ({ headers: { 'x-proxy-secret': secret, 'x-client-ip': client, 'x-forwarded-for': '9.9.9.9' } });
+
+  assert.equal((await app.request('/v1/app/ping')).status, 403);
+  assert.equal((await app.request('/v1/app/ping', viaWorker('1.1.1.1', 'a-guess-that-is-the-wrong-secret-0123456789'))).status, 403);
+  assert.equal((await app.request('/v1/health')).status, 200);
+  // Everything arrives from the Worker's address, but limits follow the visitor it names.
+  assert.equal((await app.request('/v1/app/ping', viaWorker('1.1.1.1'))).status, 200);
+  assert.equal((await app.request('/v1/app/ping', viaWorker('2.2.2.2'))).status, 200);
+  assert.equal((await app.request('/v1/app/ping', viaWorker('1.1.1.1'))).status, 429);
+});
+
+test('settings: a proxy secret must be long', () => {
+  assert.throws(() => loadConfig({ DATABASE_URL: 'postgres://u:p@h/d', ADMIN_ORIGIN: ADMIN, PROXY_SECRET: 'short' }), /PROXY_SECRET: use at least 32 characters/);
+});

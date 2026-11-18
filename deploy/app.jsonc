@@ -1,0 +1,10 @@
+// The app's web version, static files only: `npm run deploy:app` from this folder.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "vimalnath-app",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "../dist",
+    "not_found_handling": "single-page-application"
+  }
+}
