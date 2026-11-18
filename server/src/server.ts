@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
 
+import { activityRoutes } from './activity.ts';
 import { createApp } from './app.ts';
 import { appRoutes, appUserAdminRoutes } from './app-users.ts';
 import { calculatorRoutes } from './calculators.ts';
@@ -9,6 +10,7 @@ import { customerRoutes } from './customers.ts';
 import { contentRoutes } from './content.ts';
 import { connect } from './db.ts';
 import { mediaAdminRoutes, mediaRoutes } from './media.ts';
+import { notificationRoutes, realSenders, startNotifier } from './notifications.ts';
 import { orderAdminRoutes } from './orders.ts';
 import { adminRoutes } from './staff.ts';
 import { versionRoutes } from './versions.ts';
@@ -28,6 +30,8 @@ admin.route('/', catalogueRoutes(sql));
 admin.route('/', calculatorRoutes(sql));
 admin.route('/', contentRoutes(sql));
 admin.route('/', versionRoutes(sql));
+admin.route('/', activityRoutes(sql));
+admin.route('/notifications', notificationRoutes(sql, { email: Boolean(config.SMTP_URL) }));
 admin.route('/media', mediaAdminRoutes(sql));
 admin.route('/orders', orderAdminRoutes(sql));
 admin.route('/customers', customerRoutes(sql));
@@ -36,8 +40,12 @@ app.route('/v1/app', appRoutes(sql));
 app.route('/v1/media', mediaRoutes(sql));
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => console.log(`API listening on port ${port}`));
+const stopNotifier = startNotifier(sql, realSenders(config));
 
 // Let requests in flight finish before the host replaces this process.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.once(signal, () => server.close(() => void sql.end().then(() => process.exit(0))));
+  process.once(signal, () => {
+    stopNotifier();
+    server.close(() => void sql.end().then(() => process.exit(0)));
+  });
 }

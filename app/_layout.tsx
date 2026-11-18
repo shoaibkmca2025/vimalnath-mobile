@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { startAdminSync } from '@/lib/admin-sync';
 import { loadSavedContent, startContentSync } from '@/lib/content-sync';
+import { startPush } from '@/lib/push';
 import { AppUIProvider } from '@/providers/AppUIProvider';
 import { CartProvider } from '@/providers/CartProvider';
 import { OrdersProvider } from '@/providers/OrdersProvider';
@@ -30,6 +31,8 @@ export default function RootLayout() {
   }, []);
   useEffect(() => startAdminSync(), []);
   useEffect(() => startContentSync(), []);
+  // Once navigation is mounted, so a tapped order update can open its order.
+  useEffect(() => (ready ? startPush() : undefined), [ready]);
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync();

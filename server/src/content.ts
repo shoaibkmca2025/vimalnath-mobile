@@ -68,10 +68,20 @@ const Settings = z
     priceListEdition: Text(80),
     appVersion: z.string().regex(VERSION, 'Enter the version like 1.2.0.'),
     minAppVersion: z.string().refine((version) => !version || VERSION.test(version), 'Enter the version like 1.2.0, or leave it empty.'),
+    // Module 8.6: the cutting loss the Bar Optimizer starts with.
+    // Module 9.7: an optional notice at the top of the app, between two dates; either can be left open.
+    announcement: Text(200),
+    announcementFrom: z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/, 'Pick a start date, or leave it empty.'),
+    announcementTo: z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/, 'Pick an end date, or leave it empty.'),
+    kerfMm: z.string().regex(/^\d{1,2}(\.\d)?$/, 'Enter the cutting loss in mm, e.g. 3 or 2.5.').refine((mm) => Number(mm) <= 20, 'Use 20 mm or less.'),
   })
   .refine((settings) => !settings.minAppVersion || compareVersions(settings.minAppVersion, settings.appVersion) <= 0, {
     error: 'The minimum version can’t be newer than the latest version.',
     path: ['minAppVersion'],
+  })
+  .refine((settings) => !settings.announcementFrom || !settings.announcementTo || settings.announcementFrom <= settings.announcementTo, {
+    error: 'The notice can’t end before it starts.',
+    path: ['announcementTo'],
   });
 
 /** Banners, videos, More Apps and settings, in the order people see them: what the admin edits and what phones download. */
@@ -87,8 +97,8 @@ export async function readContent(sql: Sql) {
     banners,
     videoSections: sections.map((section) => ({ title: section.title, videos: videos.filter((video) => video.section_id === section.id).map(({ title, detail, url }) => ({ title, detail, url })) })),
     moreApps,
-    // Databases imported before Module 9 have no minimum version: empty means none.
-    settings: { minAppVersion: '', ...Object.fromEntries(settings.map((row) => [row.key, row.value])) } as Record<string, string>,
+    // Databases imported before Modules 9, 8.6 and 9.7 have no minimum version (none), cutting loss (0 mm) or notice.
+    settings: { minAppVersion: '', kerfMm: '0', announcement: '', announcementFrom: '', announcementTo: '', ...Object.fromEntries(settings.map((row) => [row.key, row.value])) } as Record<string, string>,
   };
 }
 

@@ -111,7 +111,7 @@ test('more apps: saved in order; an app needs at least one secure store link', {
 
 test('settings: an Owner saves company details and update control; the developer line stays as it is', { skip }, async () => {
   const owner = await staff('owner');
-  const settings: Settings = { ...seed.settings, phone: '+91 22 4000 1234', email: 'sales@vimalnath.in', website: 'https://vimalnath.in', appVersion: '1.10.0', minAppVersion: '1.9.0', defaultUnit: 'in' };
+  const settings: Settings = { ...seed.settings, phone: '+91 22 4000 1234', email: 'sales@vimalnath.in', website: 'https://vimalnath.in', appVersion: '1.10.0', minAppVersion: '1.9.0', defaultUnit: 'in', kerfMm: '2.5', announcement: 'Closed 10–12 Nov for Diwali', announcementFrom: '2026-11-05', announcementTo: '2026-11-12' };
   assert.equal((await send('/settings', 'PUT', { settings: { ...settings, developer: 'Someone else' } }, owner)).status, 204);
   assert.deepEqual((await read()).settings, settings);
 });
@@ -125,6 +125,10 @@ test('settings: a minimum newer than the latest version, or a bad email, is refu
     [{ email: 'sales@' }, 'Enter an email address like sales@company.com.', 'settings.email'],
     [{ website: 'http://vimalnath.in' }, 'Use the secure address, starting with https://.', 'settings.website'],
     [{ phone: '12345' }, 'Enter a 10-digit number, with the area code for landlines.', 'settings.phone'],
+    [{ kerfMm: '25' }, 'Use 20 mm or less.', 'settings.kerfMm'],
+    [{ announcement: 'Closed for Diwali', announcementFrom: '2026-11-10', announcementTo: '2026-11-01' }, 'The notice can’t end before it starts.', 'settings.announcementTo'],
+    [{ announcementFrom: '10/11/2026' }, 'Pick a start date, or leave it empty.', 'settings.announcementFrom'],
+    [{ kerfMm: '3mm' }, 'Enter the cutting loss in mm, e.g. 3 or 2.5.', 'settings.kerfMm'],
   ] as const;
   for (const [change, message, field] of tries) assert.deepEqual(await reason(await send('/settings', 'PUT', { settings: { ...before, ...change } }, owner)), [400, message, field]);
   assert.deepEqual((await read()).settings, before);

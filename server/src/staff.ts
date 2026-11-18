@@ -92,7 +92,8 @@ export function adminRoutes(sql: Sql, { adminOrigin, production, trustProxy }: {
     await sql.begin(async (tx) => {
       await tx`delete from staff_sessions where expires_at < now()`;
       await tx`delete from sign_in_attempts where expires_at < now() or (email = ${email} and client = ${client})`;
-      await tx`insert into staff_sessions (token_hash, staff_id, expires_at) values (${sha256(token)}, ${row.id}, now() + interval '12 hours')`;
+      // The browser it came from, to tell sessions apart under Signed-in devices (Module 2.6).
+      await tx`insert into staff_sessions (token_hash, staff_id, expires_at, device) values (${sha256(token)}, ${row.id}, now() + interval '12 hours', ${(c.req.header('user-agent') ?? '').slice(0, 300)})`;
       await tx`update staff_users set last_sign_in_at = now() where id = ${row.id}`;
     });
     setCookie(c, COOKIE, token, cookie);
@@ -119,7 +120,7 @@ export function adminRoutes(sql: Sql, { adminOrigin, production, trustProxy }: {
     const token = getCookie(c, COOKIE);
     const hash = token ? sha256(token) : '';
     const [staff] = await sql<Staff[]>`
-      update staff_sessions s set expires_at = now() + interval '12 hours'
+      update staff_sessions s set expires_at = now() + interval '12 hours', last_used_at = now()
       from staff_users u
       where s.token_hash = ${hash} and s.expires_at > now() and u.id = s.staff_id and u.active
       returning u.id, u.name, u.email, u.role`;
@@ -134,6 +135,27 @@ export function adminRoutes(sql: Sql, { adminOrigin, production, trustProxy }: {
   admin.post('/auth/sign-out', async (c) => {
     await sql`delete from staff_sessions where token_hash = ${c.get('sessionHash')}`;
     deleteCookie(c, COOKIE, cookie);
+    return c.body(null, 204);
+  });
+
+  // Module 2.6: the devices you're signed in on, most recently used first.
+  admin.get('/auth/sessions', async (c) =>
+    c.json(
+      await sql`
+        select id, device, created_at as "createdAt", last_used_at as "lastUsedAt", token_hash = ${c.get('sessionHash')} as current
+        from staff_sessions where staff_id = ${c.get('staff').id} and expires_at > now() order by last_used_at desc`,
+    ),
+  );
+
+  // Signs out every other device, or one of them by id. Never this one (that's Sign Out) and never someone else's.
+  const signOutOthers = (c: Context<Env>, id?: number) =>
+    sql`delete from staff_sessions where staff_id = ${c.get('staff').id} and token_hash <> ${c.get('sessionHash')} ${id === undefined ? sql`` : sql`and id = ${id}`}`;
+  admin.delete('/auth/sessions', async (c) => {
+    await signOutOthers(c);
+    return c.body(null, 204);
+  });
+  admin.delete('/auth/sessions/:id', async (c) => {
+    await signOutOthers(c, parse(z.coerce.number().int().positive().max(2147483647), c.req.param('id')));
     return c.body(null, 204);
   });
 

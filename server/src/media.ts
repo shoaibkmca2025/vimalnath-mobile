@@ -56,8 +56,55 @@ export function mediaAdminRoutes(sql: Sql) {
     return c.json({ id, url: `/v1/media/${id}.${kind === 'pdf' ? 'pdf' : 'webp'}`, width: file.width, height: file.height }, 201);
   });
 
+  // Module 5.4: every upload, newest first, with where each is used.
+  media.get('/', only('owner', 'catalogue'), async (c) => {
+    const [files, uses] = await Promise.all([
+      sql`select f.id, f.kind, f.name, f.bytes, f.width, f.height, f.uploaded_at as "uploadedAt", coalesce(s.name, '') as "uploadedBy"
+          from media_files f left join staff_users s on s.id = f.uploaded_by order by f.uploaded_at desc`,
+      mediaUses(sql),
+    ]);
+    return c.json(
+      files.map((file) => ({
+        ...file,
+        url: `/v1/media/${file.id}.${file.kind === 'pdf' ? 'pdf' : 'webp'}`,
+        usedBy: uses.filter((use) => use.id === file.id).map(({ label, link }) => ({ label, to: link })),
+      })),
+    );
+  });
+
+  // One file nothing uses any more. A file still in use is refused, naming where, so no page loses its picture.
+  media.delete('/:id', only('owner', 'catalogue'), async (c) => {
+    const id = c.req.param('id');
+    const [used] = await sql`select label from (${mediaUses(sql)}) u where id = ${id} limit 1`;
+    if (used) throw new HTTPException(409, { message: `It’s still used by ${used.label}. Change that first.` });
+    await sql`delete from media_files where id = ${id}`;
+    return c.body(null, 204);
+  });
+
+  // Module 5.5: removes every file nothing uses. A day's grace, because a photo just uploaded may belong to a form not yet saved.
+  media.post('/cleanup', only('owner'), async (c) => {
+    const removed = await sql`
+      delete from media_files where uploaded_at < now() - interval '1 day' and id not in (select id from (${mediaUses(sql)}) u where id is not null)
+      returning id`;
+    return c.json({ removed: removed.length });
+  });
+
   return media;
 }
+
+/** Every place an uploaded file can be used, by its address. A new table that stores a photo or PDF link belongs here too. */
+const mediaUses = (sql: Sql) => sql<{ id: string | null; label: string; link: string }[]>`
+  select substring(url from '/v1/media/([a-f0-9]{24})') as id, label, link from (
+    select image as url, 'Product ' || code as label, '/products/' || id as link from products
+    union all select image, 'Category: ' || label, '/categories' from categories
+    union all select image, 'Catalogue page ' || page || ' (' || source || ')', '/products' from catalogue_pages
+    union all select url, 'Price list: ' || title, '/price-lists' from price_lists
+    union all select photo, 'Cutlist card: ' || name, '/cutlist?system=' || id from cutlist_systems
+    union all select image, 'Configuration: ' || name, '/cutlist?system=' || system_id from cutlist_configurations
+    union all select image, 'Home banner: ' || headline, '/banners' from banners
+    union all select icon, 'More Apps: ' || name, '/more-apps' from more_apps
+    union all select value, 'Company logo', '/settings' from settings where key = 'logo'
+  ) used where url like '/v1/media/%'`;
 
 /** GET /v1/media/<id>.webp (also -md and -sm) and /v1/media/<id>.pdf: public, because the app shows them. */
 export function mediaRoutes(sql: Sql) {

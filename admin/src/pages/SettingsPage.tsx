@@ -1,5 +1,5 @@
 import { DownloadSimpleIcon, InfoIcon } from '@phosphor-icons/react';
-import { useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/Button';
 import { Card, CardHeader } from '@/components/Card';
@@ -10,6 +10,7 @@ import { useToast } from '@/components/useToast';
 import { useData } from '@/data/useData';
 import type { Settings } from '@/data/types';
 import { api, type ApiError } from '@/lib/api';
+import { formatDateTime, formatRelativeTime } from '@/lib/format';
 import { useTheme, type ThemePreference } from '@/lib/theme';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -51,6 +52,8 @@ export default function SettingsPage() {
     website: websiteError(draft.website),
     appVersion: VERSION.test(draft.appVersion.trim()) ? null : 'Enter the version like 1.2.0.',
     minAppVersion: minVersionError(draft.minAppVersion.trim(), draft.appVersion.trim()),
+    announcementTo: draft.announcementFrom && draft.announcementTo && draft.announcementTo < draft.announcementFrom ? 'The notice can’t end before it starts.' : null,
+    kerfMm: /^\d{1,2}(\.\d)?$/.test(draft.kerfMm.trim()) && Number(draft.kerfMm) <= 20 ? null : 'Enter the cutting loss in mm, from 0 to 20, e.g. 3 or 2.5.',
   };
   const shown = (key: string) => (touched.has(key) ? errors[key] : null);
   const touch = (key: string) => () => setTouched((current) => new Set(current).add(key));
@@ -116,7 +119,35 @@ export default function SettingsPage() {
               />
               <p className="field__hint">The unit the glass calculator and bar optimizer start in. People can still switch on their phone.</p>
             </div>
+            <TextField
+              id="setting-kerfMm"
+              label="Bar Optimizer cutting loss (mm)"
+              inputMode="decimal"
+              value={draft.kerfMm}
+              onChange={(event) => set('kerfMm', event.target.value)}
+              onBlur={touch('kerfMm')}
+              error={shown('kerfMm')}
+              hint="The blade width lost at each cut. The optimizer starts with it; people can still change it on their phone."
+            />
             <TextField label="Price list edition" value={draft.priceListEdition} onChange={(event) => set('priceListEdition', event.target.value)} hint="The price list the app’s prices come from, e.g. Taiton · Feb 2026." />
+          </div>
+        </Card>
+
+        <Card aria-labelledby="announcement-title">
+          <CardHeader id="announcement-title" title="Announcement" description="A notice at the top of the app’s Shop, for example a holiday closure or a new price list. Leave it empty to show none." />
+          <div className="card__body form-grid">
+            <TextAreaField className="span-2" label="Notice" value={draft.announcement} onChange={(event) => set('announcement', event.target.value)} rows={2} maxLength={200} placeholder="e.g. Closed 10–12 November for Diwali. Orders placed now are confirmed on the 13th." />
+            <TextField label="Show from" type="date" value={draft.announcementFrom} onChange={(event) => set('announcementFrom', event.target.value)} hint="Empty: from now." />
+            <TextField
+              id="setting-announcementTo"
+              label="Show until"
+              type="date"
+              value={draft.announcementTo}
+              onChange={(event) => set('announcementTo', event.target.value)}
+              onBlur={touch('announcementTo')}
+              error={shown('announcementTo')}
+              hint="Empty: until you clear the notice."
+            />
           </div>
         </Card>
 
@@ -140,6 +171,8 @@ export default function SettingsPage() {
 
         <ChangePassword />
 
+        <SignedInDevices />
+
         <Card aria-labelledby="appearance-title">
           <CardHeader id="appearance-title" title="Appearance" description="Light matches the mobile app. Applies to this admin on this device." />
           <div className="card__body">
@@ -162,8 +195,8 @@ export default function SettingsPage() {
             <p className="notice">
               <InfoIcon size={16} weight="bold" aria-hidden />
               <span>
-                Everything you edit here is saved on the server. The Activity page is the exception: it lists changes made in this browser only, until the activity log
-                moves to the server. Phones linked to the shop send orders, see their status, and get your catalogue, content and settings changes when they next open the app.
+                Everything you edit here is saved on the server, and so is the Activity log of who changed what. Phones linked to the shop send orders, see their status,
+                and get your catalogue, content and settings changes when they next open the app.
               </span>
             </p>
             <div>
@@ -236,6 +269,90 @@ function ChangePassword() {
           </Button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+type Session = { id: number; device: string; createdAt: string; lastUsedAt: string; current: boolean };
+
+/** "Chrome on Windows" from a browser's user agent: enough to tell your own devices apart. */
+function deviceName(agent: string) {
+  const browser = /Edg\//.test(agent) ? 'Edge' : /Chrome\//.test(agent) ? 'Chrome' : /Firefox\//.test(agent) ? 'Firefox' : /Safari\//.test(agent) ? 'Safari' : 'A browser';
+  const system = /Android/.test(agent) ? 'Android' : /iPhone|iPad/.test(agent) ? 'iPhone or iPad' : /Windows/.test(agent) ? 'Windows' : /Mac OS/.test(agent) ? 'Mac' : /Linux/.test(agent) ? 'Linux' : '';
+  return system ? `${browser} on ${system}` : browser;
+}
+
+/** Module 2.6: where you're signed in, and a way to sign the other devices out, for example a lost phone. */
+function SignedInDevices() {
+  const toast = useToast();
+  const [sessions, setSessions] = useState<Session[] | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const load = useCallback(
+    () =>
+      api<Session[]>('/auth/sessions').then(
+        (list) => {
+          setSessions(list);
+          setFailure(null);
+        },
+        (error: unknown) => setFailure(error instanceof Error ? error.message : 'Something went wrong.'),
+      ),
+    [],
+  );
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const signOut = async (session?: Session) => {
+    try {
+      await api(session ? `/auth/sessions/${session.id}` : '/auth/sessions', 'DELETE');
+      toast({ message: session ? `${deviceName(session.device)} is signed out.` : 'Your other devices are signed out.' });
+    } catch (error) {
+      toast({ tone: 'error', message: error instanceof Error ? error.message : 'Something went wrong.' });
+    }
+    await load();
+  };
+  const others = sessions?.filter((session) => !session.current).length ?? 0;
+
+  return (
+    <Card aria-labelledby="devices-title">
+      <CardHeader
+        id="devices-title"
+        title="Signed-in devices"
+        description="Where you're signed in to this admin. Sign out a device you no longer use or have lost."
+        action={
+          others > 0 && (
+            <Button size="sm" variant="danger-plain" onClick={() => signOut()}>
+              Sign Out Other Devices
+            </Button>
+          )
+        }
+      />
+      {failure ? (
+        <p className="card__body notice notice--warning" role="alert">
+          {failure}
+        </p>
+      ) : (
+        <ul className="list">
+          {sessions?.map((session) => (
+            <li key={session.id} className="list-row">
+              <div className="list-row__main">
+                <p className="list-row__title">
+                  {deviceName(session.device)}
+                  {session.current && <span className="muted"> · This device</span>}
+                </p>
+                <p className="list-row__meta">
+                  Signed in {formatDateTime(session.createdAt)} · last used {formatRelativeTime(session.lastUsedAt)}
+                </p>
+              </div>
+              {!session.current && (
+                <Button size="sm" onClick={() => signOut(session)}>
+                  Sign Out
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

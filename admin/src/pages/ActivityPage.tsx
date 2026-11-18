@@ -7,6 +7,7 @@ import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { SearchInput, Segmented } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
+import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import type { ActivityArea } from '@/data/types';
 import { formatRelativeDay, plural } from '@/lib/format';
@@ -53,7 +54,11 @@ export default function ActivityPage() {
 
   return (
     <>
-      <PageHeader title="Activity" description="Every change made in this admin and every order placed in the app, newest first." />
+      <PageHeader
+        title="Activity"
+        // Only Owners see everyone's changes; the server sends others just their own.
+        description={readSession()?.role === 'owner' ? 'Every change made in this admin and every order placed in the app, newest first.' : 'Your changes in this admin, newest first.'}
+      />
 
       <div className="toolbar">
         <Segmented<Filter>

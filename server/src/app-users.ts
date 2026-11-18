@@ -97,6 +97,12 @@ export function appRoutes(sql: Sql) {
     return c.json(c.req.query('have') === version ? { version } : { version, content });
   });
 
+  // Module 3.5: where Expo should send this phone's notifications; null when the person turns them off.
+  app.post('/push-token', jsonBody(z.object({ token: z.string().regex(/^Expo(nent)?PushToken\[[\w-]+\]$/, 'That is not an Expo push token.').nullable() })), async (c) => {
+    await sql`update app_devices set push_token = ${c.req.valid('json').token} where id = ${c.get('deviceId')}`;
+    return c.json({ received: true });
+  });
+
   app.post('/profile', jsonBody(ProfileEvent), async (c) => {
     await sql`update app_devices set ${sql(c.req.valid('json').profile)}, profile_updated_at = now() where id = ${c.get('deviceId')}`;
     return c.json({ received: true });

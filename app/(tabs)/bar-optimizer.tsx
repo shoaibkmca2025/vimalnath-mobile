@@ -80,7 +80,8 @@ export default function BarOptimizerScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [barLengths, setBarLengths] = useState<PieceRow[]>(() => [makeRow(String(sections[0].bar))]);
   const [barFocusRowId, setBarFocusRowId] = useState<number | null>(null);
-  const [kerf, setKerf] = useState<Kerf>({ mm: '0', frac: 0 });
+  // Until something is saved on this phone, the shop's cutting loss (Module 8.6).
+  const [kerf, setKerf] = useState<Kerf>({ mm: String(settings.kerfMm), frac: 0 });
   const [fractionFor, setFractionFor] = useState<FractionTarget | null>(null);
   const defaultPieces = () => DEFAULT_PIECES.map((piece) => makeRow(piece.length === '' ? '' : String(piece.length), String(piece.qty)));
   const [pieces, setPieces] = useState<PieceRow[]>(defaultPieces);
@@ -183,7 +184,7 @@ export default function BarOptimizerScreen() {
       // Defaults are millimetres; in inch mode they're converted like a unit switch would.
       const inUnit = (row: PieceRow) => (unit === 'in' ? convertRow(row, 'in') : row);
       setBarLengths([inUnit(makeRow(String(sections[0].bar)))]);
-      setKerf({ mm: '0', frac: 0 });
+      setKerf({ mm: String(settings.kerfMm), frac: 0 });
       setPieces(defaultPieces().map(inUnit));
       setBarFocusRowId(null);
       setFocusRowId(null);

@@ -281,3 +281,31 @@ test('Owners: the last one cannot be removed, even by two at once', { skip }, as
   assert.equal(last.status, 400);
   assert.match(await last.text(), /at least one active Owner/);
 });
+
+test('signed-in devices: each is listed; one or all of the others can be signed out, never someone else’s', { skip }, async () => {
+  const { email } = await person();
+  const signInFrom = async (browser: string) =>
+    cookieOf(await app.request('/v1/admin/auth/sign-in', { method: 'POST', body: JSON.stringify({ email, password: GOOD }), headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.0.0.1', 'User-Agent': browser } }));
+  const [laptop, phone, tablet] = [await signInFrom('Laptop Chrome'), await signInFrom('Phone Safari'), await signInFrom('Tablet Firefox')];
+  const listed = (await (await call('/auth/sessions', 'GET', undefined, laptop)).json()) as { id: number; device: string; current: boolean; createdAt: string; lastUsedAt: string }[];
+  assert.deepEqual(listed.map((item) => item.device).sort(), ['Laptop Chrome', 'Phone Safari', 'Tablet Firefox']);
+  assert.deepEqual(listed.filter((item) => item.current).map((item) => item.device), ['Laptop Chrome']);
+  assert.ok(listed.every((item) => item.createdAt && item.lastUsedAt));
+
+  // Someone else can't sign this person out.
+  const other = await session((await person()).email);
+  assert.equal((await call(`/auth/sessions/${listed.find((item) => item.device === 'Phone Safari')!.id}`, 'DELETE', undefined, other)).status, 204);
+  assert.equal((await call('/me', 'GET', undefined, phone)).status, 200);
+
+  assert.equal((await call(`/auth/sessions/${listed.find((item) => item.device === 'Phone Safari')!.id}`, 'DELETE', undefined, laptop)).status, 204);
+  assert.equal((await call('/me', 'GET', undefined, phone)).status, 401);
+  assert.equal((await call('/me', 'GET', undefined, tablet)).status, 200);
+  // Its own id is left alone: this device signs out with Sign Out.
+  assert.equal((await call(`/auth/sessions/${listed.find((item) => item.current)!.id}`, 'DELETE', undefined, laptop)).status, 204);
+  assert.equal((await call('/me', 'GET', undefined, laptop)).status, 200);
+
+  assert.equal((await call('/auth/sessions', 'DELETE', undefined, laptop)).status, 204);
+  assert.equal((await call('/me', 'GET', undefined, tablet)).status, 401);
+  assert.equal((await call('/me', 'GET', undefined, laptop)).status, 200);
+  assert.equal((await call('/auth/sessions/abc', 'DELETE', undefined, laptop)).status, 400);
+});

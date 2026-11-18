@@ -1,6 +1,6 @@
 import type { Database, Order, OrderStatus } from './types';
 
-/** The parts of the admin's data that are saved on the server: all of it except the activity log, which stays in this browser until Module 12. */
+/** The parts of the admin's data that are saved on the server through `update`. The activity log is added to by the server itself. */
 export const SERVER_KEYS = ['products', 'categories', 'catalogues', 'orders', 'cutlist', 'sections', 'banners', 'videoSections', 'moreApps', 'settings'] as const;
 export type ServerKey = (typeof SERVER_KEYS)[number];
 export type Catalogue = Pick<Database, 'products' | 'categories' | 'catalogues' | 'catalogPages'>;
@@ -48,4 +48,19 @@ function orderRequests(before: Order[], after: Order[]): Request[] {
     if ((was.inventoryNote?.text ?? '') !== stock) notes.push({ path: `/orders/${encodeURIComponent(order.id)}/inventory-note`, method: 'PUT', body: { text: stock } });
   }
   return [...[...moved].map(([status, ids]) => ({ path: '/orders/status', method: 'POST' as const, body: { ids, status } })), ...notes];
+}
+
+/** Only what a save changed, for the activity log: the list items that differ, or the fields of an object that differ. */
+export function changed(before: unknown, after: unknown): { before: unknown; after: unknown } {
+  if (Array.isArray(before) && Array.isArray(after)) {
+    const was = new Set(before.map((item) => JSON.stringify(item)));
+    const now = new Set(after.map((item) => JSON.stringify(item)));
+    return { before: before.filter((item) => !now.has(JSON.stringify(item))), after: after.filter((item) => !was.has(JSON.stringify(item))) };
+  }
+  if (before && after && typeof before === 'object' && typeof after === 'object') {
+    const [old, now] = [before as Record<string, unknown>, after as Record<string, unknown>];
+    const keys = [...new Set([...Object.keys(old), ...Object.keys(now)])].filter((key) => JSON.stringify(old[key]) !== JSON.stringify(now[key]));
+    return { before: Object.fromEntries(keys.map((key) => [key, old[key]])), after: Object.fromEntries(keys.map((key) => [key, now[key]])) };
+  }
+  return { before, after };
 }

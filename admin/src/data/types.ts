@@ -53,6 +53,12 @@ export type Settings = {
   appVersion: string;
   /** Older apps ask people to update before ordering; empty means any version may order. */
   minAppVersion: string;
+  /** Module 8.6: the cutting loss in mm the Bar Optimizer starts with, e.g. '3'. */
+  kerfMm: string;
+  /** Module 9.7: a notice at the top of the app, shown from and until these dates (YYYY-MM-DD); empty dates are open. */
+  announcement: string;
+  announcementFrom: string;
+  announcementTo: string;
   logo: string;
 };
 

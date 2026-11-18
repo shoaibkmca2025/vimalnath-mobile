@@ -9,13 +9,14 @@ import { HeroCard } from '@/components/HeroCard';
 import { ProductCard } from '@/components/ProductCard';
 import { Screen } from '@/components/Screen';
 import type { ShopCategoryId, ShopProduct } from '@/data/shop';
-import { useAppContent } from '@/lib/content-sync';
+import { activeAnnouncement, useAppContent } from '@/lib/content-sync';
 import { colors, radius, space, type } from '@/theme';
 
 const PAGE_SIZE = 20;
 
 export default function ShopScreen() {
-  const { categories: shopCategories, products: shopProducts } = useAppContent();
+  const { categories: shopCategories, products: shopProducts, settings } = useAppContent();
+  const announcement = activeAnnouncement(settings);
   const [picked, setCategory] = useState<ShopCategoryId>();
   // The first category until one is picked, and again if a download from the shop drops the picked one.
   const category = shopCategories.some((item) => item.id === picked) ? picked : shopCategories[0]?.id;
@@ -119,6 +120,12 @@ export default function ShopScreen() {
 
       {!searching && (
         <>
+          {announcement ? (
+            <View style={styles.announcement} accessible accessibilityLabel={`Notice from the shop: ${announcement}`}>
+              <Ionicons name="megaphone-outline" size={20} color={colors.tint} />
+              <Text style={styles.announcementText}>{announcement}</Text>
+            </View>
+          ) : null}
           <HeroCard />
 
           <Text style={styles.sectionTitle} accessibilityRole="header">
@@ -192,6 +199,8 @@ export default function ShopScreen() {
 const productKey = (product: ShopProduct) => product.id;
 
 const styles = StyleSheet.create({
+  announcement: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14, padding: 14, backgroundColor: colors.card, borderRadius: radius.md },
+  announcementText: { ...type.subheadline, flex: 1 },
   search: {
     height: 40,
     flexDirection: 'row',

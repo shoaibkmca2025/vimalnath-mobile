@@ -1,5 +1,6 @@
 import {
   BookOpenIcon,
+  RulerIcon,
   CalculatorIcon,
   CaretRightIcon,
   ClockIcon,
@@ -27,6 +28,7 @@ import { useData } from '@/data/useData';
 import type { OrderStatus } from '@/data/types';
 import { formatDate, formatDay, formatHours, formatINR, formatINRCompact, formatNumber, formatPercent, formatRelativeTime, formatWeekday, plural, relativePhrase } from '@/lib/format';
 import { getSystemRange } from '@/generated/app-lib/glass-calculator';
+import { sampleSections } from '@/generated/app-lib/sample-sections';
 
 type Range = '7' | '30' | '90';
 type Measure = 'value' | 'orders';
@@ -105,9 +107,16 @@ export default function DashboardPage() {
       to: '/orders?status=placed',
       count: stats.waiting,
     },
-    { icon: CalculatorIcon, title: 'Glass sizes on a placeholder formula', detail: 'Synchro and folding: opening − 20 mm until confirmed', to: '/formulas', count: placeholderFormulas },
+    { icon: CalculatorIcon, title: 'Glass sizes on a placeholder formula', detail: 'Folding: opening − 20 mm until confirmed', to: '/formulas', count: placeholderFormulas },
     { icon: CurrencyInrIcon, title: 'Products without a price', detail: 'Shown as “price in catalogue” in the app', to: '/products?view=missing-price', count: health.total - health.priced },
     { icon: ImageSquareIcon, title: 'Products without a photo', detail: 'Shown with a placeholder in the app', to: '/products?view=missing-photo', count: health.total - health.photo },
+    {
+      icon: RulerIcon,
+      title: 'Bar sections still on sample data',
+      detail: 'The app’s placeholder profiles, not Vimalnath’s',
+      to: '/sections',
+      count: db.sections.filter((section) => sampleSections.some((sample) => sample.code === section.code && sample.description === section.description)).length,
+    },
     { icon: BookOpenIcon, title: 'Price lists not published', detail: 'Shown as “coming soon” in the app', to: '/price-lists', count: db.catalogues.filter((list) => !list.url).length },
     { icon: TagIcon, title: 'Hidden categories', detail: 'Not shown in the Shop', to: '/categories', count: db.categories.filter((category) => !category.visible).length },
   ];

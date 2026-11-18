@@ -36,6 +36,12 @@ export type ShopSettings = {
   priceListEdition: string;
   /** Older app versions are asked to update before ordering; empty means any version may order. */
   minAppVersion: string;
+  /** Module 8.6: the cutting loss the Bar Optimizer starts with, in mm. */
+  kerfMm: number;
+  /** Module 9.7: a notice for the top of the Shop, shown between these dates (YYYY-MM-DD; empty is open). */
+  announcement: string;
+  announcementFrom: string;
+  announcementTo: string;
   developer: string;
 };
 export type AppContent = {
@@ -99,6 +105,10 @@ const BUILT_IN: AppContent = {
     defaultUnit: 'mm',
     priceListEdition: 'Taiton · Feb 2026',
     minAppVersion: '',
+    kerfMm: 0,
+    announcement: '',
+    announcementFrom: '',
+    announcementTo: '',
     developer: '4AM Global Media',
   },
 };
@@ -148,6 +158,7 @@ function fromServer(content: ServerContent, baseUrl: string): AppContent {
       ...content.settings,
       logo: image(content.settings.logo ?? null) ?? BUILT_IN.settings.logo,
       defaultUnit: content.settings.defaultUnit === 'in' ? 'in' : 'mm',
+      kerfMm: Number(content.settings.kerfMm) || 0,
     },
   };
 }
@@ -224,6 +235,13 @@ export function startContentSync() {
     subscription.remove();
     unsubscribe();
   };
+}
+
+/** Module 9.7: the shop's notice if today, on this phone's calendar, is within its dates; otherwise empty. */
+export function activeAnnouncement(settings: ShopSettings, now = new Date()) {
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const { announcement, announcementFrom: from, announcementTo: to } = settings;
+  return announcement && (!from || from <= today) && (!to || today <= to) ? announcement : '';
 }
 
 /** True when the shop needs a newer app than this one to order ("1.9.0" is older than "1.10.0"). */

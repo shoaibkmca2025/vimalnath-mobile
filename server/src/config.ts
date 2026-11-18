@@ -6,6 +6,11 @@ const Env = z.object({
   DATABASE_URL: z.string().regex(/^postgres(ql)?:\/\//, 'must start with postgres://'),
   ADMIN_ORIGIN: z.url().transform((url) => new URL(url).origin),
   TRUST_PROXY: z.stringbool().default(false),
+  // Module 10: staff emails need an SMTP login, e.g. smtps://user:password@smtp.gmail.com. Without it they're logged as not set up.
+  SMTP_URL: z.string().regex(/^smtps?:\/\//, 'must start with smtp:// or smtps://').optional(),
+  MAIL_FROM: z.string().max(200).optional(),
+  // Only if enhanced push security is switched on in the Expo dashboard.
+  EXPO_ACCESS_TOKEN: z.string().max(200).optional(),
 });
 
 /** Stops the server at startup if a setting is missing or wrong. Messages never include the values. */

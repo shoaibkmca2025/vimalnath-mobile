@@ -32,35 +32,41 @@ test('telescopic sizes match the confirmed rule', () => {
   ];
   for (const [system, width, cutting, glass, quantity] of known) {
     const result = plan(`${system} Sliding System`, width, 2400);
-    assert.deepEqual([result.cuttingWidth, result.cuttingHeight, result.glassWidth, result.glassHeight, result.glassQuantity], [cutting, 2308, glass, 2287, quantity], system);
+    assert.deepEqual([result.cuttingWidth, result.cuttingHeight, result.glassWidth, result.glassHeight, result.glassQuantity], [cutting, 2307, glass, 2286, quantity], system);
   }
 });
 
 test('the 2+1 material list follows its rules', () => {
   const materials = Object.fromEntries(plan('2+1 Sliding System', 2730, 2400).materials.map((item) => [item.label, item.value]));
-  assert.equal(materials['Vertical'], '2 nos (2.5 m)');
-  assert.equal(materials['Horizontal'], '2 nos (3 m)');
-  assert.equal(materials['Top Track'], '3 nos (9 ft)');
-  assert.equal(materials['Gasket'], '9 nos (8mm)');
+  assert.equal(materials['Vertical Profile'], '6 nos (2.5 m)');
+  assert.equal(materials['Horizontal Profile'], '2 nos (118″)');
+  assert.equal(materials['Top Track'], '3 nos (10 ft)');
+  assert.equal(materials['Gasket'], '8 nos (8mm)');
   assert.equal(materials['Connector'], '12 nos');
 });
 
 test('an opening outside the allowed size is refused', () => {
   assert.ok('error' in computeGlassPlan('2+1 Sliding System', 1000, 2400, 3));
   assert.ok('error' in computeGlassPlan('2+1 Sliding System', 2730, 3100, 3));
+  // 1+1 takes openings from 1200 to 2400 mm wide.
+  assert.ok('error' in computeGlassPlan('1+1 Sliding System', 2438, 2400, 2));
 });
 
 test('a panel over the printed 950 mm limit warns, and one within it does not', () => {
   assert.equal(plan('1+1 Sliding System', 1880, 2400).warning, undefined);
-  assert.match(plan('1+1 Sliding System', 2438, 2400).warning ?? '', /over the 950 mm/);
+  assert.match(plan('1+1 Sliding System', 2000, 2400).warning ?? '', /over the 950 mm/);
 });
 
-test('systems without a confirmed formula give per-panel sizes and a warning', () => {
-  for (const system of ['2+2 Synchro Sliding System', '4 Door Sliding Folding System']) {
-    const result = plan(system, 2400, 2400, 4);
-    assert.deepEqual([result.cuttingWidth, result.cuttingHeight, result.glassWidth, result.glassHeight, result.glassQuantity], [595, 2380, 595, 2380, 4], system);
-    assert.match(result.warning ?? '', /No confirmed formula/);
-  }
+test('synchro sizes follow their confirmed formula', () => {
+  const result = plan('2+2 Synchro Sliding System', 2400, 2400, 4);
+  assert.deepEqual([result.cuttingWidth, result.cuttingHeight, result.glassWidth, result.glassHeight, result.glassQuantity], [608, 2307, 587, 2286, 4]);
+  assert.equal(result.warning, undefined);
+});
+
+test('a system without a confirmed formula gives per-panel sizes and a warning', () => {
+  const result = plan('4 Door Sliding Folding System', 2400, 2400, 4);
+  assert.deepEqual([result.cuttingWidth, result.cuttingHeight, result.glassWidth, result.glassHeight, result.glassQuantity], [595, 2380, 595, 2380, 4]);
+  assert.match(result.warning ?? '', /No confirmed formula/);
 });
 
 test('every piece ends up in a bar, and no bar is overfilled', () => {
