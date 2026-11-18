@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { Sheet } from '@/components/Sheet';
 import { TextField } from '@/components/TextField';
+import { formatPhone, isFullPhone } from '@/lib/format';
 import type { OrderDetails } from '@/providers/OrdersProvider';
 import { colors, type } from '@/theme';
 
@@ -16,10 +17,12 @@ type Props = {
 export function PlaceOrderSheet({ visible, summary, onClose, onSubmit }: Props) {
   const [customer, setCustomer] = useState('');
   const [phone, setPhone] = useState('');
+  const [phoneDone, setPhoneDone] = useState(false);
   const [notes, setNotes] = useState('');
 
-  // The only required field gates the Place button, so there's no error state to recover from.
-  const ready = customer.trim().length > 0;
+  // The name is required; the phone is optional, but if it's given it must be all 10 digits.
+  const phoneOk = !phone || isFullPhone(phone);
+  const ready = customer.trim().length > 0 && phoneOk;
   const submit = () => {
     if (ready) onSubmit({ customer: customer.trim(), phone: phone.trim(), notes: notes.trim() });
   };
@@ -44,9 +47,11 @@ export function PlaceOrderSheet({ visible, summary, onClose, onSubmit }: Props) 
         <TextField
           label="Phone (optional)"
           value={phone}
-          onChangeText={setPhone}
-          placeholder="Phone number"
-          keyboardType="phone-pad"
+          onChangeText={(text) => setPhone(formatPhone(text))}
+          onBlur={() => setPhoneDone(true)}
+          error={phoneDone && !phoneOk ? 'Enter all 10 digits of the mobile number.' : undefined}
+          placeholder="98220 12345"
+          keyboardType="number-pad"
           textContentType="telephoneNumber"
           autoComplete="tel"
           containerStyle={styles.field}

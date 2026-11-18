@@ -6,6 +6,7 @@ import { Button } from '@/components/Button';
 import { Screen } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
 import { enqueueAdminProfile } from '@/lib/admin-sync';
+import { formatPhone, isFullPhone } from '@/lib/format';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, type } from '@/theme';
 
@@ -18,16 +19,28 @@ const EMPTY: Profile = { name: '', business: '', phone: '', email: '', city: '' 
 export default function UserScreen() {
   const { showToast } = useAppUI();
   const [profile, setProfile] = useState<Profile>(EMPTY);
+  const [phoneDone, setPhoneDone] = useState(false);
+  const phoneOk = !profile.phone || isFullPhone(profile.phone);
 
   useEffect(() => {
     AsyncStorage.getItem(PROFILE_KEY)
-      .then((raw) => raw && setProfile({ ...EMPTY, ...JSON.parse(raw) }))
+      // A number saved before phones were checked is shown the new way, e.g. +91 98220-12345 → 98220 12345.
+      .then((raw) => {
+        if (!raw) return;
+        const saved = { ...EMPTY, ...JSON.parse(raw) } as Profile;
+        setProfile({ ...saved, phone: formatPhone(saved.phone) });
+      })
       .catch(() => {});
   }, []);
 
   const set = (key: keyof Profile) => (value: string) => setProfile((current) => ({ ...current, [key]: value }));
 
   const save = async () => {
+    if (!phoneOk) {
+      setPhoneDone(true);
+      showToast('Enter all 10 digits of the mobile number.');
+      return;
+    }
     try {
       await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
       void enqueueAdminProfile(profile);
@@ -54,7 +67,17 @@ export default function UserScreen() {
       <View style={styles.fields}>
         <TextField label="Name" value={profile.name} onChangeText={set('name')} placeholder="Full name" autoComplete="name" textContentType="name" />
         <TextField label="Business" value={profile.business} onChangeText={set('business')} placeholder="Business or firm name" textContentType="organizationName" />
-        <TextField label="Phone" value={profile.phone} onChangeText={set('phone')} placeholder="Mobile number" keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" />
+        <TextField
+          label="Phone"
+          value={profile.phone}
+          onChangeText={(text) => set('phone')(formatPhone(text))}
+          onBlur={() => setPhoneDone(true)}
+          error={phoneDone && !phoneOk ? 'Enter all 10 digits of the mobile number.' : undefined}
+          placeholder="98220 12345"
+          keyboardType="number-pad"
+          autoComplete="tel"
+          textContentType="telephoneNumber"
+        />
         <TextField
           label="Email"
           value={profile.email}

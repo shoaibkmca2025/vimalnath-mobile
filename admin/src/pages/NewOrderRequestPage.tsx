@@ -12,6 +12,7 @@ import { useToast } from '@/components/useToast';
 import { lowestPrice, productTitle } from '@/data/products';
 import { useData } from '@/data/useData';
 import type { Order, Product } from '@/data/types';
+import { formatPhone, isFullPhone } from '@/generated/app-lib/format';
 import { ApiError, api } from '@/lib/api';
 import { formatINR, plural } from '@/lib/format';
 
@@ -68,7 +69,7 @@ export default function NewOrderRequestPage() {
 
   function fillFrom(user: AppUser) {
     setCustomer(user.business || user.name || user.label);
-    setPhone(user.phone);
+    setPhone(formatPhone(user.phone));
   }
 
   const chooseAppUser = (id: string) => {
@@ -96,6 +97,7 @@ export default function NewOrderRequestPage() {
     const found: Errors = {};
     if (!appUserId) found.appUserId = 'Choose who to send it to.';
     if (!customer.trim()) found.customer = 'Enter the customer or site name.';
+    if (phone && !isFullPhone(phone)) found.phone = 'Enter all 10 digits of the mobile number.';
     if (!lines.length) found.lines = 'Add at least one product.';
     lines.forEach((line) => {
       const qty = quantity(line.qty);
@@ -319,7 +321,19 @@ export default function NewOrderRequestPage() {
                 hint={chosen && !chosen.lastSeenAt ? 'This app hasn’t connected yet. They’ll see the request once they enter their token.' : undefined}
               />
               <TextField label="Customer or site name" required value={customer} maxLength={200} error={errors.customer} onChange={(event) => setCustomer(event.target.value)} />
-              <TextField label="Phone" value={phone} maxLength={40} inputMode="tel" error={errors.phone} onChange={(event) => setPhone(event.target.value)} />
+              <TextField
+                label="Phone"
+                value={phone}
+                inputMode="numeric"
+                autoComplete="tel"
+                placeholder="98220 12345"
+                error={errors.phone}
+                hint="10-digit mobile number."
+                onChange={(event) => {
+                  setPhone(formatPhone(event.target.value));
+                  setErrors((current) => ({ ...current, phone: undefined }));
+                }}
+              />
               <TextAreaField label="Delivery notes" value={notes} maxLength={2000} rows={3} error={errors.notes} placeholder="Delivery address, timing…" onChange={(event) => setNotes(event.target.value)} />
             </div>
           </Card>
