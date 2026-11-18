@@ -11,6 +11,7 @@ import {
   ListIcon,
   MagnifyingGlassIcon,
   PackageIcon,
+  PaperPlaneTiltIcon,
   PlayCircleIcon,
   ReceiptIcon,
   RulerIcon,
@@ -29,13 +30,15 @@ import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useNavigatio
 import { IconButton } from '@/components/Button';
 import { CommandPalette } from '@/components/CommandPalette';
 import { PageMetaContext, type PageMeta } from '@/components/pageMeta';
+import { useRequestNotifications } from '@/data/requestNotifications';
 import { endSession, readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import { initials } from '@/lib/format';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
-type NavItem = { to: string; label: string; icon: Icon; end?: boolean; count?: number };
+/** `alert` shows the count as a red badge on the icon: new updates, not just work waiting. */
+type NavItem = { to: string; label: string; icon: Icon; end?: boolean; count?: number; alert?: boolean };
 
 export function AppShell() {
   const { db } = useData();
@@ -52,6 +55,8 @@ export function AppShell() {
 
   const setMeta = useCallback((next: PageMeta) => setMetaState(next), []);
   const newOrders = db.orders.filter((order) => order.status === 'placed').length;
+  // Customers answering or receiving order requests since this person last opened Order Requests.
+  const { count: requestUpdates } = useRequestNotifications(db.orders);
   const toPack = db.orders.filter((order) => order.status === 'confirmed').length;
   const inventoryItem: NavItem = { to: '/inventory', label: 'Inventory', icon: WarehouseIcon, count: toPack };
   // The inventory team only works on its own panel (and its password, under Settings).
@@ -68,7 +73,7 @@ export function AppShell() {
       title: 'Sales',
       items: [
         { to: '/orders', label: 'Orders', icon: ReceiptIcon, count: newOrders },
-        ...(session?.role === 'catalogue' ? [] : [inventoryItem]),
+        ...(session?.role === 'catalogue' ? [] : [{ to: '/order-requests', label: 'Order Requests', icon: PaperPlaneTiltIcon, count: requestUpdates, alert: true }, inventoryItem]),
         { to: '/customers', label: 'Customers', icon: UsersThreeIcon },
         ...(session?.role === 'catalogue' ? [] : [{ to: '/app-users', label: 'App Users', icon: DeviceMobileIcon }]),
       ],
@@ -176,12 +181,20 @@ export function AppShell() {
                   {group.title}
                 </p>
                 <ul className="nav-list" aria-labelledby={`nav-${group.title}`}>
-                  {group.items.map(({ to, label, icon: ItemIcon, end, count }) => (
+                  {group.items.map(({ to, label, icon: ItemIcon, end, count, alert }) => (
                     <li key={to}>
                       <NavLink to={to} end={end} className="nav-link">
-                        <ItemIcon size={18} aria-hidden />
+                        <span className="nav-link__icon">
+                          <ItemIcon size={18} aria-hidden />
+                          {alert && count ? (
+                            <span className="alert-badge num" aria-hidden>
+                              {count > 99 ? '99+' : count}
+                            </span>
+                          ) : null}
+                        </span>
                         {label}
-                        {count ? (
+                        {alert && count ? <span className="visually-hidden"> ({count === 1 ? '1 new update' : `${count} new updates`})</span> : null}
+                        {!alert && count ? (
                           <span className="nav-link__count num" aria-label={`${count} new`}>
                             {count}
                           </span>
@@ -216,14 +229,17 @@ export function AppShell() {
 
         <div className="content">
           <header className="topbar">
-            <IconButton
-              icon={ListIcon}
-              label={menuOpen ? 'Close menu' : 'Open menu'}
-              className="topbar__menu"
-              aria-expanded={menuOpen}
-              aria-controls="sidebar"
-              onClick={() => setMenuOpen((open) => !open)}
-            />
+            <span className="topbar__menu-wrap">
+              <IconButton
+                icon={ListIcon}
+                label={menuOpen ? 'Close menu' : requestUpdates && !inventoryOnly ? `Open menu, ${requestUpdates} new order request ${requestUpdates === 1 ? 'update' : 'updates'}` : 'Open menu'}
+                className="topbar__menu"
+                aria-expanded={menuOpen}
+                aria-controls="sidebar"
+                onClick={() => setMenuOpen((open) => !open)}
+              />
+              {requestUpdates > 0 && !inventoryOnly && !menuOpen && <span className="alert-dot" aria-hidden />}
+            </span>
             <nav aria-label="Breadcrumb" style={{ minWidth: 0, flex: 1 }}>
               <ol className="breadcrumbs">
                 {meta.crumbs.map((crumb) => (

@@ -117,7 +117,7 @@ export default function NewOrderRequestPage() {
       // Already saved on the server: this only adds it to the list and the activity log.
       await update('orders', (current) => [created, ...current], { area: 'orders', summary: `Sent order request ${created.number} to ${chosen?.label ?? created.customer}`, to: `/orders/${created.id}` });
       toast({ message: `${created.number} sent to ${chosen?.label ?? created.customer}. It appears in their app for them to confirm.` });
-      navigate(`/orders/${created.id}`, { replace: true });
+      navigate('/order-requests', { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Something went wrong.';
       const field = error instanceof ApiError ? error.field : undefined;
@@ -132,7 +132,7 @@ export default function NewOrderRequestPage() {
   if (loadError)
     return (
       <>
-        <PageHeader title="New Order Request" crumbs={[{ label: 'Orders', to: '/orders' }]} />
+        <PageHeader title="New Order Request" crumbs={[{ label: 'Order Requests', to: '/order-requests' }]} />
         <Card>
           <EmptyState icon={DeviceMobileIcon} title="Couldn’t load app users" action={<Button onClick={() => window.location.reload()}>Try Again</Button>}>
             {loadError}
@@ -144,7 +144,7 @@ export default function NewOrderRequestPage() {
   if (appUsers && !appUsers.length)
     return (
       <>
-        <PageHeader title="New Order Request" crumbs={[{ label: 'Orders', to: '/orders' }]} />
+        <PageHeader title="New Order Request" crumbs={[{ label: 'Order Requests', to: '/order-requests' }]} />
         <Card>
           <EmptyState
             icon={DeviceMobileIcon}
@@ -164,8 +164,8 @@ export default function NewOrderRequestPage() {
   return (
     <>
       <PageHeader
-        title="New Order Request"
-        crumbs={[{ label: 'Orders', to: '/orders' }]}
+        title="Request Order"
+        crumbs={[{ label: 'Order Requests', to: '/order-requests' }]}
         description="Make an order for a customer and send it to their app. When they confirm it, it goes straight to the inventory team."
       />
 
@@ -339,7 +339,7 @@ export default function NewOrderRequestPage() {
               <Button variant="primary" icon={PaperPlaneTiltIcon} loading={sending} loadingLabel="Sending…" onClick={send} block>
                 Send to Customer
               </Button>
-              <ButtonLink to="/orders" block>
+              <ButtonLink to="/order-requests" block>
                 Cancel
               </ButtonLink>
             </div>

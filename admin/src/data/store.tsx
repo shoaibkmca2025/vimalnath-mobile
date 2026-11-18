@@ -120,7 +120,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [toast],
   );
 
-  // Phones keep sending orders while the admin is open, so fetch them again every minute and when the window comes
+  // Phones keep sending orders while the admin is open, so fetch them again regularly and when the window comes
   // back to the front. Through the save queue, so a refresh never lands in the middle of a save.
   const ready = state.status === 'ready';
   useEffect(() => {
@@ -133,7 +133,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, orders } } : previous));
       });
     };
-    const timer = setInterval(refresh, 60_000);
+    // Every 30 seconds, so a customer confirming an order request shows up quickly.
+    const timer = setInterval(refresh, 30_000);
     window.addEventListener('focus', refresh);
     return () => {
       clearInterval(timer);

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { customersFromOrders, nextStatus, whatsappLink } from '../src/data/orders.ts';
+import { inOrders, isNew, requestState, requestUpdates, updateLabel } from '../src/data/requests.ts';
 import type { Order } from '../src/data/types.ts';
 import { escapeHtml, withTimeout } from '../src/generated/app-lib/pdf-html.ts';
 import { toCsv } from '../src/lib/csv.ts';
@@ -56,6 +57,27 @@ test('order steps: placed → confirmed → packed → dispatched → delivered;
     (['placed', 'confirmed', 'packed', 'dispatched', 'delivered', 'cancelled', 'requested', 'declined'] as const).map(nextStatus),
     ['confirmed', 'packed', 'dispatched', 'delivered', null, null, null, null],
   );
+});
+
+test('order requests: stay out of Orders until the customer confirms, with each update until then', () => {
+  const request = (status: Order['status'], history: Order['history'], customerSeenAt?: string): Order => ({ ...order('Site B', status, 100, '2026-11-18T10:00:00Z'), source: 'admin', history, customerSeenAt });
+  const sent = { status: 'requested' as const, at: '2026-11-18T10:00:00Z', by: 'Asha' };
+  const waiting = request('requested', [sent], '2026-11-18T10:05:00.123456+00:00');
+  const confirmed = request('packed', [sent, { status: 'confirmed', at: '2026-11-18T11:00:00Z', by: 'App' }, { status: 'packed', at: '2026-11-18T12:00:00Z', by: 'Imran' }], '2026-11-18T10:05:00Z');
+  const declined = request('declined', [sent, { status: 'declined', at: '2026-11-18T11:00:00Z', by: 'App' }]);
+  const cancelled = request('cancelled', [sent, { status: 'cancelled', at: '2026-11-18T11:00:00Z', by: 'Asha' }]);
+
+  assert.deepEqual([waiting, confirmed, declined, cancelled].map(inOrders), [false, true, false, false]);
+  assert.equal(inOrders(order('App order', 'placed', 1, '2026-11-18T10:00:00Z')), true);
+  assert.deepEqual([waiting, confirmed, declined, cancelled].map(requestState), ['waiting', 'confirmed', 'declined', 'cancelled']);
+  // Received sorts by time, whatever the format; nothing after confirming is a request update.
+  assert.deepEqual(requestUpdates(confirmed).map((update) => [updateLabel(update), update.fromCustomer]), [
+    ['Sent to the customer', false],
+    ['Received in their app', true],
+    ['Confirmed by the customer', true],
+  ]);
+  assert.equal(isNew(requestUpdates(confirmed).at(-1)!, Date.parse('2026-11-18T10:30:00Z')), true);
+  assert.equal(isNew(requestUpdates(confirmed).at(-1)!, Date.parse('2026-11-18T11:00:00Z')), false);
 });
 
 test('requests and declined orders are not sales; a request is still open', () => {

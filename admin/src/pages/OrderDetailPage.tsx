@@ -29,6 +29,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
 import { NEXT_ACTION_LABEL, ORDER_STATUS, STATUS_ORDER, customerOf, customersFromOrders, itemCount, nextStatus, stepLabel, stepsOf, whatsappLink } from '@/data/orders';
+import { inOrders } from '@/data/requests';
 import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import type { Order, OrderStatus } from '@/data/types';
@@ -139,12 +140,17 @@ export default function OrderDetailPage() {
   const older = db.orders[index + 1];
   const reached = (status: OrderStatus) => order.history.findLast((event) => event.status === status);
   const ended = reached(order.status);
+  // Newest first. A request also shows when the customer's app received it.
+  const timeline = [
+    ...order.history.map((step) => ({ key: `${step.status}-${step.at}`, label: stepLabel(step.status, step.by), at: step.at, who: step.by === 'App' ? order.customer : step.by, tone: ORDER_STATUS[step.status].tone })),
+    ...(order.customerSeenAt ? [{ key: 'received', label: 'Received in their app', at: order.customerSeenAt, who: order.customer, tone: 'info' as const }] : []),
+  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 
   return (
     <>
       <PageHeader
         title={`Order ${order.number}`}
-        crumbs={[{ label: 'Orders', to: '/orders' }]}
+        crumbs={[inOrders(order) ? { label: 'Orders', to: '/orders' } : { label: 'Order Requests', to: '/order-requests' }]}
         description={
           <>
             {order.customer} · {plural(items, 'item')} · {fromAdmin ? 'sent to the customer’s app' : 'placed in the app'} {formatDateTime(order.createdAt)}
@@ -355,7 +361,10 @@ export default function OrderDetailPage() {
               <p className="notice">
                 <PaperPlaneTiltIcon size={16} weight="bold" aria-hidden />
                 <span>
-                  {order.appUser ? `${order.appUser.label} sees it in their app under Orders.` : 'The customer sees it in their app under Orders.'} When they confirm it, it goes to the inventory team.
+                  {order.customerSeenAt
+                    ? `Received in ${order.appUser?.label ?? 'the customer'}’s app ${formatDateTime(order.customerSeenAt)}.`
+                    : `Not received yet: ${order.appUser?.label ?? 'the customer'}’s app gets it the next time it syncs.`}{' '}
+                  When they confirm it, it moves to Orders and the inventory team.
                 </span>
               </p>
             )}
@@ -368,13 +377,13 @@ export default function OrderDetailPage() {
               />
             </div>
             <ol className="timeline" aria-label="Status history">
-              {[...order.history].reverse().map((step) => (
-                <li key={`${step.status}-${step.at}`} className="timeline__item">
-                  <span className="timeline__dot" data-tone={ORDER_STATUS[step.status].tone} aria-hidden />
+              {timeline.map((step) => (
+                <li key={step.key} className="timeline__item">
+                  <span className="timeline__dot" data-tone={step.tone} aria-hidden />
                   <span>
-                    <span style={{ fontWeight: 600 }}>{stepLabel(step.status, step.by)}</span>
+                    <span style={{ fontWeight: 600 }}>{step.label}</span>
                     <span className="cell-sub" style={{ display: 'block' }}>
-                      {formatDateTime(step.at)} · {step.by === 'App' ? order.customer : step.by}
+                      {formatDateTime(step.at)} · {step.who}
                     </span>
                   </span>
                 </li>

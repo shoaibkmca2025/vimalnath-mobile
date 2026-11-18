@@ -10,10 +10,11 @@ import { EmptyState } from '@/components/EmptyState';
 import { SearchInput, Segmented } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { itemCount } from '@/data/orders';
-import { REQUEST_STATE, isNew, isRequest, latestUpdate, requestState, requestUpdates, updateLabel, useRequestNotifications, type RequestState } from '@/data/requests';
+import { useRequestNotifications } from '@/data/requestNotifications';
+import { REQUEST_STATE, isNew, isRequest, latestUpdate, requestState, requestUpdates, updateLabel, type RequestState } from '@/data/requests';
 import { useData } from '@/data/useData';
 import type { Order } from '@/data/types';
-import { formatDateTime, formatINR, formatRelativeDay, plural } from '@/lib/format';
+import { formatDateTime, formatINR, formatRelativeDay, plural, relativePhrase } from '@/lib/format';
 
 type Filter = 'all' | RequestState;
 const FILTERS: Filter[] = ['all', 'waiting', 'confirmed', 'declined', 'cancelled'];
@@ -64,7 +65,7 @@ export default function OrderRequestsPage() {
           <Link to={`/orders/${order.id}`} className="cell-title num">
             {order.number}
           </Link>
-          <div className="cell-sub">Sent {formatRelativeDay(order.createdAt).toLowerCase()}</div>
+          <div className="cell-sub">Sent {relativePhrase(formatRelativeDay(order.createdAt))}</div>
         </>
       ),
     },
