@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { InsetGroup, ValueRow } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
 import { findShopProduct, formatINR } from '@/data/shop';
-import { useShopOrders } from '@/lib/admin-sync';
+import { getAdminSyncStatus, useShopOrders } from '@/lib/admin-sync';
 import { useAppContent } from '@/lib/content-sync';
 import { formatOrderDate } from '@/lib/format';
 import { buildOrderHtml } from '@/lib/order-pdf';
@@ -107,6 +107,14 @@ export default function OrderScreen() {
           ))}
         </InsetGroup>
       ) : null}
+      {/* Orders reach the shop only from a linked app; say so instead of leaving the customer to wonder. */}
+      {!shop && (
+        <Text style={styles.notSent}>
+          {getAdminSyncStatus().connection.enabled
+            ? 'Sending to the shop. Its order number and progress show here once it arrives.'
+            : 'Not sent to the shop yet: this app isn’t linked to it. Link it in Settings under Shop connection, and this order is sent.'}
+        </Text>
+      )}
 
       <InsetGroup header="Items">
         {order.lines.map((line, index) => {
@@ -143,6 +151,7 @@ export default function OrderScreen() {
 }
 
 const styles = StyleSheet.create({
+  notSent: { ...type.footnote, marginHorizontal: 16, marginBottom: 20, color: colors.secondaryLabel },
   line: { flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 16 },
   lineCode: { ...type.caption1, color: colors.secondaryLabel, fontWeight: '500' },
   lineDetail: { ...type.footnote, marginTop: 2, color: colors.secondaryLabel },
