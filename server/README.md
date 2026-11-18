@@ -1,6 +1,6 @@
 # Vimalnath API
 
-The backend for the mobile app and admin panel, following the plan in `docs/Vimalnath-Backend-Modules.pdf`. Built so far: Module 1 (API server, database, security, deployment), Module 2 (staff sign-in and roles), Module 3 (app users), Module 4 (catalogue: products, categories and price lists, edited in the admin), Module 5 (photo and PDF uploads), Module 6 (orders), Module 7 (customers), Module 8 (calculator settings: 8.1, 8.2 and 8.5) and Module 9 (app content and settings: 9.1 to 9.6, saved and edited in the admin; phones get them with app sync, Module 11).
+The backend for the mobile app and admin panel, following the plan in `docs/Vimalnath-Backend-Modules.pdf`. Built so far: Module 1 (API server, database, security, deployment), Module 2 (staff sign-in and roles), Module 3 (app users), Module 4 (catalogue: products, categories and price lists, edited in the admin), Module 5 (photo and PDF uploads), Module 6 (orders), Module 7 (customers), Module 8 (calculator settings: 8.1, 8.2 and 8.5) and Module 9 (app content and settings: 9.1 to 9.6, saved and edited in the admin; phones get them with app sync) and Module 11 (app sync: linked phones download what staff edit and keep a copy for offline use).
 
 Needs Node 24.2 or newer, which runs the TypeScript directly, so there is no build step.
 
@@ -35,7 +35,7 @@ src/
   server.ts    Starts the API and shuts it down cleanly
   app.ts       Routes, security, request limits and the one error format
   staff.ts     Staff sign-in, roles and everything under /v1/admin
-  app-users.ts The app's shop connection (/v1/app) and the admin's App Users (/v1/admin/app-users)
+  app-users.ts The app's shop connection (/v1/app, including GET /v1/app/content for app sync) and the admin's App Users (/v1/admin/app-users)
   catalogue.ts Products, categories, price lists and the MRP history (/v1/admin/price-history) under /v1/admin (read: all staff; change: Owner and Catalogue editor)
   customers.ts Customers (/v1/admin/customers): each app user belongs to one; notes, tags and merging
   calculators.ts Cutlist systems, configurations and bar sections (/v1/admin/calculators, /cutlist, /bar-sections; change: Owner and Catalogue editor)

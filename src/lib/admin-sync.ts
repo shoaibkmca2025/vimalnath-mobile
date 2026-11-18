@@ -110,7 +110,7 @@ export function validateAdminUrl(value: string, allowLocalHttp: boolean): string
   return parsed.toString().replace(/\/+$/, '');
 }
 
-async function request<T>(config: AdminConnection, path: string, body?: Record<string, unknown>): Promise<T> {
+export async function request<T>(config: AdminConnection, path: string, body?: Record<string, unknown>): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {

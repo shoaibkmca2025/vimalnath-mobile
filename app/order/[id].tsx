@@ -8,6 +8,7 @@ import { InsetGroup, ValueRow } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
 import { findShopProduct, formatINR } from '@/data/shop';
 import { useShopOrders } from '@/lib/admin-sync';
+import { useAppContent } from '@/lib/content-sync';
 import { formatOrderDate } from '@/lib/format';
 import { buildOrderHtml } from '@/lib/order-pdf';
 import { pdfFileName, sharePdf } from '@/lib/pdf-export';
@@ -24,6 +25,7 @@ export default function OrderScreen() {
   const [sharing, setSharing] = useState(false);
   const order = orders.find((item) => item.id === id);
   const shop = useShopOrders().get(id);
+  const { settings } = useAppContent();
 
   if (!order) {
     return (
@@ -41,7 +43,7 @@ export default function OrderScreen() {
   const share = async () => {
     setSharing(true);
     try {
-      await sharePdf(buildOrderHtml({ ...order, number, status }), pdfFileName(`${number} ${order.customer}`), `Share order ${number}`);
+      await sharePdf(buildOrderHtml({ ...order, number, status }, settings), pdfFileName(`${number} ${order.customer}`), `Share order ${number}`);
     } catch (err) {
       console.error('Order PDF export failed:', err);
       const reason = err instanceof Error && err.message ? err.message : 'Unknown error';

@@ -12,7 +12,8 @@ import { InsetGroup } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
 import { SectionPickerSheet } from '@/components/SectionPickerSheet';
 import { SegmentedControl } from '@/components/SegmentedControl';
-import { sections, type Section } from '@/data/sections';
+import type { Section } from '@/data/sections';
+import { useAppContent } from '@/lib/content-sync';
 import { planBars, type BarPlan } from '@/lib/bar-optimizer';
 import { buildBarPlanHtml } from '@/lib/bar-plan-pdf';
 import { confirmDestructive } from '@/lib/confirm';
@@ -72,6 +73,7 @@ export default function BarOptimizerScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const nextId = useRef(0);
   const makeRow = (value = '', qty = '', frac = 0): PieceRow => ({ id: nextId.current++, value, frac, qty });
+  const { sections, settings } = useAppContent();
 
   const [unit, setUnit] = useState<LengthUnit>('mm');
   const [section, setSection] = useState<Section>(sections[0]);
@@ -122,7 +124,7 @@ export default function BarOptimizerScreen() {
         // Corrupt or missing cache — keep the defaults.
       }
       const preferred = await AsyncStorage.getItem(SIZE_UNIT_KEY).catch(() => null);
-      const target: LengthUnit = preferred === 'in' || preferred === 'mm' ? preferred : inputsUnit;
+      const target: LengthUnit = preferred === 'in' || preferred === 'mm' ? preferred : settings.defaultUnit;
       setUnit(target);
       if (target !== inputsUnit) convertInputs(target);
     })();

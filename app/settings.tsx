@@ -9,6 +9,7 @@ import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { confirmDestructive } from '@/lib/confirm';
 import { SIZE_UNIT_KEY, UNIT_OPTIONS, type LengthUnit } from '@/lib/length-units';
+import { useAppContent } from '@/lib/content-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { useCart } from '@/providers/CartProvider';
 import { useOrders } from '@/providers/OrdersProvider';
@@ -18,8 +19,10 @@ export default function SettingsScreen() {
   const { showToast } = useAppUI();
   const { count, clear } = useCart();
   const { orders, clearOrders } = useOrders();
-  const [unit, setUnit] = useState<LengthUnit>('mm');
+  const { settings } = useAppContent();
+  const [unit, setUnit] = useState<LengthUnit>(settings.defaultUnit);
 
+  // Before anyone picks a unit on this phone, the shop's default shows.
   useEffect(() => {
     AsyncStorage.getItem(SIZE_UNIT_KEY)
       .then((saved) => (saved === 'in' || saved === 'mm') && setUnit(saved))

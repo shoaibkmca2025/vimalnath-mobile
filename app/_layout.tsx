@@ -4,10 +4,11 @@ import { Stack } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { startAdminSync } from '@/lib/admin-sync';
+import { startAdminSync } from '@/lib/admin-sync';
+import { loadSavedContent, startContentSync } from '@/lib/content-sync';
 import { AppUIProvider } from '@/providers/AppUIProvider';
 import { CartProvider } from '@/providers/CartProvider';
 import { OrdersProvider } from '@/providers/OrdersProvider';
@@ -20,9 +21,15 @@ ScreenOrientation.unlockAsync().catch(() => {});
 export default function RootLayout() {
   // Interface text uses the system font; only the brand wordmark needs a bundled typeface.
   const [fontsLoaded, fontError] = useFonts({ SpaceGrotesk_700Bold });
-  const ready = fontsLoaded || Boolean(fontError);
+  // The shop's last download is read before the first screen, so it never flashes the data built into the app.
+  const [contentLoaded, setContentLoaded] = useState(false);
+  const ready = (fontsLoaded || Boolean(fontError)) && contentLoaded;
 
+  useEffect(() => {
+    void loadSavedContent().finally(() => setContentLoaded(true));
+  }, []);
   useEffect(() => startAdminSync(), []);
+  useEffect(() => startContentSync(), []);
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync();

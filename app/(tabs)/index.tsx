@@ -8,13 +8,17 @@ import { EmptyState } from '@/components/EmptyState';
 import { HeroCard } from '@/components/HeroCard';
 import { ProductCard } from '@/components/ProductCard';
 import { Screen } from '@/components/Screen';
-import { shopCategories, shopProducts, type ShopCategoryId, type ShopProduct } from '@/data/shop';
+import type { ShopCategoryId, ShopProduct } from '@/data/shop';
+import { useAppContent } from '@/lib/content-sync';
 import { colors, radius, space, type } from '@/theme';
 
 const PAGE_SIZE = 20;
 
 export default function ShopScreen() {
-  const [category, setCategory] = useState<ShopCategoryId>(shopCategories[0].id);
+  const { categories: shopCategories, products: shopProducts } = useAppContent();
+  const [picked, setCategory] = useState<ShopCategoryId>();
+  // The first category until one is picked, and again if a download from the shop drops the picked one.
+  const category = shopCategories.some((item) => item.id === picked) ? picked : shopCategories[0]?.id;
   const [section, setSection] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [visible, setVisible] = useState(PAGE_SIZE);
@@ -23,13 +27,13 @@ export default function ShopScreen() {
     const map = new Map<ShopCategoryId, number>();
     for (const product of shopProducts) map.set(product.category, (map.get(product.category) ?? 0) + 1);
     return map;
-  }, []);
+  }, [shopProducts]);
 
   const sections = useMemo(() => {
     const list: string[] = [];
     for (const product of shopProducts) if (product.category === category && !list.includes(product.section)) list.push(product.section);
     return list;
-  }, [category]);
+  }, [category, shopProducts]);
 
   // The tap or keystroke shows at once; the product grid catches up in a follow-up render that
   // React can interrupt, so a quick run of taps never queues up grid renders.
@@ -46,7 +50,7 @@ export default function ShopScreen() {
       );
     }
     return shopProducts.filter((product) => product.category === shownCategory && (!shownSection || product.section === shownSection));
-  }, [trimmed, shownCategory, shownSection]);
+  }, [trimmed, shownCategory, shownSection, shopProducts]);
   const page = useMemo(() => results.slice(0, visible), [results, visible]);
   const renderProduct = useCallback(({ item }: { item: ShopProduct }) => <ProductCard product={item} />, []);
 
@@ -56,7 +60,7 @@ export default function ShopScreen() {
     setVisible(PAGE_SIZE);
   };
 
-  const activeCategory = shopCategories.find((item) => item.id === shownCategory)!;
+  const activeCategory = shopCategories.find((item) => item.id === shownCategory);
 
   return (
     <Screen
@@ -133,7 +137,7 @@ export default function ShopScreen() {
                   style={({ pressed }) => [styles.categoryTile, pressed && styles.pressed]}
                 >
                   <View style={[styles.categoryImageFrame, selected && styles.categoryImageSelected]}>
-                    <Image cachePolicy="memory" source={item.image} style={[styles.categoryImage, item.fit === 'contain' && styles.categoryImageProduct]} contentFit={item.fit} />
+                    <Image cachePolicy="memory-disk" source={item.image} style={[styles.categoryImage, item.fit === 'contain' && styles.categoryImageProduct]} contentFit={item.fit} />
                   </View>
                   <Text style={[styles.categoryName, selected && { color: colors.tint }]} numberOfLines={2}>
                     {item.label}
@@ -174,7 +178,7 @@ export default function ShopScreen() {
       ) : (
         <View style={styles.resultsHeader}>
           <Text style={styles.resultsTitle} accessibilityRole="header">
-            {trimmed ? 'Results' : (shownSection ?? activeCategory.label)}
+            {trimmed ? 'Results' : (shownSection ?? activeCategory?.label)}
           </Text>
           <Text style={styles.resultsCount}>
             {results.length} product{results.length === 1 ? '' : 's'}

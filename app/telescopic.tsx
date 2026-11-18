@@ -1,7 +1,8 @@
 import { ConfigurationGridScreen } from '@/components/ConfigurationGridScreen';
-import { telescopicConfigurations } from '@/data/cutlist';
+import { useAppContent } from '@/lib/content-sync';
 
 export default function TelescopicScreen() {
+  const { configurations } = useAppContent();
   return (
     <ConfigurationGridScreen
       title="Telescopic Sliding"
@@ -9,7 +10,7 @@ export default function TelescopicScreen() {
       backLabel="Cutlist"
       backRoute="/cutlist"
       ownRoute="/telescopic"
-      configurations={telescopicConfigurations}
+      configurations={configurations.telescopic}
     />
   );
 }

@@ -4,7 +4,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { InsetGroup } from '@/components/InsetGroup';
 import { Sheet } from '@/components/Sheet';
-import { sections, sectionTones, type Section } from '@/data/sections';
+import { sectionTones, type Section } from '@/data/sections';
+import { useAppContent } from '@/lib/content-sync';
 import { formatMm } from '@/lib/format';
 import { colors, type } from '@/theme';
 
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export function SectionPickerSheet({ visible, selectedCode, onSelect, onClose }: Props) {
+  const { sections } = useAppContent();
   return (
     <Sheet visible={visible} title="Choose Profile" onClose={onClose}>
       <ScrollView contentContainerStyle={styles.content}>

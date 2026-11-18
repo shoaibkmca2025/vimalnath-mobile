@@ -11,6 +11,7 @@ import { PlaceOrderSheet } from '@/components/PlaceOrderSheet';
 import { QtyStepper } from '@/components/QtyStepper';
 import { BarButton, Screen } from '@/components/Screen';
 import { findShopProduct, formatINR, productTitle } from '@/data/shop';
+import { needsUpdate, useAppContent } from '@/lib/content-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { unitPrice, useCart, type CartLine } from '@/providers/CartProvider';
 import { useOrders, type OrderDetails } from '@/providers/OrdersProvider';
@@ -21,6 +22,9 @@ export default function CartScreen() {
   const { lines, count, setQty, clear } = useCart();
   const { placeOrder } = useOrders();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  // Module 9.6: the shop can stop versions it knows send bad orders. Subscribing also refreshes the lines after a download.
+  const { settings } = useAppContent();
+  const outdated = needsUpdate(settings.minAppVersion);
 
   const priced = lines.filter((line) => unitPrice(line) !== undefined);
   const subtotal = priced.reduce((sum, line) => sum + (unitPrice(line) ?? 0) * line.qty, 0);
@@ -65,7 +69,13 @@ export default function CartScreen() {
             <ValueRow label="Total (MRP)" value={formatINR(subtotal)} emphasized />
           </InsetGroup>
 
-          <Button label="Place Order" onPress={() => setCheckoutOpen(true)} />
+          {outdated && (
+            <View style={styles.update} accessibilityRole="alert">
+              <Ionicons name="arrow-up-circle" size={20} color={colors.red} />
+              <Text style={styles.updateText}>Update the app to place orders. This version is older than {settings.companyName} accepts. Your cart is kept.</Text>
+            </View>
+          )}
+          <Button label="Place Order" disabled={outdated} onPress={() => setCheckoutOpen(true)} />
           <Button label="Continue Shopping" variant="plain" size="medium" onPress={() => router.navigate('/')} style={styles.continue} />
         </>
       )}
@@ -95,7 +105,7 @@ function CartLineRow({ line, onChange }: { line: CartLine; onChange: (qty: numbe
         style={({ pressed }) => [styles.lineMedia, pressed && { opacity: 0.7 }]}
       >
         {product.image ? (
-          <Image cachePolicy="memory" source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" />
+          <Image cachePolicy="memory-disk" source={product.image} style={StyleSheet.absoluteFill} contentFit="contain" />
         ) : (
           <Ionicons name="cube-outline" size={24} color={colors.tertiaryLabel} />
         )}
@@ -120,6 +130,8 @@ function CartLineRow({ line, onChange }: { line: CartLine; onChange: (qty: numbe
 }
 
 const styles = StyleSheet.create({
+  update: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12, padding: 14, backgroundColor: colors.card, borderRadius: radius.md },
+  updateText: { ...type.subheadline, flex: 1 },
   line: { flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 16 },
   lineMedia: {
     width: 64,

@@ -74,27 +74,30 @@ const Settings = z
     path: ['minAppVersion'],
   });
 
+/** Banners, videos, More Apps and settings, in the order people see them: what the admin edits and what phones download. */
+export async function readContent(sql: Sql) {
+  const [banners, sections, videos, moreApps, settings] = await Promise.all([
+    sql`select id, image, kicker, headline, body, active from banners order by sort_order`,
+    sql`select id, title from video_sections order by sort_order`,
+    sql`select section_id, title, detail, url from videos order by section_id, sort_order`,
+    sql`select name, description, icon, play_store as "playStore", app_store as "appStore" from more_apps order by sort_order`,
+    sql`select key, value from settings order by key`,
+  ]);
+  return {
+    banners,
+    videoSections: sections.map((section) => ({ title: section.title, videos: videos.filter((video) => video.section_id === section.id).map(({ title, detail, url }) => ({ title, detail, url })) })),
+    moreApps,
+    // Databases imported before Module 9 have no minimum version: empty means none.
+    settings: { minAppVersion: '', ...Object.fromEntries(settings.map((row) => [row.key, row.value])) } as Record<string, string>,
+  };
+}
+
 /** Module 9: what the app shows besides the catalogue. Every signed-in person reads it; Owners and Catalogue editors change content, only Owners change settings. */
 export function contentRoutes(sql: Sql) {
   const content = new Hono<Env>();
   const editors = only('owner', 'catalogue');
 
-  content.get('/content', async (c) => {
-    const [banners, sections, videos, moreApps, settings] = await Promise.all([
-      sql`select id, image, kicker, headline, body, active from banners order by sort_order`,
-      sql`select id, title from video_sections order by sort_order`,
-      sql`select section_id, title, detail, url from videos order by section_id, sort_order`,
-      sql`select name, description, icon, play_store as "playStore", app_store as "appStore" from more_apps order by sort_order`,
-      sql`select key, value from settings`,
-    ]);
-    return c.json({
-      banners,
-      videoSections: sections.map((section) => ({ title: section.title, videos: videos.filter((video) => video.section_id === section.id).map(({ title, detail, url }) => ({ title, detail, url })) })),
-      moreApps,
-      // Databases imported before Module 9 have no minimum version: empty means none.
-      settings: { minAppVersion: '', ...Object.fromEntries(settings.map((row) => [row.key, row.value])) },
-    });
-  });
+  content.get('/content', async (c) => c.json(await readContent(sql)));
 
   // Each list is short and saved whole, in the order the app shows it.
   content.put('/banners', editors, jsonBody(z.object({ banners: Banners, version: Seen })), async (c) => {

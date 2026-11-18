@@ -133,7 +133,7 @@ export default function SettingsPage() {
               onChange={(event) => set('minAppVersion', event.target.value)}
               onBlur={touch('minAppVersion')}
               error={shown('minAppVersion')}
-              hint="Once app sync is built, phones on an older version will be asked to update before they order."
+              hint="Phones linked to the shop on an older version are asked to update before they order."
             />
           </div>
         </Card>
@@ -163,7 +163,7 @@ export default function SettingsPage() {
               <InfoIcon size={16} weight="bold" aria-hidden />
               <span>
                 Everything you edit here is saved on the server. The Activity page is the exception: it lists changes made in this browser only, until the activity log
-                moves to the server. Phones send orders and see their status; they get catalogue, content and settings changes once app sync is built.
+                moves to the server. Phones linked to the shop send orders, see their status, and get your catalogue, content and settings changes when they next open the app.
               </span>
             </p>
             <div>

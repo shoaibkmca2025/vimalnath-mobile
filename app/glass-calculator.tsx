@@ -13,6 +13,7 @@ import { formatInches, formatInchSize, formatMm, inchesToMm, mmToInchParts } fro
 import { computeGlassPlan, getSystemRange, parsePanelCount, type GlassPlanResult } from '@/lib/glass-calculator';
 import { buildGlassPlanHtml } from '@/lib/glass-plan-pdf';
 import { SIZE_UNIT_KEY, UNIT_OPTIONS, type LengthUnit } from '@/lib/length-units';
+import { useAppContent } from '@/lib/content-sync';
 import { pdfFileName, savePdf, sharePdf } from '@/lib/pdf-export';
 import { rememberPdf } from '@/lib/saved-pdfs';
 import { useAppUI } from '@/providers/AppUIProvider';
@@ -76,10 +77,11 @@ export default function GlassCalculatorScreen() {
     AsyncStorage.setItem(COLOUR_KEY, name).catch(() => {});
   };
 
-  // The last unit chosen is remembered for the next calculation.
+  // The last unit chosen is remembered for the next calculation; before any choice, the shop's default.
+  const { settings } = useAppContent();
   useEffect(() => {
     AsyncStorage.getItem(SIZE_UNIT_KEY)
-      .then((saved) => saved === 'in' && setUnit('in'))
+      .then((saved) => (saved ?? settings.defaultUnit) === 'in' && setUnit('in'))
       .catch(() => {});
   }, []);
 
