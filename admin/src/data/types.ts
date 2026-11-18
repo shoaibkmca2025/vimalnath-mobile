@@ -100,6 +100,8 @@ export type Order = {
   internalNote?: { text: string; at: string; by: string };
   /** 'app': placed from the cart. 'admin': sent from the admin for the customer to confirm. */
   source?: 'app' | 'admin';
+  /** For an order sent from the admin: when the customer's app first received it. */
+  customerSeenAt?: string;
   /** The inventory team's note (stock, transport, LR number). Seen by all staff, never by the customer. */
   inventoryNote?: { text: string; at: string; by: string };
   /** The App Users entry whose phone sent it. */
