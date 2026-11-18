@@ -1,13 +1,16 @@
 {
   "name": "vimalnath-deploy",
   "private": true,
-  "description": "Cloudflare deployment: the admin and the API (as a container) on one Worker, and the app's web version on another.",
+  "description": "Deployment: the admin on a Cloudflare Worker (passing /v1 to the API), the app's web version on another Worker, and the API as a Neon Function.",
   "scripts": {
     "deploy:admin": "npm --prefix ../admin run build && wrangler deploy --config admin.jsonc",
-    "deploy:app": "cd .. && npx expo export -p web --output-dir dist && cd deploy && wrangler deploy --config app.jsonc"
+    "deploy:app": "cd .. && npx expo export -p web --output-dir dist && cd deploy && wrangler deploy --config app.jsonc",
+    "build:function": "node build-function.mjs",
+    "deploy:function": "npm run build:function && npx -y neon@latest functions deploy api --src function --no-bundle --project-id empty-paper-39101544 --branch main"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261118.1",
+    "esbuild": "^0.25.12",
     "typescript": "^5.9.3",
     "wrangler": "^4.164.0"
   }
