@@ -33,7 +33,7 @@ export function serverRequests<K extends ServerKey>(key: K, before: Database[K],
   ];
 }
 
-/** Staff change only an order's status and internal note: one request per new status, so 20 orders confirmed at once is one call. */
+/** Staff change only an order's status and its internal and inventory notes: one request per new status, so 20 orders confirmed at once is one call. New order requests are sent by their page before they reach this list. */
 function orderRequests(before: Order[], after: Order[]): Request[] {
   const old = new Map(before.map((order) => [order.id, order]));
   const moved = new Map<OrderStatus, string[]>();
@@ -44,6 +44,8 @@ function orderRequests(before: Order[], after: Order[]): Request[] {
     if (was.status !== order.status) moved.set(order.status, [...(moved.get(order.status) ?? []), order.id]);
     const text = order.internalNote?.text ?? '';
     if ((was.internalNote?.text ?? '') !== text) notes.push({ path: `/orders/${encodeURIComponent(order.id)}/internal-note`, method: 'PUT', body: { text } });
+    const stock = order.inventoryNote?.text ?? '';
+    if ((was.inventoryNote?.text ?? '') !== stock) notes.push({ path: `/orders/${encodeURIComponent(order.id)}/inventory-note`, method: 'PUT', body: { text: stock } });
   }
   return [...[...moved].map(([status, ids]) => ({ path: '/orders/status', method: 'POST' as const, body: { ids, status } })), ...notes];
 }

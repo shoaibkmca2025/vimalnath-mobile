@@ -37,7 +37,7 @@ function greeting(hour: number) {
   return 'Good evening';
 }
 
-const PIPELINE: OrderStatus[] = ['placed', 'confirmed', 'dispatched'];
+const PIPELINE: OrderStatus[] = ['requested', 'placed', 'confirmed', 'packed', 'dispatched'];
 
 export default function DashboardPage() {
   const { db } = useData();

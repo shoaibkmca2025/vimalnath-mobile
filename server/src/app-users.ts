@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql } from 'postgres';
 import { z } from 'zod';
 
-import { AppOrder, appOrders, placeOrder } from './orders.ts';
+import { AppOrder, appOrders, placeOrder, respondToRequest } from './orders.ts';
 import { newToken, only, sha256, type Env } from './staff.ts';
 import { jsonBody, parse } from './validate.ts';
 
@@ -49,6 +49,13 @@ export function appRoutes(sql: Sql) {
     const { eventId, order } = c.req.valid('json');
     await placeOrder(sql, c.get('deviceId'), eventId, order);
     return c.json({ received: true });
+  });
+
+  // The customer confirms or declines an order the shop sent. Confirmed, it goes to the inventory team.
+  app.post('/orders/:id/respond', jsonBody(z.object({ decision: z.enum(['confirm', 'decline'], 'Choose confirm or decline.') })), async (c) => {
+    const id = parse(AppUserId, c.req.param('id'));
+    await respondToRequest(sql, c.get('deviceId'), id, c.req.valid('json').decision);
+    return c.json({ orders: await appOrders(sql, c.get('deviceId')) });
   });
 
   app.post('/activity', jsonBody(ActivityEvent), async (c) => {

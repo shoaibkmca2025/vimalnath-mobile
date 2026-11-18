@@ -61,6 +61,7 @@ async function phone(label = 'Ravi Glass Works') {
       return send('/v1/app/orders', 'POST', { eventId, order }, auth);
     },
     orders: async () => (await (await send('/v1/app/orders', 'GET', undefined, auth)).json()) as AppOrders,
+    respond: (id: string, decision: string) => send(`/v1/app/orders/${id}/respond`, 'POST', { decision }, auth),
   };
 }
 
@@ -184,4 +185,112 @@ test('access: Owners and Sales work on orders; Catalogue editors and signed-out 
   assert.equal((await send('/v1/admin/orders', 'GET', undefined, (await staff('catalogue')).headers)).status, 403);
   assert.equal((await send('/v1/admin/orders', 'GET', undefined, (await staff('owner')).headers)).status, 200);
   assert.equal((await send('/v1/admin/orders/status', 'POST', { ids: [1], status: 'shipped' }, (await staff('sales')).headers)).status, 400);
+});
+
+type ShopOrder = AppOrders['orders'][number] & { id: string; source: string; details?: { customer: string; total: number; lines: Line[] } };
+
+/** An order request staff send to a customer's phone, as the admin's New Order Request page sends it. */
+async function request(headers: Record<string, string>, label: string, extra: Record<string, unknown> = {}) {
+  const [device] = await sql`select id from app_devices where label = ${label}`;
+  const body = { appUserId: device!.id, customer: 'Site B', phone: '98220 11111', notes: 'Deliver after 4 pm', lines: [{ productId: 'p1', option: 'SSS', qty: 2, note: 'Matt' }, { productId: 'p3', qty: 1 }], ...extra };
+  return send('/v1/admin/orders', 'POST', body, headers);
+}
+
+test('request: staff send an order; the customer sees its details and confirms it, which passes it to inventory', { skip }, async () => {
+  const ravi = await phone('Request Co');
+  const desk = await staff('sales');
+  const res = await request(desk.headers, 'Request Co');
+  assert.equal(res.status, 201);
+  const [sent] = ((await res.json()) as { orders: Order[] }).orders;
+  assert.equal(sent!.status, 'requested');
+  assert.equal(sent!.source, 'admin');
+  assert.equal(sent!.total, 3000);
+  assert.deepEqual(sent!.lines.map((line) => [line.code, line.optionCode, line.mrp, line.note]), [['TGH-55', 'TGH-55-S', 1500, 'Matt'], ['TGH-99', undefined, undefined, undefined]]);
+  assert.deepEqual(sent!.history.map((step) => [step.status, step.by]), [['requested', desk.name]]);
+
+  const inventory = await staff('inventory');
+  assert.equal((await adminOrders(inventory.headers)).some((order) => order.id === sent!.id), false);
+
+  const [seen] = (await ravi.orders()).orders as ShopOrder[];
+  assert.deepEqual([seen!.status, seen!.source, seen!.details?.customer, seen!.details?.total, seen!.details?.lines.length], ['Requested', 'admin', 'Site B', 3000, 2]);
+  assert.match(seen!.mobileEventId, /^admin:/);
+
+  assert.equal((await ravi.respond(seen!.id, 'maybe')).status, 400);
+  assert.equal((await ravi.respond(seen!.id, 'confirm')).status, 200);
+  // Pressed twice: still fine, and recorded once.
+  assert.equal((await ravi.respond(seen!.id, 'confirm')).status, 200);
+  assert.equal((await ravi.respond(seen!.id, 'decline')).status, 409);
+
+  const confirmed = (await adminOrders(desk.headers)).find((order) => order.id === sent!.id)!;
+  assert.deepEqual(confirmed.history.map((step) => [step.status, step.by]), [['requested', desk.name], ['confirmed', 'App']]);
+  assert.equal((await adminOrders(inventory.headers)).some((order) => order.id === sent!.id), true);
+
+  // Another phone can't answer it.
+  const other = await phone('Other Co');
+  assert.equal((await other.respond(seen!.id, 'confirm')).status, 404);
+});
+
+test('request: a declined one stays out of inventory, a cancelled one cannot be confirmed, and bad lines are refused', { skip }, async () => {
+  const ravi = await phone('Decline Co');
+  const desk = await staff('owner');
+  await request(desk.headers, 'Decline Co');
+  await request(desk.headers, 'Decline Co');
+  const [second, first] = (await ravi.orders()).orders as ShopOrder[];
+  assert.equal((await ravi.respond(first!.id, 'decline')).status, 200);
+  assert.equal((await ravi.orders()).orders.find((order) => order.number === first!.number)!.status, 'Declined');
+
+  await send('/v1/admin/orders/status', 'POST', { ids: [second!.id], status: 'cancelled' }, desk.headers);
+  const late = await ravi.respond(second!.id, 'confirm');
+  assert.equal(late.status, 409);
+  assert.match(JSON.stringify(await late.json()), /cancelled/);
+
+  const noOption = await request(desk.headers, 'Decline Co', { lines: [{ productId: 'p1', qty: 1 }] });
+  assert.equal(noOption.status, 400);
+  assert.equal(((await noOption.json()) as { error: { field: string } }).error.field, 'lines.0.option');
+  assert.equal((await request(desk.headers, 'Decline Co', { lines: [{ productId: 'gone', qty: 1 }] })).status, 400);
+  assert.equal((await request(desk.headers, 'Decline Co', { lines: [] })).status, 400);
+  assert.equal((await request(desk.headers, 'Decline Co', { appUserId: 999999 })).status, 400);
+  assert.equal((await request((await staff('inventory')).headers, 'Decline Co')).status, 403);
+});
+
+test('inventory: packs and dispatches confirmed orders, can set them back to pending, and every change shows in the admin', { skip }, async () => {
+  const ravi = await phone('Inventory Co');
+  await ravi.place(lock());
+  await ravi.place(lock(3));
+  const desk = await staff('sales');
+  const inventory = await staff('inventory');
+  const [newer, older] = await ofDevice('Inventory Co');
+  // Not confirmed yet, so not theirs to see or move.
+  assert.equal((await adminOrders(inventory.headers)).some((order) => order.id === older!.id), false);
+  const early = (await (await send('/v1/admin/orders/status', 'POST', { ids: [older!.id], status: 'packed' }, inventory.headers)).json()) as { orders: Order[] };
+  assert.equal(early.orders[0]!.status, 'placed');
+
+  await send('/v1/admin/orders/status', 'POST', { ids: [older!.id, newer!.id], status: 'confirmed' }, desk.headers);
+  const move = (ids: string[], status: string) => send('/v1/admin/orders/status', 'POST', { ids, status }, inventory.headers);
+  assert.equal((await move([older!.id], 'packed')).status, 200);
+  assert.equal((await move([older!.id], 'dispatched')).status, 200);
+  assert.equal((await move([newer!.id], 'packed')).status, 200);
+  assert.equal((await move([newer!.id], 'confirmed')).status, 200);
+  // Only Pending, Packed and Dispatched are theirs.
+  assert.equal((await move([older!.id], 'delivered')).status, 403);
+  assert.equal((await move([older!.id], 'cancelled')).status, 403);
+
+  const noted = (await (await send(`/v1/admin/orders/${older!.id}/inventory-note`, 'PUT', { text: 'VRL Logistics, LR 4471' }, inventory.headers)).json()) as { orders: Order[] };
+  assert.deepEqual([noted.orders[0]!.inventoryNote?.text, noted.orders[0]!.inventoryNote?.by], ['VRL Logistics, LR 4471', inventory.name]);
+  assert.equal((await send(`/v1/admin/orders/${older!.id}/internal-note`, 'PUT', { text: 'x' }, inventory.headers)).status, 403);
+
+  const seen = new Map((await adminOrders(desk.headers)).map((order) => [order.id, order]));
+  assert.deepEqual(seen.get(older!.id)!.history.map((step) => [step.status, step.by]), [['placed', 'App'], ['confirmed', desk.name], ['packed', inventory.name], ['dispatched', inventory.name]]);
+  assert.equal(seen.get(older!.id)!.inventoryNote?.text, 'VRL Logistics, LR 4471');
+  assert.deepEqual(seen.get(newer!.id)!.history.map((step) => step.status), ['placed', 'confirmed', 'packed', 'confirmed']);
+  // The customer sees Packed and Dispatched too, but never the inventory note.
+  const phoneView = JSON.stringify(await ravi.orders());
+  assert.match(phoneView, /"Packed"/);
+  assert.doesNotMatch(phoneView, /VRL/);
+
+  // Once delivered, the inventory team still sees it but can't move it.
+  await send('/v1/admin/orders/status', 'POST', { ids: [older!.id], status: 'delivered' }, desk.headers);
+  assert.equal((await adminOrders(inventory.headers)).find((order) => order.id === older!.id)?.status, 'delivered');
+  const stuck = (await (await move([older!.id], 'packed')).json()) as { orders: Order[] };
+  assert.equal(stuck.orders[0]!.status, 'delivered');
 });

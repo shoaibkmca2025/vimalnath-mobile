@@ -1,4 +1,4 @@
-import { customerOf, itemCount } from './orders';
+import { customerOf, isCounted, itemCount } from './orders';
 import type { Category, Order, Product } from './types';
 
 export const DAY = 86_400_000;
@@ -14,11 +14,11 @@ const startOfDay = (time: number) => {
   return date;
 };
 
-/** Orders placed within [from, to), cancelled ones left out, as every money figure in the admin does. */
+/** Orders placed within [from, to), counted ones only (see isCounted), as every money figure in the admin does. */
 export const ordersBetween = (orders: Order[], from: number, to: number) =>
   orders.filter((order) => {
     const time = new Date(order.createdAt).getTime();
-    return order.status !== 'cancelled' && time >= from && time < to;
+    return isCounted(order.status) && time >= from && time < to;
   });
 
 export function totals(orders: Order[]): Totals {
@@ -39,7 +39,7 @@ export function dailySeries(orders: Order[], days: number, now: number): DayPoin
   });
   const first = points[0]!.date.getTime();
   for (const order of orders) {
-    if (order.status === 'cancelled') continue;
+    if (!isCounted(order.status)) continue;
     const day = startOfDay(new Date(order.createdAt).getTime());
     const index = Math.round((day.getTime() - first) / DAY);
     const point = points[index];

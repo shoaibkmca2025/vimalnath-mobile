@@ -13,7 +13,7 @@ import { Stat } from '@/components/Stat';
 import { useToast } from '@/components/useToast';
 import { topProducts } from '@/data/analytics';
 import type { CustomerRecord } from '@/data/customers';
-import { ORDER_STATUS, STATUS_ORDER, customerOf, itemCount, whatsappLink } from '@/data/orders';
+import { ORDER_STATUS, STATUS_ORDER, customerOf, isCounted, itemCount, whatsappLink } from '@/data/orders';
 import { useData } from '@/data/useData';
 import type { Order } from '@/data/types';
 import { api, type ApiError } from '@/lib/api';
@@ -74,7 +74,7 @@ export default function CustomerDetailPage() {
       </>
     );
 
-  const counted = orders.filter((order) => order.status !== 'cancelled');
+  const counted = orders.filter((order) => isCounted(order.status));
   const products = topProducts(counted).slice(0, 6);
   const topQty = Math.max(1, ...products.map((product) => product.qty));
   const places = [...new Set(orders.map((order) => order.notes).filter((note): note is string => Boolean(note)))].slice(0, 4);
@@ -83,7 +83,7 @@ export default function CustomerDetailPage() {
   const statusMix = STATUS_ORDER.map((status) => ({ status, count: orders.filter((order) => order.status === status).length })).filter((row) => row.count);
   const averageGapDays =
     customer.firstOrder && customer.lastOrder && customer.orders > 1 ? (new Date(customer.lastOrder).getTime() - new Date(customer.firstOrder).getTime()) / (customer.orders - 1) / 86_400_000 : null;
-  const paid = customer.orders - orders.filter((order) => order.status === 'cancelled').length;
+  const paid = orders.filter((order) => isCounted(order.status)).length;
   const dirty = JSON.stringify(draft) !== JSON.stringify(draftOf(customer));
 
   const save = async () => {

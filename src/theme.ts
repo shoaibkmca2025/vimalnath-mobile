@@ -31,6 +31,9 @@ export const colors = {
   red: '#d70015',
   redFill: 'rgba(215, 0, 21, 0.1)',
   green: '#248a3d',
+  /** Waiting on the customer, e.g. an order the shop sent to confirm. Dark enough for text on white. */
+  orange: '#c93400',
+  orangeFill: 'rgba(201, 52, 0, 0.12)',
   white: '#ffffff',
   backdrop: 'rgba(0, 0, 0, 0.4)',
   hud: 'rgba(28, 28, 30, 0.94)',

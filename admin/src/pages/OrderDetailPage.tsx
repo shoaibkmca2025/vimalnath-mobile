@@ -5,10 +5,14 @@ import {
   ChatCircleTextIcon,
   CheckIcon,
   NoteIcon,
+  PackageIcon,
+  PaperPlaneTiltIcon,
   PhoneIcon,
+  ProhibitIcon,
   PrinterIcon,
   ReceiptIcon,
   TruckIcon,
+  WarehouseIcon,
   WarningCircleIcon,
   XCircleIcon,
 } from '@phosphor-icons/react';
@@ -24,13 +28,12 @@ import { SelectField, TextAreaField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
-import { NEXT_ACTION_LABEL, ORDER_STATUS, STATUS_ORDER, customerOf, customersFromOrders, itemCount, nextStatus, whatsappLink } from '@/data/orders';
+import { NEXT_ACTION_LABEL, ORDER_STATUS, STATUS_ORDER, customerOf, customersFromOrders, itemCount, nextStatus, stepLabel, stepsOf, whatsappLink } from '@/data/orders';
 import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import type { Order, OrderStatus } from '@/data/types';
 import { formatDate, formatDateTime, formatINR, formatNumber, initials, plural } from '@/lib/format';
 
-const STEPS: OrderStatus[] = ['placed', 'confirmed', 'dispatched', 'delivered'];
 const SOURCE_NAME = { master: 'Master', office: 'Office', tavic: 'Tavic' } as const;
 
 export default function OrderDetailPage() {
@@ -43,10 +46,14 @@ export default function OrderDetailPage() {
   const order = db.orders[index];
 
   const [noteDraft, setNoteDraft] = useState(order?.internalNote?.text ?? '');
+  const [stockDraft, setStockDraft] = useState(order?.inventoryNote?.text ?? '');
   const [noteSource, setNoteSource] = useState(order);
   if (noteSource !== order) {
     setNoteSource(order);
-    if (order?.id !== noteSource?.id) setNoteDraft(order?.internalNote?.text ?? '');
+    if (order?.id !== noteSource?.id) {
+      setNoteDraft(order?.internalNote?.text ?? '');
+      setStockDraft(order?.inventoryNote?.text ?? '');
+    }
   }
 
   if (!order)
@@ -107,6 +114,21 @@ export default function OrderDetailPage() {
     toast({ message: text ? 'Internal note saved.' : 'Internal note removed.' });
   };
 
+  const stockDirty = stockDraft.trim() !== (order.inventoryNote?.text ?? '');
+  const saveStockNote = async () => {
+    const text = stockDraft.trim();
+    const ok = await update(
+      'orders',
+      (orders) => orders.map((item) => (item.id === order.id ? { ...item, inventoryNote: text ? { text, at: new Date().toISOString(), by: by() } : undefined } : item)),
+      { area: 'orders', summary: text ? `Updated the inventory note on ${order.number}` : `Removed the inventory note on ${order.number}`, to: `/orders/${order.id}` },
+    );
+    if (!ok) return;
+    setStockDraft(text);
+    toast({ message: text ? 'Inventory note saved.' : 'Inventory note removed.' });
+  };
+
+  const steps = stepsOf(order);
+  const fromAdmin = order.source === 'admin';
   const next = nextStatus(order.status);
   const items = itemCount(order);
   const priced = order.lines.filter((line) => line.mrp !== undefined);
@@ -116,6 +138,7 @@ export default function OrderDetailPage() {
   const newer = db.orders[index - 1];
   const older = db.orders[index + 1];
   const reached = (status: OrderStatus) => order.history.findLast((event) => event.status === status);
+  const ended = reached(order.status);
 
   return (
     <>
@@ -124,7 +147,7 @@ export default function OrderDetailPage() {
         crumbs={[{ label: 'Orders', to: '/orders' }]}
         description={
           <>
-            {order.customer} · {plural(items, 'item')} · placed in the app {formatDateTime(order.createdAt)}
+            {order.customer} · {plural(items, 'item')} · {fromAdmin ? 'sent to the customer’s app' : 'placed in the app'} {formatDateTime(order.createdAt)}
           </>
         }
         actions={
@@ -137,7 +160,7 @@ export default function OrderDetailPage() {
               Print
             </Button>
             {next && (
-              <Button variant="primary" icon={next === 'confirmed' ? CheckIcon : next === 'dispatched' ? TruckIcon : undefined} onClick={() => setStatus(next)} className="no-print">
+              <Button variant="primary" icon={next === 'confirmed' ? CheckIcon : next === 'packed' ? PackageIcon : next === 'dispatched' ? TruckIcon : undefined} onClick={() => setStatus(next)} className="no-print">
                 {NEXT_ACTION_LABEL[next]}
               </Button>
             )}
@@ -148,29 +171,29 @@ export default function OrderDetailPage() {
       <PrintHeader order={order} company={db.settings} />
 
       <Card aria-label="Progress" className="no-print" style={{ marginBottom: 'var(--space-4)' }}>
-        {order.status === 'cancelled' ? (
+        {order.status === 'cancelled' || order.status === 'declined' ? (
           <div className="card__body row" style={{ gap: 'var(--space-3)' }}>
-            <XCircleIcon size={22} color="var(--danger)" aria-hidden />
+            {order.status === 'cancelled' ? <XCircleIcon size={22} color="var(--danger)" aria-hidden /> : <ProhibitIcon size={22} color="var(--danger)" aria-hidden />}
             <span>
-              <strong>Cancelled</strong>
+              <strong>{order.status === 'cancelled' ? 'Cancelled' : 'Declined by the customer'}</strong>
               <span className="muted">
                 {' '}
-                · {reached('cancelled') ? `${formatDateTime(reached('cancelled')!.at)} by ${reached('cancelled')!.by}` : ''}
+                · {ended ? `${formatDateTime(ended.at)}${ended.by === 'App' ? ' in the app' : ` by ${ended.by}`}` : ''}
               </span>
             </span>
           </div>
         ) : (
           <ol className="stepper">
-            {STEPS.map((step) => {
+            {steps.map((step) => {
               const event = reached(step);
-              const state = step === order.status ? 'current' : STEPS.indexOf(step) < STEPS.indexOf(order.status) ? 'done' : 'todo';
+              const state = step === order.status ? 'current' : steps.indexOf(step) < steps.indexOf(order.status) ? 'done' : 'todo';
               return (
                 <li key={step} className="stepper__step" data-state={state} aria-current={state === 'current' ? 'step' : undefined}>
                   <span className="stepper__dot" aria-hidden>
                     {state !== 'todo' && <CheckIcon size={12} weight="bold" />}
                   </span>
-                  <span className="stepper__label">{ORDER_STATUS[step].label === 'New' ? 'Placed' : ORDER_STATUS[step].label}</span>
-                  <span className="stepper__meta">{event && state !== 'todo' ? `${formatDateTime(event.at)} · ${event.by === 'App' ? 'in the app' : event.by}` : 'Not yet'}</span>
+                  <span className="stepper__label">{step === 'placed' ? 'Placed' : step === 'requested' ? 'Sent' : ORDER_STATUS[step].label}</span>
+                  <span className="stepper__meta">{event && state !== 'todo' ? `${formatDateTime(event.at)} · ${event.by === 'App' ? (step === 'placed' ? 'in the app' : 'by the customer') : event.by}` : 'Not yet'}</span>
                 </li>
               );
             })}
@@ -276,7 +299,7 @@ export default function OrderDetailPage() {
           </Card>
 
           <Card aria-labelledby="notes-title">
-            <CardHeader id="notes-title" title="Customer’s notes" description="Typed in the app when the order was placed." />
+            <CardHeader id="notes-title" title={fromAdmin ? 'Delivery notes' : 'Customer’s notes'} description={fromAdmin ? 'Sent to the customer with the request.' : 'Typed in the app when the order was placed.'} />
             <p className="card__body" style={{ display: 'flex', gap: 8 }}>
               <NoteIcon size={18} color="var(--text-2)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
               {order.notes ?? <span className="muted">No delivery notes.</span>}
@@ -299,6 +322,28 @@ export default function OrderDetailPage() {
               </div>
             </div>
           </Card>
+
+          <Card aria-labelledby="stock-title" className="no-print">
+            <CardHeader
+              id="stock-title"
+              title="Inventory note"
+              description={order.inventoryNote ? `Last edited by ${order.inventoryNote.by}, ${formatDateTime(order.inventoryNote.at)}.` : 'Written by the inventory team: stock, packing, transport. Staff see it; the customer doesn’t.'}
+              action={
+                <Link to="/inventory" className="row" style={{ gap: 4 }}>
+                  <WarehouseIcon size={14} aria-hidden /> Inventory
+                </Link>
+              }
+            />
+            <div className="card__body stack">
+              <TextAreaField label="Note" value={stockDraft} onChange={(event) => setStockDraft(event.target.value)} rows={2} placeholder="e.g. VRL Logistics, LR 4471" />
+              <div className="row" style={{ justifyContent: 'flex-end' }}>
+                {stockDirty && <Button onClick={() => setStockDraft(order.inventoryNote?.text ?? '')}>Discard</Button>}
+                <Button variant="primary" disabled={!stockDirty} onClick={saveStockNote}>
+                  Save Note
+                </Button>
+              </div>
+            </div>
+          </Card>
         </div>
 
         <div className="stack editor__aside">
@@ -306,6 +351,14 @@ export default function OrderDetailPage() {
             <CardHeader id="status-title" title="Status" action={<OrderStatusBadge status={order.status} />} />
             <div className="card__body stack">
               <p className="muted">{ORDER_STATUS[order.status].description}.</p>
+            {order.status === 'requested' && (
+              <p className="notice">
+                <PaperPlaneTiltIcon size={16} weight="bold" aria-hidden />
+                <span>
+                  {order.appUser ? `${order.appUser.label} sees it in their app under Orders.` : 'The customer sees it in their app under Orders.'} When they confirm it, it goes to the inventory team.
+                </span>
+              </p>
+            )}
               <SelectField
                 label="Change status"
                 value={order.status}
@@ -319,7 +372,7 @@ export default function OrderDetailPage() {
                 <li key={`${step.status}-${step.at}`} className="timeline__item">
                   <span className="timeline__dot" data-tone={ORDER_STATUS[step.status].tone} aria-hidden />
                   <span>
-                    <span style={{ fontWeight: 600 }}>{step.status === 'placed' ? 'Placed in the app' : ORDER_STATUS[step.status].label}</span>
+                    <span style={{ fontWeight: 600 }}>{stepLabel(step.status, step.by)}</span>
                     <span className="cell-sub" style={{ display: 'block' }}>
                       {formatDateTime(step.at)} · {step.by === 'App' ? order.customer : step.by}
                     </span>
@@ -379,9 +432,9 @@ export default function OrderDetailPage() {
             </div>
           </Card>
 
-          {order.status !== 'cancelled' && order.status !== 'delivered' && (
+          {order.status !== 'cancelled' && order.status !== 'delivered' && order.status !== 'declined' && (
             <Button variant="danger-plain" icon={XCircleIcon} onClick={() => setConfirmCancel(true)} className="no-print">
-              Cancel Order
+              {order.status === 'requested' ? 'Cancel Request' : 'Cancel Order'}
             </Button>
           )}
         </div>
@@ -389,9 +442,13 @@ export default function OrderDetailPage() {
 
       <ConfirmDialog
         open={confirmCancel}
-        title={`Cancel order ${order.number}?`}
-        body={`The order from ${order.customer} will be marked cancelled. You can change the status back later if this was a mistake.`}
-        confirmLabel="Cancel Order"
+        title={order.status === 'requested' ? `Cancel request ${order.number}?` : `Cancel order ${order.number}?`}
+        body={
+          order.status === 'requested'
+            ? `${order.customer} will no longer be able to confirm it in the app. You can change the status back later if this was a mistake.`
+            : `The order from ${order.customer} will be marked cancelled. You can change the status back later if this was a mistake.`
+        }
+        confirmLabel={order.status === 'requested' ? 'Cancel Request' : 'Cancel Order'}
         destructive
         onCancel={() => setConfirmCancel(false)}
         onConfirm={() => {

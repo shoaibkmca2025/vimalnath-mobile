@@ -41,7 +41,7 @@ src/
   calculators.ts Cutlist systems, configurations and bar sections (/v1/admin/calculators, /cutlist, /bar-sections; change: Owner and Catalogue editor)
   content.ts   Banners, installation videos, More Apps and settings (/v1/admin/content, /banners, /videos, /more-apps; /settings is Owner only)
   versions.ts  A save counter per whole list (/v1/admin/versions): a save from an out-of-date admin tab is refused (409) instead of replacing a newer change
-  orders.ts    Orders from the app (numbered VSC-0001 on), and /v1/admin/orders for status changes and internal notes
+  orders.ts    Orders from the app (numbered VSC-0001 on), and /v1/admin/orders for order requests staff send to a customer's app, status changes, and internal and inventory notes. The Inventory manager role sees only confirmed, packed, dispatched and delivered orders, and moves them between Pending (confirmed), Packed and Dispatched
   media.ts     Uploads (POST /v1/admin/media: photos up to 5 MB, PDFs up to 25 MB) and serving them at /v1/media/<id>.webp, -md.webp, -sm.webp or .pdf
   validate.ts  Checks input; a route uses jsonBody(schema)
   config.ts    Reads and checks the settings at startup
@@ -55,7 +55,8 @@ Every error looks like `{ "error": { "message": "...", "field": "name" } }`. `fi
 
 | Route | What it does |
 |---|---|
-| `GET /v1/app/orders` | `{ customerId, orders }`: each order's shop number, status and history. The app checks this around every sync. |
+| `GET /v1/app/orders` | `{ customerId, orders }`: each order's shop number, status and history. An order staff sent (`source: "admin"`) also carries its `details`. The app checks this around every sync. |
+| `POST /v1/app/orders/:id/respond` | `{ decision: "confirm" | "decline" }` for an order staff sent. Confirmed, it goes to the inventory team. |
 | `POST /v1/app/orders` | `{ eventId, order }`. Saved once however often it's sent, at the server's prices; lines that no longer match the catalogue are flagged for staff, not refused. |
 | `POST /v1/app/profile` | `{ eventId, profile }`, the User screen's details. |
 | `POST /v1/app/activity` | A product view, sent only if the customer turned on activity sharing. |

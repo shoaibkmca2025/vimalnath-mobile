@@ -51,8 +51,16 @@ test('customers: one per name however it is typed; cancelled orders are not coun
   assert.equal(anil?.spent, 200);
 });
 
-test('order steps: placed → confirmed → dispatched → delivered, and nothing after delivered or cancelled', () => {
-  assert.deepEqual((['placed', 'confirmed', 'dispatched', 'delivered', 'cancelled'] as const).map(nextStatus), ['confirmed', 'dispatched', 'delivered', null, null]);
+test('order steps: placed → confirmed → packed → dispatched → delivered; a request waits for the customer; nothing after the end', () => {
+  assert.deepEqual(
+    (['placed', 'confirmed', 'packed', 'dispatched', 'delivered', 'cancelled', 'requested', 'declined'] as const).map(nextStatus),
+    ['confirmed', 'packed', 'dispatched', 'delivered', null, null, null, null],
+  );
+});
+
+test('requests and declined orders are not sales; a request is still open', () => {
+  const [ravi] = customersFromOrders([order('Ravi', 'requested', 700, '2026-11-01T10:00:00Z'), order('Ravi', 'declined', 300, '2026-11-02T10:00:00Z'), order('Ravi', 'packed', 100, '2026-11-03T10:00:00Z')]);
+  assert.deepEqual([ravi?.spent, ravi?.open, ravi?.orders], [100, 2, 3]);
 });
 
 test('WhatsApp links: an Indian mobile number gets 91 in front; other countries keep theirs', () => {

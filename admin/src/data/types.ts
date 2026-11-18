@@ -56,7 +56,8 @@ export type Settings = {
   logo: string;
 };
 
-export type OrderStatus = 'placed' | 'confirmed' | 'dispatched' | 'delivered' | 'cancelled';
+/** requested and declined: sent from the admin, waiting on or turned down by the customer. confirmed is Pending for the inventory team. */
+export type OrderStatus = 'requested' | 'declined' | 'placed' | 'confirmed' | 'packed' | 'dispatched' | 'delivered' | 'cancelled';
 
 /** Same fields as an order line in the app (OrdersProvider): a snapshot of the product when it was ordered. */
 export type OrderLine = {
@@ -77,7 +78,7 @@ export type OrderLine = {
 export type OrderEvent = {
   status: OrderStatus;
   at: string;
-  /** Who made the change: "App" for the order itself, otherwise the admin's name. */
+  /** Who made the change: "App" for the customer (placing, confirming or declining), otherwise the staff member's name. */
   by: string;
 };
 
@@ -97,6 +98,10 @@ export type Order = {
   history: OrderEvent[];
   /** Only seen in the admin, never by the customer. */
   internalNote?: { text: string; at: string; by: string };
+  /** 'app': placed from the cart. 'admin': sent from the admin for the customer to confirm. */
+  source?: 'app' | 'admin';
+  /** The inventory team's note (stock, transport, LR number). Seen by all staff, never by the customer. */
+  inventoryNote?: { text: string; at: string; by: string };
   /** The App Users entry whose phone sent it. */
   appUser?: { id: number; label: string };
   /** The customer that app user belongs to (Module 7); customers group orders by this, not by the typed name. */
