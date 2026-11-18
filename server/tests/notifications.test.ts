@@ -92,7 +92,7 @@ test('sending: delivered once; a failure is tried three times; email without SMT
   await sql`update notification_log set status = 'sent' where status = 'pending'`;
   const owner = await staff('owner');
   const order = await phoneWithOrder(owner, 'ExponentPushToken[gone]');
-  const add = (channel: string, recipient: string) => sql`insert into notification_log (event, channel, recipient, order_id, title, body) values ('test', ${channel}, ${recipient}, ${order.id}, 'T', 'B') returning id`;
+  const add = (channel: string, recipient: string) => sql<{ id: number }[]>`insert into notification_log (event, channel, recipient, order_id, title, body) values ('test', ${channel}, ${recipient}, ${order.id}, 'T', 'B') returning id`;
   const [[ok], [flaky], [mail], [gone]] = [await add('push', 'ExponentPushToken[ok]'), await add('push', 'ExponentPushToken[flaky]'), await add('email', 'a@b.in'), await add('push', 'ExponentPushToken[gone]')];
   const delivered: string[] = [];
   const push = async (message: Message) => {
