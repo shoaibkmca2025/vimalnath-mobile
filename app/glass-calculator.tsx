@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View, type ImageSourcePropType } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { FractionButton, FractionSheet } from '@/components/FractionPicker';
@@ -52,8 +53,8 @@ export default function GlassCalculatorScreen() {
   const { name, backLabel, fallbackRoute } = useLocalSearchParams<{ name?: string; backLabel?: string; fallbackRoute?: string }>();
   const systemName = name ?? 'Sliding System';
   const panelCount = parsePanelCount(systemName);
-  // Telescopic and synchronized systems call the opening's width its length; folding systems keep "Width".
-  const widthLabel = /folding/i.test(systemName) ? 'Width' : 'Length';
+  // Vimalnath calls the opening's width its length, in every system.
+  const widthLabel = 'Length';
 
   const [unit, setUnit] = useState<Unit>('mm');
   const [width, setWidth] = useState('');
@@ -64,8 +65,8 @@ export default function GlassCalculatorScreen() {
   const [result, setResult] = useState<GlassPlanResult | null>(null);
   const [sizeError, setSizeError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'share' | 'save' | null>(null);
-  // Telescopic and synchronized systems let the user pick the profile colour for the material list (remembered).
-  const hasColour = widthLabel === 'Length';
+  // Systems with a confirmed formula let the user pick the profile colour for the material list (remembered).
+  const hasColour = getSystemRange(systemName) !== null;
   const [colour, setColour] = useState(MATERIAL_COLOURS[0].name);
   useEffect(() => {
     AsyncStorage.getItem(COLOUR_KEY)
@@ -78,7 +79,7 @@ export default function GlassCalculatorScreen() {
   };
 
   // The last unit chosen is remembered for the next calculation; before any choice, the shop's default.
-  const { settings } = useAppContent();
+  const { settings, products } = useAppContent();
   useEffect(() => {
     AsyncStorage.getItem(SIZE_UNIT_KEY)
       .then((saved) => (saved ?? settings.defaultUnit) === 'in' && setUnit('in'))
@@ -260,9 +261,15 @@ export default function GlassCalculatorScreen() {
           )}
 
           <InsetGroup header={hasColour ? `Material list · ${colour}` : 'Material list'} style={hasColour ? undefined : styles.materials}>
-            {result.materials.map((item) => (
-              <ValueRow key={item.label} label={item.label} value={item.value} detail={item.note} />
-            ))}
+            {result.materials.map((item) => {
+              // The Shop's photo of the part, from the latest catalogue sync.
+              const image = item.productId ? products.find((product) => product.id === item.productId)?.image : undefined;
+              return image ? (
+                <MaterialRow key={item.label} item={item} image={image} />
+              ) : (
+                <ValueRow key={item.label} label={item.label} value={item.value} detail={item.note} />
+              );
+            })}
           </InsetGroup>
 
           <View style={styles.exportRow}>
@@ -300,6 +307,23 @@ export default function GlassCalculatorScreen() {
         onClose={() => setFractionFor(null)}
       />
     </Screen>
+  );
+}
+
+/** A material with its product photo: the photo, the name and note, then the quantity on the right. */
+function MaterialRow({ item, image }: { item: GlassPlanResult['materials'][number]; image: ImageSourcePropType }) {
+  return (
+    <View style={styles.materialRow} accessible accessibilityLabel={`${item.label}, ${item.value}${item.note ? `, ${item.note}` : ''}`}>
+      <View style={styles.materialPhoto}>
+        {/* Memory only: a photo replaced under the same name must not come back from the disk cache. */}
+        <Image source={image} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory" transition={120} accessibilityIgnoresInvertColors />
+      </View>
+      <View style={styles.materialText}>
+        <Text style={type.body}>{item.label}</Text>
+        {item.note ? <Text style={styles.materialNote}>{item.note}</Text> : null}
+      </View>
+      <Text style={styles.materialValue}>{item.value}</Text>
+    </View>
   );
 }
 
@@ -385,6 +409,12 @@ const styles = StyleSheet.create({
   sizeValue: { ...type.title2, marginTop: 2, ...tabularNums },
   sizeInches: { ...type.headline, marginBottom: 2, color: colors.secondaryLabel, ...tabularNums },
   materials: { marginTop: 16 },
+  materialRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
+  materialPhoto: { width: 52, height: 52, overflow: 'hidden', borderRadius: 8, backgroundColor: colors.white, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.separator },
+  // Both text columns take a share of the row, so Android's Bold text can't cut the ends off.
+  materialText: { flex: 1.4 },
+  materialNote: { ...type.footnote, marginTop: 2, color: colors.secondaryLabel },
+  materialValue: { ...type.body, flex: 1, textAlign: 'right', color: colors.secondaryLabel },
   colours: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 12 },
   colourChip: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 10, paddingRight: 14, borderWidth: 1.5, borderColor: colors.separator, borderRadius: 20 },
   colourChipSelected: { borderColor: colors.tint, backgroundColor: colors.tintFill },

@@ -35,8 +35,8 @@ export function buildGlassPlanHtml({ systemName, result, materialColour }: Glass
           section .value { font-size: 23px; font-weight: 700; }
           section .inches { margin-top: 2px; font-size: 15px; font-weight: 600; color: #5a6b8c; }
           section .note { margin-top: 4px; font-size: 12px; color: #5a6b8c; }
-          .cutting { background: #e6eeff; }
-          .cutting h2, .cutting .value { color: #0f3fb8; }
+          .cutting { background: #fdecee; }
+          .cutting h2, .cutting .value { color: #a30010; }
           .glass { background: #edf2ff; }
           .glass h2, .glass .value { color: #2458e8; }
           .material { background: #eef3ff; }

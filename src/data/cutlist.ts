@@ -11,19 +11,19 @@ export type CutlistSystem = {
 export const cutlistSystems: CutlistSystem[] = [
   {
     id: 'telescopic',
-    name: 'Telescopic Sliding',
+    name: '16 × 35 Telescopic Sliding System',
     subtitle: 'Multi-panel travel system',
     photo: require('../../assets/images/telescopic-sliding-photo.webp'),
   },
   {
     id: 'synchronized',
-    name: 'Synchronized System',
+    name: '16 × 35 Synchronized Sliding System',
     subtitle: 'Balanced panel movement',
     photo: require('../../assets/images/synchronized-system-photo.webp'),
   },
   {
     id: 'folding',
-    name: 'Sliding Folding System',
+    name: '12 × 45 Sliding Folding System',
     subtitle: 'Compact folding panels',
     photo: require('../../assets/images/sliding-folding-photo.webp'),
   },

@@ -1,8 +1,11 @@
 import { calculateBars } from '@/lib/bar-optimizer';
-import { formatInches } from '@/lib/format';
+import { formatFeetRoundedUp, formatInches } from '@/lib/format';
 
-/** `note` carries extra detail shown under the label, e.g. the cut pieces behind a bar count. */
-export type MaterialItem = { label: string; value: string; note?: string };
+/**
+ * `note` carries extra detail shown under the label, e.g. the cut pieces behind a bar count. `productId` is the
+ * Shop product it is, so the list can show its photo.
+ */
+export type MaterialItem = { label: string; value: string; note?: string; productId?: string };
 
 export type GlassPlanResult = {
   openingWidth: number;
@@ -35,11 +38,13 @@ export function parsePanelCount(name: string): number {
 }
 
 /**
- * "1+0 Sliding System" → "1+0", "2+0 Synchro Sliding System" → "synchro:2+0". Used to look up the
- * confirmed per-system formulas below; synchro systems get their own keys so a telescopic formula
- * never applies to the synchro system with the same panel count.
+ * "1+0 Sliding System" → "1+0", "2+0 Synchro Sliding System" → "synchro:2+0", "2 Door Sliding Folding
+ * System" → "folding:2". Used to look up the confirmed per-system formulas below; synchro and folding
+ * systems get their own keys so a telescopic formula never applies to another system with the same count.
  */
 function systemKey(name: string): string {
+  const doors = /folding/i.test(name) ? name.match(/(\d+)\s*Door/i) : null;
+  if (doors) return `folding:${doors[1]}`;
   const match = name.match(/\d+\s*\+\s*\d+/);
   if (!match) return '';
   const key = match[0].replace(/\s+/g, '');
@@ -69,6 +74,8 @@ type SystemFormula = {
   glassQuantity: number;
   materialBrackets: MaterialBracket[];
   notice?: (cuttingWidth: number) => string;
+  /** The glass from the cutting size; without it the glass is 21 mm smaller each way. */
+  glassSize?: (cuttingWidth: number, cuttingHeight: number) => { width: number; height: number };
 };
 
 /** Extra track beyond the opening and one parked shutter, for systems whose shutters all slide into the wall. */
@@ -357,6 +364,94 @@ function synchro(system: string, connectors: number, track?: TrackSpec): SystemS
   };
 }
 
+type FoldingSpec = {
+  doors: number;
+  /** Taken off the opening length before it's shared between the doors. */
+  deduction: number;
+  minWidth: number;
+  maxWidth: number;
+  /** The fixed counts Vimalnath gives for this number of doors. */
+  verticals: number;
+  endCaps: number;
+  magnetPairs: number;
+  wheels: number;
+  hingePairs: number;
+  /** The lock and rod as Vimalnath writes it: "1+1", or a count such as "2 nos". */
+  lockAndRod?: string;
+  /** One top track as long as the opening, in whole feet (rounded up); otherwise one 2.5 m track. */
+  trackFromOpening?: boolean;
+  /** Lists the outer vertical gaskets (small and big), in metres. */
+  outerGasket?: boolean;
+};
+
+/**
+ * 12 × 45 Sliding Folding Systems, as specified by Vimalnath: height 1000–3000 mm; cutting length =
+ * (length − deduction) ÷ doors, cutting height = height − 60; glass = cutting length − 3 by cutting height − 54;
+ * one glass per door. The material list is the same up to a 2400 mm and a 2950 mm cutting height, except
+ * that above 2400 mm the vertical profiles are 3 m: a 2.5 m profile is shorter than the panel. The fixed
+ * counts are the ones Vimalnath gave; the horizontals (top and bottom of each glass) come from the bar optimizer.
+ */
+function slidingFolding(spec: FoldingSpec): SystemFormula {
+  const cuttingWidth = (openingWidth: number) => (openingWidth - spec.deduction) / spec.doors;
+  return {
+    range: { minWidth: spec.minWidth, maxWidth: spec.maxWidth, minHeight: 1000, maxHeight: 3000 },
+    cuttingSize: {
+      width: cuttingWidth,
+      height: (_openingWidth, openingHeight) => openingHeight - 60,
+    },
+    glassSize: (finishedWidth, cuttingHeight) => ({ width: finishedWidth - 3, height: cuttingHeight - 54 }),
+    glassQuantity: spec.doors,
+    materialBrackets: [2400, 2950].map((maxHeight, index, all) => ({
+      // Every cutting size the opening range produces.
+      minWidth: cuttingWidth(spec.minWidth),
+      maxWidth: cuttingWidth(spec.maxWidth),
+      minHeight: index === 0 ? 1000 - 60 : all[index - 1]! + 1,
+      maxHeight,
+      materials: (finishedWidth: number, cuttingHeight: number, openingWidth: number) => {
+        const { verticals } = spec;
+        const verticalMetres = cuttingHeight <= 2400 ? 2.5 : 3;
+        const horizontal = optimizedRow('Horizontal Profile', 2 * spec.doors, finishedWidth, PROFILE_STOCK, 'top and bottom of each glass');
+        // Each item is a Taiton framed sliding folding part (Master catalogue page 30), shown with its photo.
+        const items: MaterialItem[] = [
+          { label: 'Vertical Profile', value: `${verticals} nos (${verticalMetres} m)`, productId: 'folding-tav-sfs-v' },
+          { ...horizontal.item, productId: 'folding-tav-sfs-h' },
+          spec.trackFromOpening
+            ? // As long as the opening, shown in whole feet: 1800 mm (5′ 11″) → 6 ft.
+              { label: 'Top Track', value: `1 nos (${formatFeetRoundedUp(openingWidth)})`, note: `As long as the opening, ${openingWidth} mm (${formatInches(openingWidth)})`, productId: 'folding-tav-sfs-tt' }
+            : { label: 'Top Track', value: '1 nos (2.5 m)', productId: 'folding-tav-sfs-tt' },
+          { label: 'Starting Panel Top and Bottom Pivot', value: '1 set', productId: 'folding-tav-sfs-pivot' },
+          { label: 'Lock and Rod', value: spec.lockAndRod ?? '1+1', productId: 'folding-tav-sfs-ld' },
+          { label: 'Profile Corner End Cap', value: `${spec.endCaps} nos`, productId: 'folding-tav-sfs-ec' },
+          { label: 'Anti-Collision Magnet', value: `${spec.magnetPairs} pair`, productId: 'folding-tav-sfs-magnet' },
+          { label: 'Hanging Wheel with Bracket', value: `${spec.wheels} nos`, productId: 'folding-tav-sfs-wb' },
+          {
+            label: 'Gasket',
+            value: `${verticals + horizontal.bars} nos (8mm)`,
+            note: `${verticals} vertical + ${horizontal.bars} horizontal profiles`,
+            productId: 'folding-tav-sfs-pvc',
+          },
+        ];
+        if (spec.outerGasket) {
+          // As long as the vertical profiles together, e.g. 6 × 2.5 m = 15 m of each, small and big.
+          items.push({
+            label: 'Outer Vertical Gasket (Small and Big)',
+            value: `${verticals * verticalMetres} m each`,
+            note: `${verticals} vertical profiles × ${verticalMetres} m`,
+            productId: 'folding-tav-sfs-v-strip2',
+          });
+        }
+        items.push(
+          { label: 'Top and Bottom Hinge', value: `${spec.hingePairs} pair`, note: 'Left or right, according to the design', productId: 'folding-tav-sfs-hinge' },
+          { label: 'Middle', value: 'According to design', productId: 'folding-tav-sfs-mp' },
+          { label: 'Georgian Bar', value: 'According to design', productId: 'folding-tav-sfs-db' },
+          { label: 'Middle Connector', value: 'According to design', productId: 'folding-tav-sfs-mp-cntr' },
+        );
+        return items;
+      },
+    })),
+  };
+}
+
 // Formulas keyed by system ("1+0", "2+0", …), with the widest opening each allows. Any system not
 // listed here falls back to the CUTTING_ALLOWANCE_MM placeholder below until its formula is confirmed.
 const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
@@ -386,6 +481,34 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
   ),
   'synchro:6+0': vimalnathSystem(synchro('6+0', 24)),
   'synchro:6+2': vimalnathSystem(synchro('6+2', 32)),
+  'folding:2': slidingFolding({ doors: 2, deduction: 63, minWidth: 600, maxWidth: 1800, verticals: 4, endCaps: 8, magnetPairs: 4, wheels: 1, hingePairs: 2 }),
+  'folding:3': slidingFolding({
+    doors: 3,
+    deduction: 92,
+    minWidth: 900,
+    maxWidth: 2700,
+    verticals: 6,
+    endCaps: 12,
+    magnetPairs: 6,
+    wheels: 1,
+    hingePairs: 4,
+    trackFromOpening: true,
+    outerGasket: true,
+  }),
+  'folding:4': slidingFolding({
+    doors: 4,
+    deduction: 121,
+    minWidth: 1200,
+    maxWidth: 3600,
+    verticals: 8,
+    endCaps: 16,
+    magnetPairs: 8,
+    wheels: 2,
+    hingePairs: 6,
+    lockAndRod: '2 nos',
+    trackFromOpening: true,
+    outerGasket: true,
+  }),
 };
 
 export function getSystemRange(systemName: string): SizeRange | null {
@@ -432,8 +555,9 @@ export function computeGlassPlan(
 
   const cuttingWidth = Math.round(formula.cuttingSize.width(width, height));
   const cuttingHeight = Math.round(formula.cuttingSize.height(width, height));
-  const glassWidth = cuttingWidth - 21;
-  const glassHeight = cuttingHeight - 21;
+  const glass = formula.glassSize?.(cuttingWidth, cuttingHeight) ?? { width: cuttingWidth - 21, height: cuttingHeight - 21 };
+  const glassWidth = glass.width;
+  const glassHeight = glass.height;
 
   // Match on the finished cutting size; if it falls just outside every bracket's width range,
   // still pick the bracket for the right height rather than showing no material list at all.
