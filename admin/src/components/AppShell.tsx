@@ -1,4 +1,5 @@
 import {
+  ArchiveIcon,
   BellIcon,
   BookOpenIcon,
   CalculatorIcon,
@@ -37,6 +38,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { ThemeSwitch } from '@/components/ThemeSwitch';
 import { creditDaysOf, isOverdue } from '@/data/payments';
 import { useRequestNotifications } from '@/data/requestNotifications';
+import { editsStock, seesStock, stockAlerts } from '@/data/stock';
 import { inOrders } from '@/data/requests';
 import { endSession, readSession } from '@/data/session';
 import { useData } from '@/data/useData';
@@ -71,12 +73,20 @@ export function AppShell() {
   const withInventory = db.orders.filter((order) => order.status === 'confirmed' || order.status === 'packed' || order.status === 'dispatched').length;
   // Every count is a red notification badge, the same everywhere.
   const inventoryItem: NavItem = { to: '/inventory', label: 'Inventory', icon: WarehouseIcon, count: withInventory, alert: true, alertLabel: 'not delivered yet' };
-  // The inventory team only works on its own panel (and its password, under Settings).
+  // Items at or below their minimum, or out: red for those who restock (Owners, the inventory team), a plain link for Sales.
+  const lowStock = stockAlerts(db.stock);
+  const stockItem: NavItem = {
+    to: '/stock',
+    label: 'Stock',
+    icon: ArchiveIcon,
+    ...(editsStock(session?.role) ? { count: lowStock.low + lowStock.out, alert: true, alertLabel: 'low or out of stock' } : {}),
+  };
+  // The inventory team only works on its own panel, the stock (and its password, under Settings).
   const inventoryOnly = session?.role === 'inventory';
 
   const groups: { title: string; items: NavItem[] }[] = inventoryOnly
     ? [
-        { title: 'Inventory', items: [{ ...inventoryItem, label: 'Orders to Pack' }] },
+        { title: 'Inventory', items: [{ ...inventoryItem, label: 'Orders to Pack' }, stockItem] },
         { title: 'System', items: [{ to: '/settings', label: 'Settings', icon: GearSixIcon }] },
       ]
     : [
@@ -95,6 +105,7 @@ export function AppShell() {
       title: 'Catalogue',
       items: [
         { to: '/products', label: 'Products', icon: PackageIcon },
+        ...(seesStock(session?.role) ? [stockItem] : []),
         { to: '/prices', label: 'Prices', icon: CurrencyInrIcon },
         { to: '/categories', label: 'Categories', icon: TagIcon },
         { to: '/price-lists', label: 'Price Lists', icon: BookOpenIcon },
@@ -177,7 +188,7 @@ export function AppShell() {
     inventoryOnly ? ['confirmed', 'packed', 'dispatched'].includes(order.status) : inOrders(order) && ['placed', 'confirmed', 'packed', 'dispatched'].includes(order.status),
   );
 
-  const allowed = !inventoryOnly || location.pathname.startsWith('/inventory') || location.pathname.startsWith('/settings');
+  const allowed = !inventoryOnly || ['/inventory', '/stock', '/settings'].some((path) => location.pathname.startsWith(path));
 
   const signOut = async () => {
     await endSession();

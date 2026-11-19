@@ -1294,3 +1294,24 @@
   justify-content: space-between;
   gap: var(--space-3);
 }
+
+/* ---------- Stock ---------- */
+
+/* A row title that opens the stock panel: reads like the other tables' title links. */
+button.cell-title {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.import-errors {
+  max-height: 260px;
+  margin: 0;
+  padding-left: var(--space-4);
+  overflow: auto;
+  font-size: var(--text-sm);
+}
