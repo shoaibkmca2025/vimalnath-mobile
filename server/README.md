@@ -35,7 +35,7 @@ src/
   server.ts    Starts the API and shuts it down cleanly
   app.ts       Routes, security, request limits and the one error format
   staff.ts     Staff sign-in, roles and everything under /v1/admin
-  app-users.ts The app's shop connection (/v1/app, including GET /v1/app/content for app sync) and the admin's App Users (/v1/admin/app-users)
+  app-users.ts The app's accounts and shop connection (/v1/app, including GET /v1/app/content for app sync) and the admin's App Users (/v1/admin/app-users)
   catalogue.ts Products, categories, price lists and the MRP history (/v1/admin/price-history) under /v1/admin (read: all staff; change: Owner and Catalogue editor)
   customers.ts Customers (/v1/admin/customers): each app user belongs to one; notes, tags and merging
   calculators.ts Cutlist systems, configurations and bar sections (/v1/admin/calculators, /cutlist, /bar-sections; change: Owner and Catalogue editor)
@@ -55,7 +55,15 @@ src/
 
 Every error looks like `{ "error": { "message": "...", "field": "name" } }`. `field` appears only when one input is at fault.
 
-**The app's shop connection.** Staff add a customer under App Users and send them the token. The customer enters it in the app under Settings → Shop connection. The app then sends `Authorization: Bearer <token>` to:
+**The app's accounts.** A customer creates an account in the app with their mobile number and a password; each account starts as its own customer, and staff see it under App Users. Logging in gives the phone a token; logging in on another phone signs the first one out. A customer who forgets their password asks the shop, and Owner or Sales staff set a new one in App Users (`PATCH /v1/admin/app-users/:id` with `{ password }`), which also signs the phone out. Five wrong passwords lock a number for 15 minutes.
+
+| Route | What it does |
+|---|---|
+| `POST /v1/app/register` | `{ name, business?, city?, email?, phone, password }` → `{ token, customerId }`. 409 if the number already has an account. |
+| `POST /v1/app/login` | `{ phone, password }` → `{ token, customerId, profile }`. The phone's earlier token stops working. |
+| `POST /v1/app/logout` | The token stops working and the phone stops getting order updates. |
+
+The app sends `Authorization: Bearer <token>` to every other route here:
 
 | Route | What it does |
 |---|---|

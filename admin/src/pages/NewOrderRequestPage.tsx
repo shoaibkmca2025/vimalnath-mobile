@@ -149,13 +149,8 @@ export default function NewOrderRequestPage() {
           <EmptyState
             icon={DeviceMobileIcon}
             title="No app users yet"
-            action={
-              <ButtonLink to="/app-users" variant="primary">
-                Go to App Users
-              </ButtonLink>
-            }
           >
-            A request is sent to a customer’s app, so connect their app to the shop first.
+            A request is sent to a customer’s app. Customers show here once they create an account in the app.
           </EmptyState>
         </Card>
       </>
@@ -316,7 +311,7 @@ export default function NewOrderRequestPage() {
                     label: `${user.label}${user.business || user.name ? ` · ${user.business || user.name}` : ''}${user.lastSeenAt ? '' : ' (not connected yet)'}`,
                   })),
                 ]}
-                hint={chosen && !chosen.lastSeenAt ? 'This app hasn’t connected yet. They’ll see the request once they enter their token.' : undefined}
+                hint={chosen && !chosen.lastSeenAt ? 'This customer hasn’t opened the app since registering. They’ll see the request when they next log in.' : undefined}
               />
               <TextField label="Customer or site name" required value={customer} maxLength={200} error={errors.customer} onChange={(event) => setCustomer(event.target.value)} />
               <TextField label="Phone" value={phone} maxLength={40} inputMode="tel" error={errors.phone} onChange={(event) => setPhone(event.target.value)} />

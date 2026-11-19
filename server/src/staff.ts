@@ -19,7 +19,7 @@ export type Env = { Variables: { staff: Staff; sessionHash: string } };
 const COOKIE = 'vimalnath_session';
 const EMAIL_USED = 'Someone already uses that email.';
 const BAD_LINK = 'This link has expired or was already used. Ask the Owner for a new one.';
-const MAX_ATTEMPTS = 5;
+export const MAX_ATTEMPTS = 5;
 
 const Email = z.string().trim().toLowerCase().pipe(z.email('Enter an email address like name@company.com.'));
 const Name = z.string().trim().min(1, 'Enter their name.').max(100, 'Use 100 characters or fewer.');
@@ -32,17 +32,32 @@ const derive = (password: string, salt: Buffer) =>
     scrypt(password, salt, 32, { N: 2 ** 15, r: 8, p: 3, maxmem: 64 * 1024 * 1024 }, (error, key) => (error ? reject(error) : resolve(key))),
   );
 
-async function hashPassword(password: string) {
+export async function hashPassword(password: string) {
   const salt = randomBytes(16);
   return `${salt.toString('base64')}:${(await derive(password, salt)).toString('base64')}`;
 }
 
-async function passwordMatches(password: string, stored: string) {
+export async function passwordMatches(password: string, stored: string) {
   const [salt, key] = stored.split(':');
   return timingSafeEqual(await derive(password, Buffer.from(salt!, 'base64')), Buffer.from(key!, 'base64'));
 }
 
-const dummyHash = hashPassword(randomBytes(16).toString('hex'));
+/** Compared against when there is no account, so the response time doesn't reveal which accounts exist. */
+export const dummyHash = hashPassword(randomBytes(16).toString('hex'));
+
+/**
+ * Counts a sign-in try for this account and client, before the password is checked, so guesses sent together can't
+ * all get past the limit. Returns the tries in the current 15-minute window. Staff key by email; the app by "app:<mobile>".
+ */
+export async function countAttempt(sql: Sql, key: string, client: string) {
+  const [attempt] = await sql`
+    insert into sign_in_attempts as a (email, client, expires_at) values (${key}, ${client}, now() + interval '15 minutes')
+    on conflict (email, client) do update set
+      attempts = case when a.expires_at <= now() then 1 else a.attempts + 1 end,
+      expires_at = case when a.expires_at <= now() or a.attempts < ${MAX_ATTEMPTS} then excluded.expires_at else a.expires_at end
+    returning attempts`;
+  return attempt!.attempts as number;
+}
 export const newToken = () => randomBytes(32).toString('base64url');
 export const sha256 = (token: string) => createHash('sha256').update(token).digest('hex');
 
@@ -73,19 +88,11 @@ export function adminRoutes(sql: Sql, { adminOrigin, production, trustProxy }: {
     const { email, password } = c.req.valid('json');
     const client = clientOf(c, trustProxy);
     const [row] = await sql`select id, name, email, role, password_hash, active from staff_users where email = ${email}`;
-    // Counted before the password check, so guesses sent together can't all get past the limit.
-    const [attempt] = row
-      ? await sql`
-          insert into sign_in_attempts as a (email, client, expires_at) values (${email}, ${client}, now() + interval '15 minutes')
-          on conflict (email, client) do update set
-            attempts = case when a.expires_at <= now() then 1 else a.attempts + 1 end,
-            expires_at = case when a.expires_at <= now() or a.attempts < ${MAX_ATTEMPTS} then excluded.expires_at else a.expires_at end
-          returning attempts`
-      : [];
+    const attempts = row ? await countAttempt(sql, email, client) : 0;
     // Hash even with nothing to compare, so the response time doesn't reveal which emails exist.
     const matches = await passwordMatches(password, row?.password_hash ?? (await dummyHash));
     // One message for every failure, so it can't be used to find out which accounts exist.
-    if (!row || !row.active || !row.password_hash || attempt!.attempts > MAX_ATTEMPTS || !matches) {
+    if (!row || !row.active || !row.password_hash || attempts > MAX_ATTEMPTS || !matches) {
       throw new HTTPException(401, { message: 'Wrong email or password. After 5 wrong tries, sign-in is locked for 15 minutes.' });
     }
     const token = newToken();

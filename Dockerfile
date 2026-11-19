@@ -6,6 +6,8 @@ COPY package.json package-lock.json ./
 COPY scripts/build-pdfjs-source.mjs scripts/
 RUN npm ci
 COPY . .
+# The admin address the app logs in through; build args reach RUN as environment variables.
+ARG EXPO_PUBLIC_SHOP_URL
 RUN CI=1 npx expo export -p web --output-dir dist
 
 FROM nginx:1.28-alpine

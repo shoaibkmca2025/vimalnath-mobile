@@ -36,7 +36,7 @@ export function buildApi(sql: Sql, config: ReturnType<typeof loadConfig>) {
   admin.route('/orders', orderAdminRoutes(sql));
   admin.route('/customers', customerRoutes(sql));
   app.route('/v1/admin', admin);
-  app.route('/v1/app', appRoutes(sql));
+  app.route('/v1/app', appRoutes(sql, { trustProxy: config.TRUST_PROXY }));
   app.route('/v1/media', mediaRoutes(sql));
   return app;
 }

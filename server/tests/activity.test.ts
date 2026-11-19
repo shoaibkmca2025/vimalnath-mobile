@@ -81,7 +81,7 @@ test('bad entries are refused, and there is no way to edit or delete one', { ski
 
 test('an order placed in the app is listed for Owners, by "App", linking to the order', { skip }, async () => {
   const owner = await staff('owner');
-  const { token } = (await (await send('/v1/admin/app-users', 'POST', { label: 'Ravi Glass Works' }, owner.cookie)).json()) as { token: string };
+  const { token } = (await (await send('/v1/app/register', 'POST', { name: 'Ravi Glass Works', phone: '9820000001', password: 'phone password' })).json()) as { token: string };
   const order = { id: 'phone-1', number: 'VSC-0001', createdAt: '2026-11-10T10:00:00.000Z', customer: 'Site A', status: 'Placed', lines: [{ productId: 'p1', code: 'TGH-55', name: 'Handle', qty: 2, mrp: 450 }], total: 900 };
   assert.equal((await send('/v1/app/orders', 'POST', { eventId: 'e-1', order }, { Authorization: `Bearer ${token}` })).status, 200);
   const [placed] = await sql`select id, number from orders where client_event_id = 'e-1'`;

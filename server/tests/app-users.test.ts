@@ -15,7 +15,7 @@ let app: ReturnType<typeof createApp>;
 let sql: postgres.Sql;
 let next = 0;
 
-type AppUser = { id: number; name: string; business: string; email: string; blocked: boolean; lastSeenAt: string | null; profileUpdatedAt: string | null; orders: number; views: number };
+type AppUser = { id: number; name: string; business: string; phone: string; email: string; blocked: boolean; lastSeenAt: string | null; profileUpdatedAt: string | null; orders: number; views: number };
 type Orders = { customerId: string; orders: { id: string; mobileEventId: string; mobileOrderId: string; status: string }[] };
 
 testDatabase('app_users', async (client) => {
@@ -41,14 +41,20 @@ async function staff(role: string) {
   return { Cookie: res.headers.get('set-cookie')!.split(';')[0]! };
 }
 
-/** A customer the shop has connected, and their phone calling the API with its token. */
-async function customer(label = 'Ravi Glass Works') {
-  const res = await send('/v1/admin/app-users', 'POST', { label }, await staff('sales'));
+const PHONE_PASSWORD = 'phone password';
+
+/** A customer who registered in the app, and their phone calling the API with the token it got. */
+async function customer(name = 'Ravi Glass Works') {
+  const mobile = `98${String(++next).padStart(8, '0')}`;
+  const res = await send('/v1/app/register', 'POST', { name, phone: mobile, password: PHONE_PASSWORD });
   assert.equal(res.status, 201);
-  const { appUser, token } = (await res.json()) as { appUser: AppUser; token: string };
+  const { token, customerId } = (await res.json()) as { token: string; customerId: string };
   const phone = (path: string, body?: unknown, auth = token) => send(`/v1/app${path}`, body === undefined ? 'GET' : 'POST', body, { Authorization: `Bearer ${auth}` });
-  return { id: appUser.id, phone };
+  return { id: Number(customerId), phone, mobile };
 }
+
+const logIn = (phone: string, password: string) => send('/v1/app/login', 'POST', { phone, password });
+const reason = async (res: Response) => [res.status, ((await res.json()) as { error: { message: string } }).error.message];
 
 const order = (id: string) => ({
   id,
@@ -115,16 +121,19 @@ test('profile and activity: staff see them; long text is cut, not refused, and e
   assert.deepEqual(stored!.body, { type: 'price_view', occurredAt: activity.occurredAt, productId: 'p1', price: 450 });
 });
 
-test('block and new token: a blocked phone is refused; a new token replaces the old one for the same customer', { skip }, async () => {
+test('block and new password: a blocked phone is refused; a new password signs the phone out and works for the same customer', { skip }, async () => {
   const owner = await staff('owner');
-  const { id, phone } = await customer();
+  const { id, phone, mobile } = await customer();
   const blocked = await send(`/v1/admin/app-users/${id}`, 'PATCH', { blocked: true }, owner);
   assert.equal(((await blocked.json()) as AppUser).blocked, true);
   assert.equal((await phone('/orders')).status, 403);
+  assert.deepEqual(await reason(await logIn(mobile, PHONE_PASSWORD)), [403, 'The shop has turned off this account. Please call the shop.']);
   await send(`/v1/admin/app-users/${id}`, 'PATCH', { blocked: false }, owner);
 
-  const { token } = (await (await send(`/v1/admin/app-users/${id}/token`, 'POST', undefined, owner)).json()) as { token: string };
+  assert.equal((await send(`/v1/admin/app-users/${id}`, 'PATCH', { password: 'a new password' }, owner)).status, 200);
   assert.equal((await phone('/orders')).status, 401);
+  assert.equal((await logIn(mobile, PHONE_PASSWORD)).status, 401);
+  const { token } = (await (await logIn(mobile, 'a new password')).json()) as { token: string };
   const res = await phone('/orders', undefined, token);
   assert.equal(res.status, 200);
   // The phone checks this ID on every sync, so it must not change with the token.
@@ -135,7 +144,8 @@ test('access: only Owners and Sales manage app users', { skip }, async () => {
   assert.equal((await send('/v1/admin/app-users')).status, 401);
   assert.equal((await send('/v1/admin/app-users', 'GET', undefined, await staff('catalogue'))).status, 403);
   assert.equal((await send('/v1/admin/app-users', 'GET', undefined, await staff('sales'))).status, 200);
-  assert.equal((await send('/v1/admin/app-users', 'POST', { label: '  ' }, await staff('sales'))).status, 400);
+  const { id } = await customer();
+  assert.deepEqual(await reason(await send(`/v1/admin/app-users/${id}`, 'PATCH', { password: 'short' }, await staff('sales'))), [400, 'Use at least 8 characters.']);
   assert.equal((await send('/v1/admin/app-users/999999', 'PATCH', { blocked: true }, await staff('owner'))).status, 404);
 });
 
@@ -147,4 +157,41 @@ test('web version: the browser may call the app routes from another address', { 
   assert.equal(res.status, 204);
   assert.equal(res.headers.get('access-control-allow-origin'), '*');
   assert.match(res.headers.get('access-control-allow-headers') ?? '', /authorization/);
+});
+
+test('register: one account per mobile number, however it is typed; the token opens the app routes', { skip }, async () => {
+  const { id, phone, mobile } = await customer('Meera Interiors');
+  assert.deepEqual(await (await phone('/orders')).json(), { customerId: String(id), orders: [] });
+  const row = await appUser(id);
+  assert.deepEqual([row.name, row.phone], ['Meera Interiors', mobile]);
+
+  const again = await send('/v1/app/register', 'POST', { name: 'Someone else', phone: `+91 ${mobile.slice(0, 5)} ${mobile.slice(5)}`, password: 'another password' });
+  assert.deepEqual(await reason(again), [409, 'This mobile number already has an account. Log in instead.']);
+  assert.deepEqual(await reason(await send('/v1/app/register', 'POST', { name: 'X', phone: '12345', password: 'long enough' })), [400, 'Enter your 10-digit mobile number.']);
+  assert.deepEqual(await reason(await send('/v1/app/register', 'POST', { name: 'X', phone: '9000000001', password: 'short' })), [400, 'Use at least 8 characters.']);
+  assert.deepEqual(await reason(await send('/v1/app/register', 'POST', { name: ' ', phone: '9000000001', password: 'long enough' })), [400, 'Enter your name.']);
+});
+
+test('login: the right password gives a new token and signs the old one out; 5 wrong tries lock it; unknown numbers get the same answer', { skip }, async () => {
+  const { id, phone, mobile } = await customer();
+  const res = await logIn(`0${mobile}`, PHONE_PASSWORD);
+  assert.equal(res.status, 200);
+  const { token, customerId, profile } = (await res.json()) as { token: string; customerId: string; profile: { name: string; phone: string } };
+  assert.deepEqual([customerId, profile.name, profile.phone], [String(id), 'Ravi Glass Works', mobile]);
+  assert.equal((await phone('/orders')).status, 401);
+  assert.equal((await phone('/orders', undefined, token)).status, 200);
+
+  const wrong = 'Wrong mobile number or password. After 5 wrong tries, login is locked for 15 minutes.';
+  assert.deepEqual(await reason(await logIn('9111111111', PHONE_PASSWORD)), [401, wrong]);
+  for (let attempt = 0; attempt < 5; attempt++) assert.deepEqual(await reason(await logIn(mobile, 'not my password')), [401, wrong]);
+  assert.deepEqual(await reason(await logIn(mobile, PHONE_PASSWORD)), [401, wrong]);
+});
+
+test('logout: the token stops working and the phone stops getting order updates; logging in again works', { skip }, async () => {
+  const { id, phone, mobile } = await customer();
+  assert.equal((await phone('/push-token', { token: 'ExponentPushToken[logout]' })).status, 200);
+  assert.equal((await phone('/logout', {})).status, 200);
+  assert.deepEqual(await reason(await phone('/orders')), [401, 'You were logged out. Log in again.']);
+  assert.equal((await sql`select push_token from app_devices where id = ${id}`)[0]!.push_token, null);
+  assert.equal((await logIn(mobile, PHONE_PASSWORD)).status, 200);
 });

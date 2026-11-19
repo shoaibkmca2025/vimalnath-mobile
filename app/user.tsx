@@ -14,7 +14,7 @@ const PROFILE_KEY = 'vimalnath:profile';
 type Profile = { name: string; business: string; phone: string; email: string; city: string };
 const EMPTY: Profile = { name: '', business: '', phone: '', email: '', city: '' };
 
-/** The person using the app; shared with the shop only after connecting in Settings. */
+/** The person using the app; shared with the shop so it knows who is ordering. */
 export default function UserScreen() {
   const { showToast } = useAppUI();
   const [profile, setProfile] = useState<Profile>(EMPTY);
@@ -40,7 +40,7 @@ export default function UserScreen() {
   const initials = profile.name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join('');
 
   return (
-    <Screen title="User" subtitle="Saved on this phone; shared when shop connection is enabled" back={{ fallback: '/', label: 'Back' }} grouped>
+    <Screen title="User" subtitle="Shared with Vimalnath, so the shop knows who is ordering" back={{ fallback: '/', label: 'Back' }} grouped>
       <View style={styles.avatarRow}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials || '?'}</Text>

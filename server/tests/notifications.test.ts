@@ -47,7 +47,8 @@ async function staff(role: string) {
 
 /** A linked phone that places one order of 2 × p1 (₹1,500 each) and returns the shop's order id. */
 async function phoneWithOrder(owner: Record<string, string>, pushToken?: string) {
-  const { token } = (await (await send('/v1/admin/app-users', 'POST', { label: `Phone ${++next}` }, owner)).json()) as { token: string };
+  void owner;
+  const { token } = (await (await send('/v1/app/register', 'POST', { name: `Phone ${++next}`, phone: `96${String(next).padStart(8, '0')}`, password: 'phone password' })).json()) as { token: string };
   const auth = { Authorization: `Bearer ${token}` };
   if (pushToken) assert.equal((await send('/v1/app/push-token', 'POST', { token: pushToken }, auth)).status, 200);
   const order = { id: `phone-order-${next}`, number: 'VSC-0001', createdAt: '2026-11-10T10:00:00.000Z', customer: 'Site A', status: 'Placed', lines: [{ productId: 'p1', code: 'TGH-55', name: 'Handle', option: 'SSS', qty: 2, mrp: 1500 }], total: 3000 };

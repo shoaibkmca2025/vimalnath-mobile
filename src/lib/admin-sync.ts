@@ -4,7 +4,7 @@ import { AppState } from 'react-native';
 
 import type { Order } from '@/providers/OrdersProvider';
 
-/** Optional shop connection. Existing local app storage remains the order source of truth. */
+/** The customer's login on this phone: `enabled` while logged in. Local app storage remains the order source of truth. */
 export type AdminConnection = {
   enabled: boolean;
   baseUrl: string;
@@ -12,6 +12,8 @@ export type AdminConnection = {
   activitySharing: boolean;
   allowLocalHttp: boolean;
   customerId?: string;
+  /** The 10-digit number the customer logs in with. */
+  mobile?: string;
 };
 /** An order the shop made and sent to this phone; the phone has no copy of its own, so the shop sends the details. */
 export type ShopOrderDetails = {
@@ -54,6 +56,8 @@ const CONNECTION_KEY = 'vimalnath:admin-connection:v1';
 const OUTBOX_KEY = 'vimalnath:admin-outbox:v1';
 const ORDERS_KEY = 'vimalnath:orders';
 const PROFILE_KEY = 'vimalnath:profile';
+// Built in; a development build points at a local server with EXPO_PUBLIC_SHOP_URL in .env.
+const SHOP_URL = process.env.EXPO_PUBLIC_SHOP_URL || 'https://vimalnath-admin.shoaibk-mca2024.workers.dev';
 const MAX_EVENTS = 400;
 const MAX_QUEUE_CHARACTERS = 750_000;
 const DEFAULT: AdminConnection = { enabled: false, baseUrl: '', deviceToken: '', activitySharing: false, allowLocalHttp: false };
@@ -144,23 +148,26 @@ export async function request<T>(config: AdminConnection, path: string, body?: R
   try {
     const response = await fetch(`${config.baseUrl}/v1/app/${path}`, {
       method: body ? 'POST' : 'GET',
-      headers: { Authorization: `Bearer ${config.deviceToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      headers: { ...(config.deviceToken ? { Authorization: `Bearer ${config.deviceToken}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: controller.signal,
     });
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) throw new Error('Shop connection rejected. Ask the shop owner to check your device token.');
-      if (response.status === 429) throw new Error('The shop server is busy. Retry sync in a moment.');
+      // The token stopped working: logged in on another phone, or the shop set a new password. Back to the login screen.
+      if (response.status === 401 && config.deviceToken && config.deviceToken === connection.deviceToken) void endSession();
+      if (response.status === 429) throw new Error('The shop server is busy. Try again in a moment.');
       let detail = '';
       try {
         const failure = await response.json() as { error?: { message?: unknown } };
         if (typeof failure.error?.message === 'string') detail = failure.error.message.slice(0, 300);
       } catch { /* A proxy may return an HTML error page instead of JSON. */ }
-      throw new Error(`Shop server returned ${response.status}. ${detail || 'Pending items remain saved for retry.'}`);
+      throw new Error(detail || `Shop server returned ${response.status}. Pending items remain saved for retry.`);
     }
     return await response.json() as T;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw new Error('Shop connection timed out. Pending items remain saved for retry.');
+    // fetch's own failure: no signal, or the server can't be reached.
+    if (error instanceof TypeError) throw new Error('Couldn’t reach the shop. Check your internet connection and try again.');
     throw error;
   } finally { clearTimeout(timeout); }
 }
@@ -170,11 +177,10 @@ function remoteIdentity(remote: RemoteOrders): string {
   return remote.customerId;
 }
 
-export async function connectAdmin(input: Omit<AdminConnection, 'enabled' | 'customerId'>): Promise<void> {
+async function connectAdmin(input: Omit<AdminConnection, 'enabled' | 'customerId'>): Promise<void> {
   await initializeAdminSync();
   if (storageError) throw new Error(storageError);
-  const config = { ...input, enabled: true, baseUrl: validateAdminUrl(input.baseUrl, input.allowLocalHttp), deviceToken: input.deviceToken.trim() };
-  if (!config.deviceToken || /\s/.test(config.deviceToken)) throw new Error('Enter the device token issued by the shop owner.');
+  const config = { ...input, enabled: true, baseUrl: validateAdminUrl(input.baseUrl, input.allowLocalHttp) };
   const remote = await request<RemoteOrders>(config, 'orders');
   const customerId = remoteIdentity(remote);
   await locked(async () => {
@@ -190,19 +196,57 @@ export async function connectAdmin(input: Omit<AdminConnection, 'enabled' | 'cus
     await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(outbox));
     publish({ connected: true, error: undefined, centralOrders: remote.orders });
   });
-  const savedProfile = await AsyncStorage.getItem(PROFILE_KEY);
-  if (savedProfile) await enqueueAdminProfile(JSON.parse(savedProfile) as Profile);
   await syncAdmin();
 }
 
-export async function disconnectAdmin(): Promise<void> {
+type Account = { token: string; customerId: string; profile?: Profile };
+
+/** Registers or logs in, then links this phone to the account and sends anything it has waiting. */
+async function signIn(path: 'register' | 'login', body: Partial<Profile> & { phone: string; password: string }): Promise<void> {
   await initializeAdminSync();
+  const mobile = body.phone.replace(/\D/g, '').slice(-10);
+  // Only after the shop ended the session (see endSession): the order history here belongs to that account, and sync
+  // would send any of it the shop hasn't acknowledged to whoever logs in next.
+  if ((outbox.customerId ?? connection.customerId) && (path === 'register' || mobile !== connection.mobile)) {
+    throw new Error(`This phone holds the orders of ${connection.mobile ?? 'another account'}. Log in with that number, then log out in Settings to use another account.`);
+  }
+  const baseUrl = validateAdminUrl(SHOP_URL, true);
+  const account = await request<Account>({ ...connection, baseUrl, deviceToken: '' }, path, body);
+  const { password: _, ...details } = body;
+  const profile = account.profile ?? { name: '', business: '', email: '', city: '', ...details, phone: mobile };
+  await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  await connectAdmin({ baseUrl, deviceToken: account.token, activitySharing: connection.activitySharing, allowLocalHttp: true, mobile });
+}
+
+export const registerAccount = (details: Profile & { password: string }) => signIn('register', details);
+export const logIn = (phone: string, password: string) => signIn('login', { phone, password });
+
+/** The shop no longer accepts this phone's token. Pending orders stay, to be sent once the same account logs back in. */
+async function endSession() {
   await locked(async () => {
-    const next = { ...connection, enabled: false, activitySharing: false };
-    await AsyncStorage.setItem(CONNECTION_KEY, JSON.stringify(next));
-    connection = next;
-    // Keep credentials and pending events so reconnecting to the same customer can recover them.
+    if (!connection.enabled) return;
+    connection = { ...connection, enabled: false, deviceToken: '' };
+    await AsyncStorage.setItem(CONNECTION_KEY, JSON.stringify(connection));
     publish({ connected: false });
+  });
+}
+
+/**
+ * Sends everything waiting, signs this phone out at the shop, and forgets the account here, with its order history,
+ * so the next person to log in can't send or see it. Refuses, changing nothing, while anything can't be sent.
+ */
+export async function logOut(): Promise<void> {
+  await syncAdmin();
+  if (current.error) throw new Error(current.error);
+  if (outbox.events.length) throw new Error('Some updates haven’t reached the shop yet. Try again when you have signal.');
+  await request({ ...connection }, 'logout', {});
+  await locked(async () => {
+    // Orders go before the account: if the app stops in between, no other account can pick them up.
+    await AsyncStorage.multiRemove([ORDERS_KEY, PROFILE_KEY]);
+    connection = { ...DEFAULT };
+    outbox = { deviceId: outbox.deviceId, events: [] };
+    await AsyncStorage.multiSet([[OUTBOX_KEY, JSON.stringify(outbox)], [CONNECTION_KEY, JSON.stringify(connection)]]);
+    publish({ connected: false, centralOrders: [], lastSyncedAt: undefined, error: undefined });
   });
 }
 
@@ -286,7 +330,7 @@ export function syncAdmin(): Promise<void> {
     publish({ syncing: true, error: undefined });
     try {
       const remote = await request<RemoteOrders>(config, 'orders');
-      if (remoteIdentity(remote) !== config.customerId) throw new Error('The device token is now assigned to a different customer. Sync stopped to protect your saved orders.');
+      if (remoteIdentity(remote) !== config.customerId) throw new Error('This login now belongs to a different customer. Sync stopped to protect your saved orders.');
       const acknowledged = new Set(remote.orders.map((order) => order.mobileEventId ?? order.eventId).filter(Boolean));
       const saved = await AsyncStorage.getItem(ORDERS_KEY);
       const local = saved ? JSON.parse(saved) as Order[] : [];
@@ -343,7 +387,7 @@ export function syncAdmin(): Promise<void> {
  */
 export async function respondToShopOrder(id: string, decision: 'confirm' | 'decline'): Promise<void> {
   await initializeAdminSync();
-  if (!connection.enabled) throw new Error('Connect to the shop in Settings first.');
+  if (!connection.enabled) throw new Error('Log in first.');
   const result = await request<{ orders: CentralOrder[] }>({ ...connection }, `orders/${encodeURIComponent(id)}/respond`, { decision });
   publish({ connected: true, centralOrders: result.orders, error: undefined, lastSyncedAt: new Date().toISOString() });
 }
