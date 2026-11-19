@@ -14,7 +14,7 @@ import { useToast } from '@/components/useToast';
 import type { Tone } from '@/data/orders';
 import { useDrawerItem } from '@/hooks/useDrawerItem';
 import { api, type ApiError } from '@/lib/api';
-import { formatDateTime, formatNumber, formatRelativeTime, plural } from '@/lib/format';
+import { formatDateTime, formatNumber, formatRelativeTime, initials, plural } from '@/lib/format';
 
 type AppUser = {
   id: number;
@@ -30,6 +30,8 @@ type AppUser = {
   createdAt: string;
   orders: number;
   views: number;
+  /** When the customer last sent their photo (Create Account or the app's User screen); null if they haven't. */
+  photoAt: string | null;
 };
 type Status = 'connected' | 'waiting' | 'blocked';
 type Draft = { label: string; blocked: boolean; password: string };
@@ -39,6 +41,27 @@ const STATUS: Record<Status, { tone: Tone; label: string }> = {
   waiting: { tone: 'warning', label: 'Not connected yet' },
   blocked: { tone: 'danger', label: 'Blocked' },
 };
+/** The customer's photo, or their initials. The photo's time is in the address, so a new photo shows at once. */
+function CustomerPhoto({ user, size = 'sm' }: { user: AppUser; size?: 'sm' | 'lg' }) {
+  const name = user.name || user.label;
+  if (!user.photoAt)
+    return (
+      <span className={size === 'lg' ? 'avatar avatar--lg' : 'avatar'} aria-hidden>
+        {initials(name)}
+      </span>
+    );
+  return (
+    <img
+      className={size === 'lg' ? 'customer-photo customer-photo--lg' : 'customer-photo'}
+      src={`/v1/admin/app-users/${user.id}/photo${size === 'lg' ? '' : '?size=small'}${size === 'lg' ? '?' : '&'}v=${encodeURIComponent(user.photoAt)}`}
+      alt={size === 'lg' ? `Photo of ${name}` : ''}
+      width={size === 'lg' ? 160 : 36}
+      height={size === 'lg' ? 160 : 36}
+      loading="lazy"
+    />
+  );
+}
+
 const statusOf = (user: AppUser): Status => (user.blocked ? 'blocked' : user.lastSeenAt ? 'connected' : 'waiting');
 const draftOf = (item: AppUser | null): Draft => ({ label: item?.label ?? '', blocked: item?.blocked ?? false, password: '' });
 
@@ -122,12 +145,15 @@ export default function AppUsersPage() {
       header: 'Customer',
       sortValue: (user) => user.label,
       cell: (user) => (
-        <>
-          <button type="button" className="cell-title link-reset" onClick={() => open(user)}>
-            {user.label}
-          </button>
-          <div className="cell-sub">{[user.name, user.business].filter(Boolean).join(' · ') || 'No details sent yet'}</div>
-        </>
+        <div className="cell-media cell-media--person">
+          <CustomerPhoto user={user} />
+          <div style={{ minWidth: 0 }}>
+            <button type="button" className="cell-title link-reset" onClick={() => open(user)}>
+              {user.label}
+            </button>
+            <div className="cell-sub">{[user.name, user.business].filter(Boolean).join(' · ') || 'No details sent yet'}</div>
+          </div>
+        </div>
       ),
     },
     {
@@ -231,6 +257,14 @@ export default function AppUsersPage() {
         }
       >
         <div className="stack">
+          {editing && (
+            <figure className="customer-photo-figure">
+              <CustomerPhoto user={editing} size="lg" />
+              <figcaption className="cell-sub">
+                {editing.photoAt ? `Photo from their app, ${formatDateTime(editing.photoAt)}` : 'No photo yet. They add one when they create their account, or on the User screen of the app.'}
+              </figcaption>
+            </figure>
+          )}
           <TextField
             label="Who it’s for"
             hint="Only staff see this. It starts as the name they registered with."

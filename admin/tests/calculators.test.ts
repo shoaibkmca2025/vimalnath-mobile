@@ -110,8 +110,24 @@ test('4 door sliding folding: (length − 121) ÷ 4 by height − 60, within 120
   for (const [width, height] of [[1199, 2000], [3601, 2000], [2400, 999], [2400, 3001]] as const) assert.ok('error' in computeGlassPlan(name, width, height, 4));
 });
 
+test('5 to 10 door sliding folding follow the 2–4 door pattern', () => {
+  const row = (result: ReturnType<typeof plan>, label: string) => result.materials.find((item) => item.label.startsWith(label))?.value;
+  const five = plan('5 Door Sliding Folding System', 3000, 2100, 5);
+  assert.deepEqual([five.cuttingWidth, five.cuttingHeight, five.glassWidth, five.glassHeight, five.glassQuantity], [570, 2040, 567, 1986, 5]);
+  assert.deepEqual(
+    ['Vertical Profile', 'Top Track', 'Lock and Rod', 'Profile Corner End Cap', 'Anti-Collision Magnet', 'Hanging Wheel', 'Outer Vertical Gasket', 'Top and Bottom Hinge'].map((label) => row(five, label)),
+    ['10 nos (2.5 m)', '1 nos (10 ft)', '3 nos', '20 nos', '16 pair', '2 nos', '25 m each', '8 pair'],
+  );
+  const ten = plan('10 Door Sliding Folding System', 6000, 2100, 10);
+  assert.deepEqual([ten.cuttingWidth, ten.glassQuantity, row(ten, 'Vertical Profile'), row(ten, 'Anti-Collision Magnet'), row(ten, 'Hanging Wheel')], [571, 10, '20 nos (2.5 m)', '36 pair', '5 nos']);
+  for (const [name, doors, min, max] of [['5 Door Sliding Folding System', 5, 1500, 4500], ['10 Door Sliding Folding System', 10, 3000, 9000]] as const) {
+    assert.ok('error' in computeGlassPlan(name, min - 1, 2000, doors));
+    assert.ok('error' in computeGlassPlan(name, max + 1, 2000, doors));
+  }
+});
+
 test('a system without a confirmed formula gives per-panel sizes and a warning', () => {
-  const result = plan('5 Door Sliding Folding System', 2400, 2400, 5);
+  const result = plan('Custom Sliding System', 2400, 2400, 5);
   assert.deepEqual([result.cuttingWidth, result.cuttingHeight, result.glassWidth, result.glassHeight, result.glassQuantity], [476, 2380, 476, 2380, 5]);
   assert.match(result.warning ?? '', /No confirmed formula/);
 });

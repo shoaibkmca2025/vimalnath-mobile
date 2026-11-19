@@ -35,6 +35,14 @@
         }
       ],
       "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Vimalnath uses the camera to take your profile photo.",
+          "photosPermission": "Vimalnath uses your photos when you choose a profile photo.",
+          "microphonePermission": false
+        }
+      ],
       "expo-image",
       "expo-sharing",
       "./plugins/with-app-font-weight"

@@ -174,7 +174,7 @@ export default function SettingsPage() {
         <SignedInDevices />
 
         <Card aria-labelledby="appearance-title">
-          <CardHeader id="appearance-title" title="Appearance" description="Light matches the mobile app. Applies to this admin on this device." />
+          <CardHeader id="appearance-title" title="Appearance" description="Light matches the mobile app. Applies to this admin on this device. You can also switch it from the top bar on any page." />
           <div className="card__body">
             <Segmented<ThemePreference>
               label="Theme"

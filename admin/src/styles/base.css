@@ -178,3 +178,17 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* Switching between light and dark by hand cross-fades the colours (about a third of a second) instead of
+   flashing the whole screen; it moves nothing, so it suits reduced-motion settings too. */
+html.theme-changing,
+html.theme-changing *,
+html.theme-changing *::before,
+html.theme-changing *::after {
+  transition:
+    background-color 280ms ease,
+    border-color 280ms ease,
+    color 280ms ease,
+    fill 280ms ease,
+    box-shadow 280ms ease !important;
+}

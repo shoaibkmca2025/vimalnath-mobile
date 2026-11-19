@@ -18,9 +18,19 @@ export function readTheme(): ThemePreference {
 
 let current: ThemePreference = readTheme();
 
-/** "system" removes the attribute so the prefers-color-scheme rules in tokens.css apply. */
-export function applyTheme(theme: ThemePreference) {
+let easing: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * "system" removes the attribute so the prefers-color-scheme rules in tokens.css apply. `ease` cross-fades the
+ * colours (see .theme-changing in base.css) so switching never flashes the whole screen from dark to bright.
+ */
+export function applyTheme(theme: ThemePreference, ease = false) {
   current = theme;
+  if (ease) {
+    document.documentElement.classList.add('theme-changing');
+    clearTimeout(easing);
+    easing = setTimeout(() => document.documentElement.classList.remove('theme-changing'), 320);
+  }
   if (theme === 'system') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', theme);
   try {
@@ -40,5 +50,5 @@ export function useTheme(): [ThemePreference, (theme: ThemePreference) => void] 
     },
     () => current,
   );
-  return [theme, applyTheme];
+  return [theme, (next: ThemePreference) => applyTheme(next, true)];
 }

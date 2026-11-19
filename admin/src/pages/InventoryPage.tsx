@@ -1,18 +1,20 @@
-import { ArrowCounterClockwiseIcon, ChatCircleTextIcon, NoteIcon, PackageIcon, PhoneIcon, PrinterIcon, TruckIcon, WarehouseIcon } from '@phosphor-icons/react';
+import { ArrowCounterClockwiseIcon, ChatCircleTextIcon, CheckCircleIcon, NoteIcon, PackageIcon, PhoneIcon, PrinterIcon, TruckIcon, WarehouseIcon, XCircleIcon, type Icon } from '@phosphor-icons/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { ConfirmDialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { SearchInput, Segmented, TextAreaField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
+import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
 import { INVENTORY_LABEL, INVENTORY_STAGES, ORDER_STATUS, itemCount, whatsappLink, type InventoryStage } from '@/data/orders';
 import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
-import type { Order, OrderStatus } from '@/data/types';
+import type { Order, OrderStatus, Product } from '@/data/types';
 import { formatDateTime, formatNumber, formatRelativeTime, plural, relativePhrase } from '@/lib/format';
 
 type Tab = InventoryStage | 'delivered';
@@ -27,6 +29,16 @@ const EMPTY: Record<Tab, string> = {
   delivered: 'No delivered orders yet.',
 };
 
+/** Where every order in a tab can go at once, with the button that does it. */
+const NEXT_ALL: Partial<Record<Tab, { to: OrderStatus; label: string; icon: Icon }>> = {
+  confirmed: { to: 'packed', label: 'Mark All Packed', icon: PackageIcon },
+  packed: { to: 'dispatched', label: 'Mark All Dispatched', icon: TruckIcon },
+  dispatched: { to: 'delivered', label: 'Mark All Delivered', icon: CheckCircleIcon },
+};
+
+/** VSC-0042 → 42. */
+const orderNumber = (order: Order) => Number(order.number.replace(/\D/g, '')) || 0;
+
 /** When the order reached its current status: the last time it was set. */
 const since = (order: Order) => order.history.findLast((event) => event.status === order.status)?.at ?? order.createdAt;
 
@@ -40,8 +52,14 @@ export default function InventoryPage() {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [printing, setPrinting] = useState<string | null>(null);
+  // The order whose Cancel was pressed, waiting for "Cancel Order" in the dialog.
+  const [cancelling, setCancelling] = useState<Order | null>(null);
+  // The orders a Mark All button would move, waiting for the dialog's yes.
+  const [bulk, setBulk] = useState<{ to: OrderStatus; label: string; orders: Order[] } | null>(null);
   const tab: Tab = (TABS as string[]).includes(params.get('stage') ?? '') ? (params.get('stage') as Tab) : 'confirmed';
   const office = readSession()?.role !== 'inventory';
+  // Each line's photo comes from the catalogue, so the packer can see what to pick.
+  const products = useMemo(() => new Map(db.products.map((product) => [product.id, product])), [db.products]);
 
   const counts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -59,9 +77,8 @@ export default function InventoryPage() {
           [order.number, order.customer, order.notes ?? '', ...order.lines.flatMap((line) => [line.code, line.name, line.optionCode ?? ''])].some((field) => field.toLowerCase().includes(needle)) ||
           (digits.length >= 4 && (order.phone ?? '').replace(/\D/g, '').includes(digits))),
     );
-    // Oldest first while there's work to do, so nothing waits behind newer orders; newest first once it's gone out.
-    const work = tab === 'confirmed' || tab === 'packed';
-    return shown.sort((a, b) => (work ? since(a).localeCompare(since(b)) : since(b).localeCompare(since(a))));
+    // In order-number order (VSC-0001, VSC-0002 …), compared as numbers so VSC-10000 comes after VSC-9999.
+    return shown.sort((a, b) => orderNumber(a) - orderNumber(b) || a.number.localeCompare(b.number));
   }, [db.orders, tab, query]);
 
   // Print only the chosen order's packing slip.
@@ -84,8 +101,13 @@ export default function InventoryPage() {
       { area: 'orders', summary: `Marked ${order.number} ${label(to)}`, to: `/orders/${order.id}` },
     );
     if (!ok) return;
+    // Only the office can restore a cancelled order (the server refuses the inventory team), so only they get Undo.
+    if (to === 'cancelled' && !office) {
+      toast({ message: `${order.number} cancelled. Ask the office if it needs restoring.` });
+      return;
+    }
     toast({
-      message: `${order.number} marked ${label(to)}.`,
+      message: to === 'cancelled' ? `${order.number} cancelled.` : `${order.number} marked ${label(to)}.`,
       action: {
         label: 'Undo',
         onAction: () =>
@@ -94,6 +116,33 @@ export default function InventoryPage() {
             summary: `Undid: ${order.number} back to ${label(from)}`,
             to: `/orders/${order.id}`,
           }),
+      },
+    });
+  };
+
+  /** Every order in the list moves together (one save), with one Undo that puts each back where it was. */
+  const moveAll = async (orders: Order[], to: OrderStatus) => {
+    const before = new Map(orders.map((order) => [order.id, order.status]));
+    const by = readSession()?.name ?? 'Inventory';
+    const step = (status: OrderStatus) => ((INVENTORY_LABEL as Record<string, string>)[status] ?? ORDER_STATUS[status].label).toLowerCase();
+    const at = new Date().toISOString();
+    const numbers = orders.map((order) => order.number);
+    const ok = await update(
+      'orders',
+      (all) => all.map((item) => (before.has(item.id) ? { ...item, status: to, history: [...item.history, { status: to, at, by }] } : item)),
+      { area: 'orders', summary: `Marked ${plural(orders.length, 'order')} ${step(to)}: ${numbers.join(', ')}`, to: '/inventory' },
+    );
+    if (!ok) return;
+    toast({
+      message: `${plural(orders.length, 'order')} marked ${step(to)}.`,
+      action: {
+        label: 'Undo',
+        onAction: () =>
+          update(
+            'orders',
+            (all) => all.map((item) => (before.has(item.id) ? { ...item, status: before.get(item.id)!, history: [...item.history, { status: before.get(item.id)!, at: new Date().toISOString(), by }] } : item)),
+            { area: 'orders', summary: `Undid: ${plural(orders.length, 'order')} marked ${step(to)}`, to: '/inventory' },
+          ),
       },
     });
   };
@@ -127,10 +176,18 @@ export default function InventoryPage() {
         <SearchInput label="Search orders" placeholder="Order, customer, phone or product code" value={query} onChange={setQuery} />
       </div>
 
-      <p className="filter-summary muted no-print" aria-live="polite">
-        {plural(rows.length, 'order')}
-        {tab === 'confirmed' && rows.length > 0 && ` · ${plural(pendingItems, 'item')} to pack, oldest first`}
-      </p>
+      <div className="inventory-summary no-print">
+        <p className="filter-summary muted" aria-live="polite">
+          {plural(rows.length, 'order')}, by order number
+          {tab === 'confirmed' && rows.length > 0 && ` · ${plural(pendingItems, 'item')} to pack`}
+        </p>
+        {/* Moves every order listed here (after a search, only those it found). */}
+        {NEXT_ALL[tab] && rows.length > 1 && (
+          <Button size="sm" variant="primary" icon={NEXT_ALL[tab]!.icon} onClick={() => setBulk({ ...NEXT_ALL[tab]!, orders: rows })}>
+            {NEXT_ALL[tab]!.label} ({rows.length})
+          </Button>
+        )}
+      </div>
 
       {rows.length === 0 ? (
         <Card>
@@ -140,18 +197,63 @@ export default function InventoryPage() {
         </Card>
       ) : (
         <ul className="inventory-list" aria-label={`${TAB_LABEL[tab]} orders`}>
-          {rows.map((order) => (
-            <li key={order.id} data-print-hidden={printing !== null && printing !== order.id}>
-              <InventoryCard order={order} office={office} onMove={(to) => move(order, to)} onSaveNote={(text) => saveNote(order, text)} onPrint={() => setPrinting(order.id)} />
+          {rows.map((order, index) => (
+            // Every other order is shaded, so it's clear where one order ends and the next begins.
+            <li key={order.id} data-shade={index % 2 ? 'dark' : 'light'} data-print-hidden={printing !== null && printing !== order.id}>
+              <InventoryCard order={order} office={office} products={products} onMove={(to) => move(order, to)} onCancel={() => setCancelling(order)} onSaveNote={(text) => saveNote(order, text)} onPrint={() => setPrinting(order.id)} />
             </li>
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={bulk !== null}
+        title={bulk ? `${bulk.label.replace('Mark All', `Mark all ${bulk.orders.length} orders`).replace(/ (Packed|Dispatched|Delivered)$/, (word) => word.toLowerCase())}?` : ''}
+        body={bulk ? `${bulk.orders.map((order) => order.number).join(', ')}. The office sees the change in Orders straight away; you can undo it from the message that follows.` : ''}
+        confirmLabel={bulk?.label ?? 'Mark All'}
+        onCancel={() => setBulk(null)}
+        onConfirm={() => {
+          const chosen = bulk;
+          setBulk(null);
+          if (chosen) void moveAll(chosen.orders, chosen.to);
+        }}
+      />
+
+      <ConfirmDialog
+        open={cancelling !== null}
+        title={cancelling ? `Cancel order ${cancelling.number}?` : ''}
+        body={
+          cancelling
+            ? `The order from ${cancelling.customer} leaves Inventory and the customer sees it as cancelled. ${office ? 'You can restore it from Orders if this was a mistake.' : 'Only the office can restore it.'}`
+            : ''
+        }
+        confirmLabel="Cancel Order"
+        destructive
+        onCancel={() => setCancelling(null)}
+        onConfirm={() => {
+          const order = cancelling;
+          setCancelling(null);
+          if (order) void move(order, 'cancelled');
+        }}
+      />
     </>
   );
 }
 
-function InventoryCard({ order, office, onMove, onSaveNote, onPrint }: { order: Order; office: boolean; onMove: (to: OrderStatus) => void; onSaveNote: (text: string) => Promise<boolean>; onPrint: () => void }) {
+function InventoryCard({
+  order,
+  office,
+  products,
+  onMove,
+  onCancel,
+  onSaveNote,
+  onPrint,
+}: {
+  order: Order;
+  office: boolean;
+  products: Map<string, Product>;
+  onCancel: () => void;
+  onMove: (to: OrderStatus) => void; onSaveNote: (text: string) => Promise<boolean>; onPrint: () => void }) {
   const [draft, setDraft] = useState(order.inventoryNote?.text ?? '');
   const [saved, setSaved] = useState(order.inventoryNote?.text ?? '');
   // Someone else changed the note (the list refreshes every minute): show theirs unless this one is being edited.
@@ -206,13 +308,18 @@ function InventoryCard({ order, office, onMove, onSaveNote, onPrint }: { order: 
               <tr key={`${line.productId}-${index}`}>
                 <td className="mono">{line.optionCode ?? line.code}</td>
                 <td>
-                  {line.name}
-                  {line.option && <div className="cell-sub" style={{ whiteSpace: 'normal' }}>{line.option}</div>}
-                  {line.note && (
-                    <div className="line-note">
-                      <NoteIcon size={14} aria-hidden /> {line.note}
+                  <div className="cell-media packing-item">
+                    <Thumb src={products.get(line.productId)?.image} />
+                    <div style={{ minWidth: 0 }}>
+                      {line.name}
+                      {line.option && <div className="cell-sub" style={{ whiteSpace: 'normal' }}>{line.option}</div>}
+                      {line.note && (
+                        <div className="line-note">
+                          <NoteIcon size={14} aria-hidden /> {line.note}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </td>
                 <td className="is-num inventory-qty">{formatNumber(line.qty)}</td>
               </tr>
@@ -271,6 +378,12 @@ function InventoryCard({ order, office, onMove, onSaveNote, onPrint }: { order: 
         <Button size="sm" variant="plain" icon={PrinterIcon} onClick={onPrint}>
           Print Slip
         </Button>
+        {/* Only before it goes out: a dispatched order is on the road. */}
+        {(stage === 'confirmed' || stage === 'packed') && (
+          <Button size="sm" variant="danger-plain" icon={XCircleIcon} onClick={onCancel}>
+            Cancel Order
+          </Button>
+        )}
         <span style={{ flex: 1 }} />
         {stage === 'packed' && (
           <Button size="sm" icon={ArrowCounterClockwiseIcon} onClick={() => onMove('confirmed')}>
@@ -295,6 +408,16 @@ function InventoryCard({ order, office, onMove, onSaveNote, onPrint }: { order: 
         {stage === 'packed' && (
           <Button size="sm" variant="primary" icon={TruckIcon} onClick={() => onMove('dispatched')}>
             Mark Dispatched
+          </Button>
+        )}
+        {stage === 'dispatched' && (
+          <Button size="sm" variant="primary" icon={CheckCircleIcon} onClick={() => onMove('delivered')}>
+            Mark Delivered
+          </Button>
+        )}
+        {stage === 'delivered' && (
+          <Button size="sm" icon={ArrowCounterClockwiseIcon} onClick={() => onMove('dispatched')}>
+            Back to Dispatched
           </Button>
         )}
       </footer>

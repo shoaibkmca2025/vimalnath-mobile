@@ -277,9 +277,11 @@ test('inventory: packs and dispatches confirmed orders, can set them back to pen
   assert.equal((await move([older!.id], 'dispatched')).status, 200);
   assert.equal((await move([newer!.id], 'packed')).status, 200);
   assert.equal((await move([newer!.id], 'confirmed')).status, 200);
-  // Only Pending, Packed and Dispatched are theirs.
-  assert.equal((await move([older!.id], 'delivered')).status, 403);
-  assert.equal((await move([older!.id], 'cancelled')).status, 403);
+  // Pending, Packed, Dispatched and Delivered are theirs, and cancelling an order that hasn't gone out; going back to New isn't.
+  assert.equal((await move([older!.id], 'placed')).status, 403);
+  assert.equal((await move([older!.id], 'requested')).status, 403);
+  const dispatchedStays = (await (await move([older!.id], 'cancelled')).json()) as { orders: Order[] };
+  assert.equal(dispatchedStays.orders[0]!.status, 'dispatched');
 
   const noted = (await (await send(`/v1/admin/orders/${older!.id}/inventory-note`, 'PUT', { text: 'VRL Logistics, LR 4471' }, inventory.headers)).json()) as { orders: Order[] };
   assert.deepEqual([noted.orders[0]!.inventoryNote?.text, noted.orders[0]!.inventoryNote?.by], ['VRL Logistics, LR 4471', inventory.name]);
@@ -294,9 +296,24 @@ test('inventory: packs and dispatches confirmed orders, can set them back to pen
   assert.match(phoneView, /"Packed"/);
   assert.doesNotMatch(phoneView, /VRL/);
 
-  // Once delivered, the inventory team still sees it but can't move it.
-  await send('/v1/admin/orders/status', 'POST', { ids: [older!.id], status: 'delivered' }, desk.headers);
+  // A pending or packed order can be cancelled by the inventory team; only the office can restore it.
+  const extra = await ravi.place(lock(5));
+  assert.equal(extra.status, 200);
+  const third = (await ofDevice('Inventory Co')).find((order) => order.status === 'placed')!;
+  await send('/v1/admin/orders/status', 'POST', { ids: [third.id], status: 'confirmed' }, desk.headers);
+  const cancelled = (await (await move([third.id], 'cancelled')).json()) as { orders: Order[] };
+  assert.deepEqual(cancelled.orders[0]!.history.at(-1), { ...cancelled.orders[0]!.history.at(-1)!, status: 'cancelled', by: inventory.name });
+  assert.equal(((await (await move([third.id], 'confirmed')).json()) as { orders: Order[] }).orders[0]!.status, 'cancelled');
+  assert.equal(((await (await send('/v1/admin/orders/status', 'POST', { ids: [third.id], status: 'confirmed' }, desk.headers)).json()) as { orders: Order[] }).orders[0]!.status, 'confirmed');
+
+  // The inventory team marks a dispatched order delivered, and can undo that back to dispatched, but no further.
+  const pendingDelivery = (await (await move([newer!.id], 'delivered')).json()) as { orders: Order[] };
+  assert.equal(pendingDelivery.orders[0]!.status, 'confirmed');
+  const delivered = (await (await move([older!.id], 'delivered')).json()) as { orders: Order[] };
+  assert.deepEqual([delivered.orders[0]!.status, delivered.orders[0]!.history.at(-1)!.by], ['delivered', inventory.name]);
   assert.equal((await adminOrders(inventory.headers)).find((order) => order.id === older!.id)?.status, 'delivered');
   const stuck = (await (await move([older!.id], 'packed')).json()) as { orders: Order[] };
   assert.equal(stuck.orders[0]!.status, 'delivered');
+  const undone = (await (await move([older!.id], 'dispatched')).json()) as { orders: Order[] };
+  assert.equal(undone.orders[0]!.status, 'dispatched');
 });

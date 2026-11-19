@@ -452,6 +452,27 @@ function slidingFolding(spec: FoldingSpec): SystemFormula {
   };
 }
 
+/**
+ * 5 to 10 doors, following the pattern of Vimalnath's 2, 3 and 4 doors: 300–900 mm of opening per door; the deduction
+ * grows by 29 mm a door (63, 92, 121 → 29 × doors + 5); 2 vertical profiles, 4 end caps, a hinge pair and 4 magnet
+ * pairs for each fold between doors; a hanging wheel for each 2 doors and a lock and rod for each 2 started; and, as for
+ * 3 and 4 doors, one top track as long as the opening and the outer vertical gaskets.
+ */
+const moreDoors = (doors: number): FoldingSpec => ({
+  doors,
+  deduction: 29 * doors + 5,
+  minWidth: 300 * doors,
+  maxWidth: 900 * doors,
+  verticals: 2 * doors,
+  endCaps: 4 * doors,
+  magnetPairs: 4 * (doors - 1),
+  wheels: Math.floor(doors / 2),
+  hingePairs: 2 * (doors - 1),
+  lockAndRod: `${Math.ceil(doors / 2)} nos`,
+  trackFromOpening: true,
+  outerGasket: true,
+});
+
 // Formulas keyed by system ("1+0", "2+0", …), with the widest opening each allows. Any system not
 // listed here falls back to the CUTTING_ALLOWANCE_MM placeholder below until its formula is confirmed.
 const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
@@ -522,6 +543,7 @@ const SYSTEM_FORMULAS: Record<string, SystemFormula> = {
     trackFromOpening: true,
     outerGasket: true,
   }),
+  ...Object.fromEntries([5, 6, 7, 8, 9, 10].map((doors) => [`folding:${doors}`, slidingFolding(moreDoors(doors))])),
 };
 
 export function getSystemRange(systemName: string): SizeRange | null {

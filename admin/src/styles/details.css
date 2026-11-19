@@ -1155,3 +1155,86 @@
   font-size: var(--text-sm);
   font-weight: 600;
 }
+
+/* ---------- App Users: the customer's own photo ---------- */
+
+.cell-media--person {
+  min-width: 200px;
+}
+
+.customer-photo {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-2, #f2f2f7);
+}
+
+.customer-photo--lg {
+  width: 160px;
+  height: 160px;
+}
+
+.customer-photo-figure {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  text-align: center;
+}
+
+/* Inventory: light and dark orders in turn, and striped packing lists, so each order and line is easy to follow.
+   Built from the theme's own colours, so it works in light and dark mode. */
+.inventory-list > li[data-shade='dark'] .inventory-card {
+  background: color-mix(in srgb, var(--tint) 7%, var(--surface));
+  border-color: color-mix(in srgb, var(--tint) 22%, var(--border));
+}
+
+.inventory-list > li[data-shade='dark'] .inventory-card__head {
+  background: color-mix(in srgb, var(--tint) 12%, var(--surface));
+}
+
+.inventory-list > li[data-shade='light'] .inventory-card__head {
+  background: var(--surface-2);
+}
+
+.inventory-card__head {
+  border-bottom: 1px solid var(--border);
+}
+
+.table--packing thead th {
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+}
+
+.table--packing tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.inventory-card .table--packing tbody td,
+.inventory-card .table--packing thead th {
+  border-color: var(--border);
+}
+
+/* Inventory: each line's photo beside its name, so the packer sees what to pick. */
+.table--packing .packing-item {
+  min-width: 0;
+}
+
+.table--packing td {
+  vertical-align: middle;
+}
+
+/* Inventory: the order count, with the Mark All button for the tab beside it. */
+.inventory-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.inventory-summary .filter-summary {
+  margin: 0;
+}

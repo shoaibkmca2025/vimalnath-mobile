@@ -71,10 +71,9 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
     const passwordHash = await hashPassword(password);
     try {
       const id = await sql.begin(async (tx) => {
-        // Each account starts as its own customer; staff merge them when one customer has several.
-        const [customer] = await tx`insert into customers (name) values (${name}) returning id`;
+        // A new account is an app user; it becomes a customer with its first order (see ensureCustomer in orders.ts).
         const [device] = await tx`
-          insert into app_devices ${tx({ label: name, name, business, city, email, phone, login: phone, password_hash: passwordHash, token_hash: sha256(token), customer_id: customer!.id, profile_updated_at: new Date() })}
+          insert into app_devices ${tx({ label: name, name, business, city, email, phone, login: phone, password_hash: passwordHash, token_hash: sha256(token), profile_updated_at: new Date() })}
           returning id`;
         return device!.id as number;
       });

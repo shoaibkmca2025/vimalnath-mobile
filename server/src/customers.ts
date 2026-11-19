@@ -36,8 +36,8 @@ export function customerRoutes(sql: Sql) {
     left join lateral (
       select count(*)::int as orders,
         -- float8, not int: a big dealer's lifetime total can pass 2^31 rupees.
-        coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::float8 as spent,
-        (count(*) filter (where o.status in ('placed', 'confirmed', 'dispatched')))::int as open,
+        coalesce(sum(o.total) filter (where o.status not in ('cancelled', 'declined', 'requested')), 0)::float8 as spent,
+        (count(*) filter (where o.status in ('requested', 'placed', 'confirmed', 'packed', 'dispatched')))::int as open,
         min(o.placed_at) as "firstOrder", max(o.placed_at) as "lastOrder"
       from orders o join app_devices d on d.id = o.device_id where d.customer_id = c.id
     ) s on true

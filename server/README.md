@@ -55,7 +55,7 @@ src/
 
 Every error looks like `{ "error": { "message": "...", "field": "name" } }`. `field` appears only when one input is at fault.
 
-**The app's accounts.** A customer creates an account in the app with their mobile number and a password; each account starts as its own customer, and staff see it under App Users. Logging in gives the phone a token; logging in on another phone signs the first one out. A customer who forgets their password asks the shop, and Owner or Sales staff set a new one in App Users (`PATCH /v1/admin/app-users/:id` with `{ password }`), which also signs the phone out. Five wrong passwords lock a number for 15 minutes.
+**The app's accounts.** A customer creates an account in the app with their mobile number and a password; staff see it under App Users straight away (with the photo the app asks for, `PUT /v1/app/photo`, which only Owner and Sales staff can view). It becomes a customer with its first order, from the app or an order request staff send it. Logging in gives the phone a token; logging in on another phone signs the first one out. A customer who forgets their password asks the shop, and Owner or Sales staff set a new one in App Users (`PATCH /v1/admin/app-users/:id` with `{ password }`), which also signs the phone out. Five wrong passwords lock a number for 15 minutes.
 
 | Route | What it does |
 |---|---|

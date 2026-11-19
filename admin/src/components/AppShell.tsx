@@ -32,6 +32,7 @@ import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useNavigatio
 import { IconButton } from '@/components/Button';
 import { CommandPalette } from '@/components/CommandPalette';
 import { PageMetaContext, type PageMeta } from '@/components/pageMeta';
+import { ThemeSwitch } from '@/components/ThemeSwitch';
 import { useRequestNotifications } from '@/data/requestNotifications';
 import { endSession, readSession } from '@/data/session';
 import { useData } from '@/data/useData';
@@ -260,6 +261,7 @@ export function AppShell() {
                 <li aria-current="page">{meta.title}</li>
               </ol>
             </nav>
+            <ThemeSwitch />
             <button type="button" className="search-trigger" onClick={() => setSearchOpen(true)} aria-label="Search" aria-keyshortcuts="Control+K Meta+K">
               <MagnifyingGlassIcon size={16} aria-hidden />
               <span className="search-trigger__text">Search</span>

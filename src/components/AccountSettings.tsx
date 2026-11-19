@@ -3,18 +3,15 @@ import { StyleSheet, Switch, Text, View } from 'react-native';
 
 import { Button } from '@/components/Button';
 import { InsetGroup, ValueRow } from '@/components/InsetGroup';
-import { getAdminSyncStatus, logOut, setAdminActivitySharing, subscribeAdminSync, syncAdmin } from '@/lib/admin-sync';
-import { confirmDestructive } from '@/lib/confirm';
+import { useLogOut } from '@/hooks/useLogOut';
+import { getAdminSyncStatus, setAdminActivitySharing, subscribeAdminSync, syncAdmin } from '@/lib/admin-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
-import { useCart } from '@/providers/CartProvider';
-import { useOrders } from '@/providers/OrdersProvider';
 import { colors, type } from '@/theme';
 
 /** Who is logged in on this phone, how sync with the shop is going, and logging out. */
 export function AccountSettings() {
   const { showToast } = useAppUI();
-  const { clear } = useCart();
-  const { clearOrders } = useOrders();
+  const { confirmLogOut, loggingOut } = useLogOut();
   const [status, setStatus] = useState(getAdminSyncStatus);
   const [busy, setBusy] = useState(false);
 
@@ -32,15 +29,6 @@ export function AccountSettings() {
     }
   };
 
-  const confirmLogOut = () =>
-    confirmDestructive('Log out?', 'Your order history and cart are removed from this phone. The shop keeps every order you sent.', 'Log Out', () => {
-      void run(async () => {
-        await logOut();
-        clearOrders();
-        clear();
-      }, 'You’re logged out.');
-    });
-
   const syncLabel = status.syncing ? 'Syncing…' : status.error ? 'Not synced' : status.connected ? 'Up to date' : 'Waiting';
 
   return (
@@ -57,7 +45,7 @@ export function AccountSettings() {
         )}
         <View style={styles.actions}>
           <Button label="Sync Now" icon="sync-outline" size="medium" variant="tinted" disabled={busy || status.syncing} onPress={() => void run(syncAdmin, 'Your orders are synced with the shop.')} style={styles.flex} />
-          <Button label="Log Out" size="medium" variant="gray" destructive disabled={busy} onPress={confirmLogOut} style={styles.flex} />
+          <Button label="Log Out" size="medium" variant="gray" destructive disabled={busy || loggingOut} onPress={confirmLogOut} style={styles.flex} />
         </View>
       </InsetGroup>
 

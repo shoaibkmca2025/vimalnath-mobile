@@ -1699,3 +1699,67 @@
 .table .cell-sub {
   white-space: nowrap;
 }
+
+/* ---------- Appearance switch in the top bar: Light, Dark, Match system ---------- */
+
+.theme-switch {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--fill);
+}
+
+.theme-switch__option {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.theme-switch__option:hover {
+  color: var(--text);
+}
+
+.theme-switch__option:active {
+  transform: scale(0.94);
+}
+
+.theme-switch__option[aria-checked='true'] {
+  background: var(--surface);
+  color: var(--tint);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-switch__option:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* 44 px targets on touch screens. */
+@media (pointer: coarse) {
+  .theme-switch__option {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Clearer edges where more contrast is asked for. */
+@media (prefers-contrast: more) {
+  .theme-switch,
+  .card,
+  .table th,
+  .table td {
+    border-color: var(--border-strong);
+  }
+}

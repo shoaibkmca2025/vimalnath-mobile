@@ -89,10 +89,13 @@ const list = async () => (await (await send('/v1/admin/customers', 'GET', undefi
 const named = async (name: string) => (await list()).find((customer) => customer.name === name)!;
 const ordersOf = async (label: string) => ((await (await send('/v1/admin/orders', 'GET', undefined, await staff())).json()) as Order[]).filter((order) => order.appUser?.label === label);
 
-test('an app user added by staff starts as its own customer, named as staff named it', { skip }, async () => {
-  await phone('Ravi Glass Works');
-  const ravi = await named('Ravi Glass Works');
-  assert.deepEqual([ravi.orders, ravi.spent, ravi.open, ravi.firstOrder, ravi.tags, ravi.appUsers.map((user) => user.label)], [0, 0, 0, null, [], ['Ravi Glass Works']]);
+test('a new sign-up is an app user, not a customer; its first order makes one, and two orders at once still make one', { skip }, async () => {
+  const ravi = await phone('Ravi Glass Works');
+  assert.equal((await list()).some((customer) => customer.name === 'Ravi Glass Works'), false);
+  await Promise.all([ravi.order(1), ravi.order(2)]);
+  const made = (await list()).filter((customer) => customer.name === 'Ravi Glass Works');
+  assert.equal(made.length, 1);
+  assert.deepEqual([made[0]!.orders, made[0]!.tags, made[0]!.appUsers.map((user) => user.label)], [2, [], ['Ravi Glass Works']]);
 });
 
 test('totals leave out cancelled orders; open counts what is not delivered yet', { skip }, async () => {
@@ -112,6 +115,7 @@ test('totals leave out cancelled orders; open counts what is not delivered yet',
 
 test('contact details come from the profile the customer’s app sent', { skip }, async () => {
   const meena = await phone('Meena Interiors');
+  await meena.order(1);
   await meena.profile({ name: 'Meena Shah', business: 'Meena Interiors LLP', phone: '98200 11111', email: 'meena@example.com', city: 'Pune' });
   const customer = await named('Meena Interiors');
   assert.deepEqual([customer.business, customer.phone, customer.city], ['Meena Interiors LLP', '98200 11111', 'Pune']);
@@ -141,7 +145,8 @@ test('merge: phones and their orders move over, tags and notes are kept, and the
 
   const merged = (await (await send(`/v1/admin/customers/${keep.id}/merge`, 'POST', { from: gone.id }, desk)).json()) as Customer;
   assert.deepEqual(merged.appUsers.map((user) => user.label), ['Ravi Glass Works', 'Ravi (second phone)']);
-  assert.deepEqual([merged.orders, merged.spent], [1, 1500]);
+  // Ravi's first two orders (1 + 2 handles) and the second phone's one; SSS on p1 is ₹1,500.
+  assert.deepEqual([merged.orders, merged.spent], [3, 6000]);
   assert.deepEqual([merged.business, merged.city, merged.phone], ['Ravi Glass Works LLP', 'Pune', '98200 22222']);
   assert.deepEqual(merged.tags, ['dealer', 'pays late', 'contractor']);
   assert.equal(merged.note, 'Collects from the godown\n\nSecond phone is the site manager’s');
@@ -174,4 +179,14 @@ test('migration: app users from before Module 7 each get a customer named after 
   const rows = await before.sql`select d.label, c.name from app_devices d join customers c on c.id = d.customer_id order by d.id`;
   assert.deepEqual(rows.map((row) => [row.label, row.name]), [['Old Shop', 'Old Shop'], ['Older Shop', 'Older Shop']]);
   await rm(older, { recursive: true });
+});
+
+test('an order request staff send also makes the app user a customer, if they were not one yet', { skip }, async () => {
+  const sunil = await phone('Sunil Hardware');
+  assert.equal((await list()).some((customer) => customer.name === 'Sunil Hardware'), false);
+  const res = await send('/v1/admin/orders', 'POST', { appUserId: sunil.id, customer: 'Sunil Hardware, Site 2', lines: [{ productId: 'p1', option: 'SSS', qty: 1 }] }, await staff());
+  assert.equal(res.status, 201);
+  const customer = await named('Sunil Hardware');
+  assert.deepEqual([customer.orders, customer.open, customer.spent], [1, 1, 0]);
+  assert.equal((await ordersOf('Sunil Hardware'))[0]!.customerRecord?.id, customer.id);
 });

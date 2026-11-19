@@ -49,11 +49,27 @@ const rupees = (amount: number) => `₹${amount.toLocaleString('en-IN')}`;
  * A line that no longer matches the catalogue is kept and flagged for staff instead of refused: refusing
  * would stop that phone from sending any later order.
  */
+/**
+ * An app user becomes a customer with their first order: the customer is made then, named as they registered (their
+ * name, else their business, else staff's label). Two orders arriving together make one: the row lock makes the
+ * second wait, and it then finds the customer already there.
+ */
+async function ensureCustomer(tx: Sql, deviceId: number) {
+  await tx`
+    with device as (
+      select id, coalesce(nullif(name, ''), nullif(business, ''), label) as customer_name
+      from app_devices where id = ${deviceId} and customer_id is null for update
+    ),
+    customer as (insert into customers (name) select customer_name from device returning id)
+    update app_devices set customer_id = (select id from customer) where id in (select id from device)`;
+}
+
 export async function placeOrder(sql: Sql, deviceId: number, eventId: string, order: AppOrder) {
   await sql.begin(async (tx) => {
     // A resend: checked first so it doesn't use up an order number.
     const [sent] = await tx`select 1 from orders where device_id = ${deviceId} and client_event_id = ${eventId}`;
     if (sent) return;
+    await ensureCustomer(tx as unknown as Sql, deviceId);
 
     const ids = [...new Set(order.lines.map((line) => line.productId))];
     const found = await tx`
@@ -181,9 +197,9 @@ export function orderAdminRoutes(sql: Sql) {
           'internalNote', case when o.internal_note is not null then json_build_object('text', o.internal_note, 'at', o.internal_note_at, 'by', o.internal_note_by) end,
           'inventoryNote', case when o.inventory_note is not null then json_build_object('text', o.inventory_note, 'at', o.inventory_note_at, 'by', o.inventory_note_by) end,
           'appUser', json_build_object('id', d.id, 'label', d.label),
-          'customerRecord', json_build_object('id', cu.id, 'name', cu.name)
+          'customerRecord', case when cu.id is not null then json_build_object('id', cu.id, 'name', cu.name) end
         )) as "order"
-        from orders o join app_devices d on d.id = o.device_id join customers cu on cu.id = d.customer_id
+        from orders o join app_devices d on d.id = o.device_id left join customers cu on cu.id = d.customer_id
         where ${where}
         order by o.placed_at desc, o.id desc`
     ).map((row) => row.order);
@@ -200,6 +216,8 @@ export function orderAdminRoutes(sql: Sql) {
     const id = await sql.begin(async (tx) => {
       const [device] = await tx`select id from app_devices where id = ${request.appUserId}`;
       if (!device) throw new HTTPException(400, { message: 'That app user does not exist.', cause: { field: 'appUserId' } });
+      // A request is an order too: an app user who hasn't ordered yet becomes a customer with it.
+      await ensureCustomer(tx as unknown as Sql, device.id);
       const ids = [...new Set(request.lines.map((line) => line.productId))];
       const found = await tx`
         select id, code, name, section,
@@ -252,13 +270,23 @@ export function orderAdminRoutes(sql: Sql) {
 
   // One order or many: confirm, dispatch, deliver, cancel, or undo by setting the earlier status again. Each change is recorded.
   const OrderIds = z.array(z.coerce.number().int().positive().max(2147483647)).min(1).max(1000);
-  // The inventory team can only move orders between Pending (confirmed), Packed and Dispatched.
+  // The inventory team moves orders between Pending (confirmed), Packed and Dispatched; marks a dispatched order
+  // delivered (and back, to undo); and cancels one that hasn't gone out yet (Pending or Packed). Only the office can
+  // restore a cancelled order, so the inventory team can't bring back, or confirm, an order the office cancelled.
+  const INVENTORY_MOVES: Record<string, string[]> = {
+    confirmed: [...INVENTORY_STATUSES],
+    packed: [...INVENTORY_STATUSES],
+    dispatched: [...INVENTORY_STATUSES, 'delivered'],
+    delivered: ['dispatched'],
+    cancelled: ['confirmed', 'packed'],
+  };
   admin.post('/status', jsonBody(z.object({ ids: OrderIds, status: z.enum(STATUSES, 'Choose a status.') })), async (c) => {
     const { ids, status } = c.req.valid('json');
     const { name: by, role } = c.get('staff');
-    if (inventory(role) && !(INVENTORY_STATUSES as readonly string[]).includes(status)) throw new HTTPException(403, { message: 'The inventory team can mark orders pending, packed or dispatched.' });
+    const from = INVENTORY_MOVES[status];
+    if (inventory(role) && !from) throw new HTTPException(403, { message: 'The inventory team can mark orders pending, packed, dispatched, delivered or cancelled.' });
     await sql.begin(async (tx) => {
-      const allowed = inventory(role) ? tx`and status in ${tx([...INVENTORY_STATUSES])}` : tx``;
+      const allowed = inventory(role) ? tx`and status in ${tx(from!)}` : tx``;
       const changed = await tx`update orders set status = ${status} where id in ${tx(ids)} and status <> ${status} ${allowed} returning id`;
       if (changed.length) await tx`insert into order_events ${tx(changed.map((row) => ({ order_id: row.id, status, by })))}`;
       // Module 10: the customer hears about it (if their phone takes notifications); sent after this commits.

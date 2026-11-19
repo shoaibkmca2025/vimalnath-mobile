@@ -200,8 +200,8 @@ test('photo: the customer adds and replaces their photo; only Owners and Sales s
   const mobile = `97${String(++next).padStart(8, '0')}`;
   const { token, customerId } = (await (await send('/v1/app/register', 'POST', { name: 'Photo Co', phone: mobile, password: PHONE_PASSWORD })).json()) as { token: string; customerId: string };
   const sharp = (await import('sharp')).default;
-  const jpeg = (r: number) => sharp({ create: { width: 1200, height: 900, channels: 3, background: { r, g: 120, b: 200 } } }).jpeg().toBuffer();
-  const put = (body: Uint8Array | string, type: string, auth = token) =>
+  const jpeg = async (r: number) => new Blob([new Uint8Array(await sharp({ create: { width: 1200, height: 900, channels: 3, background: { r, g: 120, b: 200 } } }).jpeg().toBuffer())]);
+  const put = (body: Blob | string, type: string, auth = token) =>
     app.request('/v1/app/photo', { method: 'PUT', body, headers: { 'Content-Type': type, Authorization: `Bearer ${auth}`, 'x-forwarded-for': '10.0.0.1' } });
 
   const owner = await staff('owner');
@@ -209,7 +209,7 @@ test('photo: the customer adds and replaces their photo; only Owners and Sales s
 
   assert.equal((await put(await jpeg(10), 'image/jpeg', 'not-a-token')).status, 401);
   assert.equal((await put('hello', 'text/plain')).status, 400);
-  assert.equal((await put(new Uint8Array([1, 2, 3]), 'image/jpeg')).status, 400);
+  assert.equal((await put(new Blob([new Uint8Array([1, 2, 3])]), 'image/jpeg')).status, 400);
   const first = await put(await jpeg(10), 'image/jpeg');
   assert.equal(first.status, 200);
 

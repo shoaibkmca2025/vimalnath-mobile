@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { getAdminSyncStatus, initializeAdminSync, startAdminSync, subscribeAdminSync } from '@/lib/admin-sync';
 import { loadSavedContent, startContentSync } from '@/lib/content-sync';
+import { startProfilePhotoSync } from '@/lib/profile-photo';
 import { startPush } from '@/lib/push';
 import { AppUIProvider } from '@/providers/AppUIProvider';
 import { CartProvider } from '@/providers/CartProvider';
@@ -37,6 +38,8 @@ export default function RootLayout() {
   }, []);
   useEffect(() => startAdminSync(), []);
   useEffect(() => startContentSync(), []);
+  // A photo from Create Account or the User screen that hasn't reached the shop yet is sent once it can be.
+  useEffect(() => startProfilePhotoSync(), []);
   // Once navigation is mounted, so a tapped order update can open its order.
   useEffect(() => (ready ? startPush() : undefined), [ready]);
 
