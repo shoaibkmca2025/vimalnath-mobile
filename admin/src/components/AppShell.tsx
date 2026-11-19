@@ -32,6 +32,7 @@ import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useNavigatio
 import { IconButton } from '@/components/Button';
 import { CommandPalette } from '@/components/CommandPalette';
 import { PageMetaContext, type PageMeta } from '@/components/pageMeta';
+import { NotificationBell } from '@/components/NotificationBell';
 import { ThemeSwitch } from '@/components/ThemeSwitch';
 import { useRequestNotifications } from '@/data/requestNotifications';
 import { inOrders } from '@/data/requests';
@@ -166,6 +167,10 @@ export function AppShell() {
 
   // On a phone the sidebar is hidden, so the menu button carries a red dot while any count in it is above zero.
   const alerts = groups.flatMap((group) => group.items).reduce((sum, item) => sum + (item.alert ? (item.count ?? 0) : 0), 0);
+  // The top-right bell lists each order not delivered yet (for the inventory team, the ones with them).
+  const bellOrders = db.orders.filter((order) =>
+    inventoryOnly ? ['confirmed', 'packed', 'dispatched'].includes(order.status) : inOrders(order) && ['placed', 'confirmed', 'packed', 'dispatched'].includes(order.status),
+  );
 
   const allowed = !inventoryOnly || location.pathname.startsWith('/inventory') || location.pathname.startsWith('/settings');
 
@@ -269,6 +274,7 @@ export function AppShell() {
               </ol>
             </nav>
             <ThemeSwitch />
+            <NotificationBell orders={bellOrders} linkTo={(order) => (inventoryOnly ? (order.status === 'confirmed' ? '/inventory' : `/inventory?stage=${order.status}`) : `/orders/${order.id}`)} requestUpdates={inventoryOnly ? 0 : requestUpdates} />
             <button type="button" className="search-trigger" onClick={() => setSearchOpen(true)} aria-label="Search" aria-keyshortcuts="Control+K Meta+K">
               <MagnifyingGlassIcon size={16} aria-hidden />
               <span className="search-trigger__text">Search</span>

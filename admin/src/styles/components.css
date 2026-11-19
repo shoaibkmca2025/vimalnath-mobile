@@ -1763,3 +1763,175 @@
     border-color: var(--border-strong);
   }
 }
+
+/* ---------- Notification bell in the top bar ---------- */
+
+.bell-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.bell {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.bell:hover,
+.bell[aria-expanded='true'] {
+  color: var(--text);
+  background: var(--fill);
+}
+
+.bell:active {
+  transform: scale(0.95);
+}
+
+.bell:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.bell .alert-badge {
+  top: -5px;
+  right: -6px;
+}
+
+@media (pointer: coarse) {
+  .bell {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* The list opens from the bell, so it grows out of it. */
+.bell-panel {
+  position: absolute;
+  z-index: var(--z-popover, 40);
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(340px, calc(100vw - 32px));
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  transform-origin: top right;
+  animation: bell-in 160ms var(--ease-out);
+}
+
+@keyframes bell-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bell-panel {
+    animation: none;
+  }
+}
+
+.bell-panel__title {
+  margin: var(--space-1) var(--space-2) var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.bell-panel__list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bell-panel__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.bell-panel__item:hover,
+.bell-panel__item:focus-visible {
+  outline: none;
+  background: var(--fill);
+}
+
+.bell-panel__icon {
+  flex-shrink: 0;
+  color: var(--danger);
+}
+
+/* A red dot beside each order still on its way. */
+.bell-panel__dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.bell-panel {
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+.bell-panel__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.bell-panel__text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.bell-panel__label {
+  font-weight: 600;
+}
+
+.bell-panel__detail {
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+
+.bell-panel__count {
+  min-width: 24px;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  color: #fff;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-align: center;
+}
+
+.bell-panel__empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-2);
+  color: var(--text-2);
+}
+
+.bell-panel__empty svg {
+  color: var(--success);
+}
