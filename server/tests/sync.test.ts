@@ -47,7 +47,7 @@ async function owner() {
 type Download = { version: string; content?: Record<string, unknown[] | Record<string, unknown>> };
 
 async function phone() {
-  const res = await send('/v1/admin/app-users', 'POST', { label: `Phone ${++next}` }, await owner());
+  const res = await send('/v1/app/register', 'POST', { name: `Phone ${++next}`, phone: `95${String(next).padStart(8, '0')}`, password: 'phone password' });
   const { token } = (await res.json()) as { token: string };
   return async (have?: string) => {
     const res = await send(`/v1/app/content${have ? `?have=${have}` : ''}`, 'GET', undefined, { Authorization: `Bearer ${token}` });
@@ -92,7 +92,7 @@ test('an admin change gives a new version; hidden products and categories, and b
 
 test('only linked phones download, and the download is gzipped for phones that accept it', { skip }, async () => {
   assert.equal((await send('/v1/app/content')).status, 401);
-  const res = await send('/v1/admin/app-users', 'POST', { label: 'Gzip' }, await owner());
+  const res = await send('/v1/app/register', 'POST', { name: 'Gzip', phone: '9499999999', password: 'phone password' });
   const { token } = (await res.json()) as { token: string };
   const gzipped = await send('/v1/app/content', 'GET', undefined, { Authorization: `Bearer ${token}`, 'Accept-Encoding': 'gzip' });
   assert.equal(gzipped.headers.get('content-encoding'), 'gzip');

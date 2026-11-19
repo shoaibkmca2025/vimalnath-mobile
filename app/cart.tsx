@@ -11,7 +11,6 @@ import { PlaceOrderSheet } from '@/components/PlaceOrderSheet';
 import { QtyStepper } from '@/components/QtyStepper';
 import { BarButton, Screen } from '@/components/Screen';
 import { findShopProduct, formatINR, productTitle } from '@/data/shop';
-import { getAdminSyncStatus } from '@/lib/admin-sync';
 import { needsUpdate, useAppContent } from '@/lib/content-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { unitPrice, useCart, type CartLine } from '@/providers/CartProvider';
@@ -37,8 +36,7 @@ export default function CartScreen() {
     const order = placeOrder(lines, details);
     clear();
     setCheckoutOpen(false);
-    // Orders reach the shop only from a phone linked to it; unlinked ones wait here and are sent once it's linked.
-    showToast(getAdminSyncStatus().connection.enabled ? `Order ${order.number} sent to the shop.` : `Order ${order.number} saved on this phone. Link the app to the shop in Settings to send it.`);
+    showToast(`Order ${order.number} sent to the shop.`);
     router.replace({ pathname: '/order/[id]', params: { id: order.id } });
   };
 

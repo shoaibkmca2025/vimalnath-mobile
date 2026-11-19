@@ -4,11 +4,12 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql } from 'postgres';
 import { z } from 'zod';
 
+import { clientOf } from './app.ts';
 import { readCalculators } from './calculators.ts';
 import { readCatalogue } from './catalogue.ts';
 import { readContent } from './content.ts';
 import { AppOrder, appOrders, placeOrder, respondToRequest } from './orders.ts';
-import { newToken, only, sha256, type Env } from './staff.ts';
+import { countAttempt, dummyHash, hashPassword, MAX_ATTEMPTS, newToken, only, passwordMatches, sha256, type Env } from './staff.ts';
 import { jsonBody, parse } from './validate.ts';
 
 // The app sends its updates strictly in order and stops at the first one refused, so free text
@@ -17,6 +18,11 @@ const Text = z.string().max(5000).default('').transform((text) => text.trim().sl
 const EventId = z.string().min(1).max(300);
 const Label = z.string().trim().min(1, 'Enter who this is for.').max(100, 'Use 100 characters or fewer.');
 const AppUserId = z.coerce.number().int().positive().max(2147483647);
+// A mobile number is the login: its last 10 digits, however it's typed ("+91 98200 12345", "09820012345").
+const Mobile = z.string().max(40).transform((value) => value.replace(/\D/g, '').slice(-10)).refine((digits) => digits.length === 10, 'Enter your 10-digit mobile number.');
+const Password = z.string().min(8, 'Use at least 8 characters.').max(200, 'Use 200 characters or fewer.');
+const Register = z.object({ name: z.string().trim().min(1, 'Enter your name.').max(100, 'Use 100 characters or fewer.'), business: Text, city: Text, email: Text, phone: Mobile, password: Password });
+const LogIn = z.object({ phone: Mobile, password: z.string().min(1, 'Enter your password.').max(200) });
 
 const ProfileEvent = z.object({ eventId: EventId, profile: z.object({ name: Text, business: Text, phone: Text, email: Text, city: Text }) });
 const OrderEvent = z.object({ eventId: EventId, order: AppOrder });
@@ -52,17 +58,66 @@ export async function appContent(sql: Sql) {
 }
 
 /** Everything under /v1/app: the customer's phone, signed in with the token the shop gave them. */
-export function appRoutes(sql: Sql) {
+export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boolean } = {}) {
   const app = new Hono<{ Variables: { deviceId: number } }>();
+
+  // Accounts: a customer registers or logs in with their mobile number and gets the token every other route here needs.
+  // Declared before the token check below, so they work without one.
+  // shortcut: one phone per account at a time; logging in on another phone gives it a new token and signs the first out. Keep a table of tokens when customers need two phones.
+  app.post('/register', jsonBody(Register), async (c) => {
+    const { name, business, city, email, phone, password } = c.req.valid('json');
+    const token = newToken();
+    const passwordHash = await hashPassword(password);
+    try {
+      const id = await sql.begin(async (tx) => {
+        // Each account starts as its own customer; staff merge them when one customer has several.
+        const [customer] = await tx`insert into customers (name) values (${name}) returning id`;
+        const [device] = await tx`
+          insert into app_devices ${tx({ label: name, name, business, city, email, phone, login: phone, password_hash: passwordHash, token_hash: sha256(token), customer_id: customer!.id, profile_updated_at: new Date() })}
+          returning id`;
+        return device!.id as number;
+      });
+      return c.json({ token, customerId: String(id) }, 201);
+    } catch (error) {
+      if ((error as { code?: string }).code === '23505') throw new HTTPException(409, { message: 'This mobile number already has an account. Log in instead.', cause: { field: 'phone' } });
+      throw error;
+    }
+  });
+
+  app.post('/login', jsonBody(LogIn), async (c) => {
+    const { phone: login, password } = c.req.valid('json');
+    const client = clientOf(c, trustProxy);
+    const [row] = await sql`select id, blocked, password_hash, name, business, phone, email, city from app_devices where login = ${login}`;
+    const attempts = row ? await countAttempt(sql, `app:${login}`, client) : 0;
+    const matches = await passwordMatches(password, row?.password_hash ?? (await dummyHash));
+    // One message for every failure, so it can't be used to find out which numbers have accounts.
+    if (!row || !row.password_hash || attempts > MAX_ATTEMPTS || !matches) {
+      throw new HTTPException(401, { message: 'Wrong mobile number or password. After 5 wrong tries, login is locked for 15 minutes.' });
+    }
+    if (row.blocked) throw new HTTPException(403, { message: 'The shop has turned off this account. Please call the shop.' });
+    const token = newToken();
+    await sql.begin(async (tx) => {
+      // The phone logged in before stops getting this account's order updates.
+      await tx`update app_devices set token_hash = ${sha256(token)}, push_token = null where id = ${row.id}`;
+      await tx`delete from sign_in_attempts where email = ${`app:${login}`} and client = ${client}`;
+    });
+    return c.json({ token, customerId: String(row.id), profile: { name: row.name, business: row.business, phone: row.phone, email: row.email, city: row.city } });
+  });
 
   app.use(async (c, next) => {
     const token = /^Bearer (\S+)$/.exec(c.req.header('authorization') ?? '')?.[1];
     // Blocked phones are still marked as seen, so staff can tell they keep trying.
     const [device] = token ? await sql`update app_devices set last_seen_at = now() where token_hash = ${sha256(token)} returning id, blocked` : [];
-    if (!device) throw new HTTPException(401, { message: 'This token is not valid. Ask the shop for a new one.' });
-    if (device.blocked) throw new HTTPException(403, { message: 'The shop has turned off this connection.' });
+    if (!device) throw new HTTPException(401, { message: 'You were logged out. Log in again.' });
+    if (device.blocked) throw new HTTPException(403, { message: 'The shop has turned off this account. Please call the shop.' });
     c.set('deviceId', device.id);
     await next();
+  });
+
+  // The token stops working and this phone stops getting the account's order updates.
+  app.post('/logout', async (c) => {
+    await sql`update app_devices set token_hash = ${sha256(newToken())}, push_token = null where id = ${c.get('deviceId')}`;
+    return c.json({ loggedOut: true });
   });
 
   // The app calls this around every sync: customerId pins the phone to one customer, and
@@ -129,33 +184,16 @@ export function appUserAdminRoutes(sql: Sql) {
   // shortcut: sends every app user at once; page it on the server past a few thousand.
   admin.get('/', async (c) => c.json(await appUsers()));
 
-  // The token is shown once: only its hash is kept.
-  admin.post('/', jsonBody(z.object({ label: Label })), async (c) => {
-    const token = newToken();
-    const { label } = c.req.valid('json');
-    // Each new app user starts as its own customer; staff merge them when one customer has several phones.
-    const [row] = await sql`
-      with customer as (insert into customers (name) values (${label}) returning id)
-      insert into app_devices (label, token_hash, customer_id) select ${label}, ${sha256(token)}, id from customer returning id`;
-    return c.json({ appUser: await one(row!.id), token }, 201);
-  });
-
-  const Change = z.object({ label: Label.optional(), blocked: z.boolean().optional() }).refine((change) => Object.keys(change).length > 0, 'Nothing to change.');
+  const Change = z.object({ label: Label.optional(), blocked: z.boolean().optional(), password: Password.optional() }).refine((change) => Object.keys(change).length > 0, 'Nothing to change.');
 
   admin.patch('/:id', jsonBody(Change), async (c) => {
     const id = parse(AppUserId, c.req.param('id'));
-    const [row] = await sql`update app_devices set ${sql(c.req.valid('json'))} where id = ${id} returning id`;
+    const { password, ...change } = c.req.valid('json');
+    // For a forgotten password: the phone is signed out too (its token stops working) until the customer logs in again.
+    const update = password ? { ...change, password_hash: await hashPassword(password), token_hash: sha256(newToken()) } : change;
+    const [row] = await sql`update app_devices set ${sql(update)} where id = ${id} returning id`;
     if (!row) throw new HTTPException(404, { message: 'That app user does not exist.' });
     return c.json(await one(id));
-  });
-
-  // Same customer, new token: the old one stops working, and the phone keeps its saved orders.
-  admin.post('/:id/token', async (c) => {
-    const id = parse(AppUserId, c.req.param('id'));
-    const token = newToken();
-    const [row] = await sql`update app_devices set token_hash = ${sha256(token)} where id = ${id} returning id`;
-    if (!row) throw new HTTPException(404, { message: 'That app user does not exist.' });
-    return c.json({ token });
   });
 
   return admin;

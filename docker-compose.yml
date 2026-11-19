@@ -47,7 +47,10 @@ services:
         condition: service_healthy
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        EXPO_PUBLIC_SHOP_URL: http://localhost:8090
     ports:
       - '127.0.0.1:8091:80'
 

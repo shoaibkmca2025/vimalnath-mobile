@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { InsetGroup } from '@/components/InsetGroup';
-import { AdminConnectionSettings } from '@/components/AdminConnectionSettings';
+import { AccountSettings } from '@/components/AccountSettings';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { confirmDestructive } from '@/lib/confirm';
@@ -42,9 +42,9 @@ export default function SettingsScreen() {
         </View>
       </InsetGroup>
 
-      <AdminConnectionSettings />
+      <AccountSettings />
 
-      <InsetGroup header="Data on this phone" footer="If shop sync reports a full queue, sync successfully before clearing Order History. Pending updates are kept separately when the shop connection is off.">
+      <InsetGroup header="Data on this phone" footer="If sync reports a full queue, sync successfully before clearing Order History.">
         <DestructiveRow
           label="Clear Cart"
           detail={count ? `${count} item${count === 1 ? '' : 's'}` : 'Empty'}

@@ -50,7 +50,7 @@ scripts/                 One-off tools: catalogue extraction from the Taiton PDF
 assets/                  Photos, catalogue pages and product thumbnails
 ```
 
-Orders, the cart, the profile and the size unit are saved on the phone with AsyncStorage. With a token from the shop (Settings → Shop connection), the app also sends the profile, orders and, if the customer allows it, product views to the server.
+Orders, the cart, the profile and the size unit are saved on the phone with AsyncStorage. Customers create an account and log in with their mobile number before using the app. The app sends the profile, orders and, if the customer allows it, product views to the shop. The shop's address is built in; a development build points at a local server with `EXPO_PUBLIC_SHOP_URL` in `.env` (for example `http://localhost:8090`).
 
 ## Before production
 

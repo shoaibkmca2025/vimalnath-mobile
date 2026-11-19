@@ -1,4 +1,4 @@
-import { CopyIcon, DeviceMobileIcon, KeyIcon, PlusIcon } from '@phosphor-icons/react';
+import { DeviceMobileIcon } from '@phosphor-icons/react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -6,10 +6,9 @@ import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
-import { ConfirmDialog } from '@/components/Dialog';
 import { Drawer } from '@/components/Drawer';
 import { EmptyState } from '@/components/EmptyState';
-import { SearchInput, Segmented, Switch, TextAreaField, TextField } from '@/components/Field';
+import { SearchInput, Segmented, Switch, TextField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/useToast';
 import type { Tone } from '@/data/orders';
@@ -33,7 +32,7 @@ type AppUser = {
   views: number;
 };
 type Status = 'connected' | 'waiting' | 'blocked';
-type Draft = { label: string; blocked: boolean };
+type Draft = { label: string; blocked: boolean; password: string };
 
 const STATUS: Record<Status, { tone: Tone; label: string }> = {
   connected: { tone: 'success', label: 'Connected' },
@@ -41,16 +40,12 @@ const STATUS: Record<Status, { tone: Tone; label: string }> = {
   blocked: { tone: 'danger', label: 'Blocked' },
 };
 const statusOf = (user: AppUser): Status => (user.blocked ? 'blocked' : user.lastSeenAt ? 'connected' : 'waiting');
-const draftOf = (item: AppUser | 'new' | null): Draft => (item && item !== 'new' ? { label: item.label, blocked: item.blocked } : { label: '', blocked: false });
+const draftOf = (item: AppUser | null): Draft => ({ label: item?.label ?? '', blocked: item?.blocked ?? false, password: '' });
 
 function matches(user: AppUser, needle: string) {
   const digits = needle.replace(/\D/g, '');
   return [user.label, user.name, user.business, user.city, user.email].some((text) => text.toLowerCase().includes(needle)) || (digits.length >= 4 && user.phone.replace(/\D/g, '').includes(digits));
 }
-
-/** The message staff send a customer, worded like the app's Settings screen. */
-const connectMessage = (address: string, token: string) =>
-  `To connect the Vimalnath app to our shop:\n1. Open the app, tap Menu, then Settings.\n2. Under Shop connection, enter:\nShop server address: ${address}\nCustomer device token: ${token}\n3. Tap Connect to shop.`;
 
 export default function AppUsersPage() {
   const toast = useToast();
@@ -59,21 +54,16 @@ export default function AppUsersPage() {
   const filter = (params.get('status') as Status | null) ?? 'all';
   const [users, setUsers] = useState<AppUser[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const drawer = useDrawerItem<AppUser | 'new'>();
+  const drawer = useDrawerItem<AppUser>();
   const [draft, setDraft] = useState<Draft>(draftOf(null));
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [saving, setSaving] = useState(false);
-  const [confirmToken, setConfirmToken] = useState(false);
-  const [issued, setIssued] = useState<{ label: string; message: string } | null>(null);
-  const [issuedOpen, setIssuedOpen] = useState(false);
 
   useEffect(() => {
     api<AppUser[]>('/app-users').then(setUsers, (error: Error) => setLoadError(error.message));
   }, []);
 
-  const editing = drawer.item === 'new' ? null : drawer.item;
-  // The API sits behind this admin's own address, so that's the address the app connects to.
-  const address = window.location.origin;
+  const editing = drawer.item;
 
   const counts = useMemo(() => {
     const all = users ?? [];
@@ -92,7 +82,7 @@ export default function AppUsersPage() {
     setParams(next, { replace: true });
   };
 
-  const open = (item: AppUser | 'new') => {
+  const open = (item: AppUser) => {
     setDraft(draftOf(item));
     setFailure(null);
     drawer.show(item);
@@ -110,41 +100,21 @@ export default function AppUsersPage() {
     }
   };
 
-  const showToken = (label: string, token: string) => {
-    drawer.close();
-    setIssued({ label, message: connectMessage(address, token) });
-    setIssuedOpen(true);
-  };
-
   const save = () =>
     run(async () => {
-      if (editing) {
-        const updated = await api<AppUser>(`/app-users/${editing.id}`, 'PATCH', draft);
-        setUsers((current) => current!.map((user) => (user.id === updated.id ? updated : user)));
-        drawer.close();
-        toast({ message: updated.blocked && !editing.blocked ? `${updated.label} is blocked.` : `${updated.label} saved.` });
-      } else {
-        const { appUser, token } = await api<{ appUser: AppUser; token: string }>('/app-users', 'POST', { label: draft.label });
-        setUsers((current) => [appUser, ...current!]);
-        showToken(appUser.label, token);
-      }
+      if (!editing) return;
+      const { password, ...change } = draft;
+      const updated = await api<AppUser>(`/app-users/${editing.id}`, 'PATCH', password ? { ...change, password } : change);
+      setUsers((current) => current!.map((user) => (user.id === updated.id ? updated : user)));
+      drawer.close();
+      toast({
+        message: password
+          ? `New password set for ${updated.label}. Their app is logged out until they log in with it.`
+          : updated.blocked && !editing.blocked
+            ? `${updated.label} is blocked.`
+            : `${updated.label} saved.`,
+      });
     });
-
-  const replaceToken = () =>
-    run(async () => {
-      setConfirmToken(false);
-      const { token } = await api<{ token: string }>(`/app-users/${editing!.id}/token`, 'POST');
-      showToken(editing!.label, token);
-    });
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(issued!.message);
-      toast({ message: 'Message copied.' });
-    } catch {
-      toast({ tone: 'error', message: 'Couldn’t copy. Select the message and copy it yourself.' });
-    }
-  };
 
   const columns: Column<AppUser>[] = [
     {
@@ -194,14 +164,7 @@ export default function AppUsersPage() {
     <>
       <PageHeader
         title="App Users"
-        description="Customers whose app is connected to the shop. Add one to get the token they enter in the app; their details, orders and product views then arrive here."
-        actions={
-          users && (
-            <Button variant="primary" icon={PlusIcon} onClick={() => open('new')}>
-              Add App User
-            </Button>
-          )
-        }
+        description="Customers who created an account in the app. Their details, orders and product views arrive here. Open one to block it, or to set a new password when they forget theirs."
       />
 
       {users && (
@@ -238,9 +201,9 @@ export default function AppUsersPage() {
               <EmptyState
                 icon={DeviceMobileIcon}
                 title={users.length ? 'No app users match' : 'No app users yet'}
-                action={users.length ? <Button onClick={() => setParams({})}>Clear Filters</Button> : <Button variant="primary" icon={PlusIcon} onClick={() => open('new')}>Add App User</Button>}
+                action={users.length ? <Button onClick={() => setParams({})}>Clear Filters</Button> : null}
               >
-                {users.length ? 'Try another name, city or phone number.' : 'Add a customer to get the token they enter in the app’s Settings.'}
+                {users.length ? 'Try another name, city or phone number.' : 'Customers show here once they create an account in the app.'}
               </EmptyState>
             }
           />
@@ -253,8 +216,8 @@ export default function AppUsersPage() {
 
       <Drawer
         open={drawer.open}
-        title={editing ? editing.label : 'Add App User'}
-        description={editing ? STATUS[statusOf(editing)].label : 'You’ll get a token to send them. It’s shown once.'}
+        title={editing?.label ?? ''}
+        description={editing ? STATUS[statusOf(editing)].label : undefined}
         dirty={JSON.stringify(draft) !== JSON.stringify(draftOf(drawer.item))}
         onClose={drawer.close}
         onSubmit={save}
@@ -262,7 +225,7 @@ export default function AppUsersPage() {
           <>
             <Button onClick={drawer.close}>Cancel</Button>
             <Button type="submit" variant="primary" loading={saving}>
-              {editing ? 'Save' : 'Add and Get Token'}
+              Save
             </Button>
           </>
         }
@@ -270,7 +233,7 @@ export default function AppUsersPage() {
         <div className="stack">
           <TextField
             label="Who it’s for"
-            hint="Only staff see this. The customer’s own details arrive once they connect."
+            hint="Only staff see this. It starts as the name they registered with."
             placeholder="Customer or firm name"
             value={draft.label}
             onChange={(event) => setDraft({ ...draft, label: event.target.value })}
@@ -280,7 +243,17 @@ export default function AppUsersPage() {
           />
           {editing && (
             <>
-              <Switch label="Blocked" description="Their app stops syncing straight away. Orders already received stay here." checked={draft.blocked} onChange={(blocked) => setDraft({ ...draft, blocked })} />
+              <Switch label="Blocked" description="Their app stops syncing straight away and they can’t log in. Orders already received stay here." checked={draft.blocked} onChange={(blocked) => setDraft({ ...draft, blocked })} />
+              <TextField
+                label="Set new password"
+                hint="For a customer who forgot theirs. Leave empty to keep it. Their app logs out; tell them the new one to log in with."
+                placeholder="At least 8 characters"
+                value={draft.password}
+                onChange={(event) => setDraft({ ...draft, password: event.target.value })}
+                error={failure?.field === 'password' ? failure.message : null}
+                autoComplete="new-password"
+                spellCheck={false}
+              />
               <dl className="kv kv--compact">
                 {details.map(([term, value]) => (
                   <Fragment key={term}>
@@ -295,41 +268,11 @@ export default function AppUsersPage() {
               </dl>
             </>
           )}
-          {failure && failure.field !== 'label' && (
+          {failure && failure.field !== 'label' && failure.field !== 'password' && (
             <p className="notice notice--warning" role="alert">
               {failure.message}
             </p>
           )}
-          {editing && (
-            <Button icon={KeyIcon} onClick={() => setConfirmToken(true)} disabled={saving}>
-              Replace Token
-            </Button>
-          )}
-        </div>
-      </Drawer>
-
-      <ConfirmDialog
-        open={confirmToken}
-        title={`Replace the token for ${editing?.label ?? 'this customer'}?`}
-        body="Their current token stops working straight away. Their app keeps its orders and connects again once they enter the new token."
-        confirmLabel="Replace Token"
-        destructive
-        onCancel={() => setConfirmToken(false)}
-        onConfirm={replaceToken}
-      />
-
-      <Drawer open={issuedOpen} title="Send this to them" description={issued ? `For ${issued.label}` : undefined} onClose={() => setIssuedOpen(false)}>
-        <div className="stack">
-          <p>Send it on WhatsApp. The token works until you replace it or block them, and it won’t be shown again.</p>
-          {address.startsWith('http:') && (
-            <p className="notice notice--warning">
-              This admin isn’t on https, so the app also needs “Allow local HTTP server” turned on in Settings and must be on the same network. Use an https address for real customers.
-            </p>
-          )}
-          <TextAreaField label="Message to send" value={issued?.message ?? ''} readOnly rows={8} onFocus={(event) => event.target.select()} />
-          <Button variant="primary" icon={CopyIcon} onClick={copy}>
-            Copy Message
-          </Button>
         </div>
       </Drawer>
     </>

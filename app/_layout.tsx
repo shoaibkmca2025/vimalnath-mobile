@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { startAdminSync } from '@/lib/admin-sync';
+import { getAdminSyncStatus, initializeAdminSync, startAdminSync, subscribeAdminSync } from '@/lib/admin-sync';
 import { loadSavedContent, startContentSync } from '@/lib/content-sync';
 import { startPush } from '@/lib/push';
 import { AppUIProvider } from '@/providers/AppUIProvider';
@@ -24,10 +24,16 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({ SpaceGrotesk_700Bold });
   // The shop's last download is read before the first screen, so it never flashes the data built into the app.
   const [contentLoaded, setContentLoaded] = useState(false);
-  const ready = (fontsLoaded || Boolean(fontError)) && contentLoaded;
+  // Unknown until the saved login is read, so a logged-in customer never sees the login screen flash.
+  const [loggedIn, setLoggedIn] = useState<boolean>();
+  const ready = (fontsLoaded || Boolean(fontError)) && contentLoaded && loggedIn !== undefined;
 
   useEffect(() => {
     void loadSavedContent().finally(() => setContentLoaded(true));
+  }, []);
+  useEffect(() => {
+    void initializeAdminSync().then(() => setLoggedIn(getAdminSyncStatus().connection.enabled));
+    return subscribeAdminSync((status) => setLoggedIn(status.connection.enabled));
   }, []);
   useEffect(() => startAdminSync(), []);
   useEffect(() => startContentSync(), []);
@@ -56,22 +62,28 @@ export default function RootLayout() {
                 freezeOnBlur: true,
               }}
             >
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="telescopic" />
-              <Stack.Screen name="synchronized" />
-              <Stack.Screen name="folding" />
-              <Stack.Screen name="glass-calculator" />
-              <Stack.Screen name="cart" />
-              <Stack.Screen name="product/[id]" />
-              <Stack.Screen name="order/[id]" />
-              <Stack.Screen name="shop-order/[id]" />
-              <Stack.Screen name="user" />
-              <Stack.Screen name="settings" />
-              <Stack.Screen name="more-apps" />
-              <Stack.Screen name="about" />
-              <Stack.Screen name="videos" />
-              <Stack.Screen name="saved-pdfs" />
-              <Stack.Screen name="pdf/[id]" />
+              {/* Logging in or out swaps these; the app's screens can't be opened, even by a link, while logged out. */}
+              <Stack.Protected guard={!loggedIn}>
+                <Stack.Screen name="account" />
+              </Stack.Protected>
+              <Stack.Protected guard={loggedIn === true}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="telescopic" />
+                <Stack.Screen name="synchronized" />
+                <Stack.Screen name="folding" />
+                <Stack.Screen name="glass-calculator" />
+                <Stack.Screen name="cart" />
+                <Stack.Screen name="product/[id]" />
+                <Stack.Screen name="order/[id]" />
+                <Stack.Screen name="shop-order/[id]" />
+                <Stack.Screen name="user" />
+                <Stack.Screen name="settings" />
+                <Stack.Screen name="more-apps" />
+                <Stack.Screen name="about" />
+                <Stack.Screen name="videos" />
+                <Stack.Screen name="saved-pdfs" />
+                <Stack.Screen name="pdf/[id]" />
+              </Stack.Protected>
             </Stack>
           </AppUIProvider>
         </OrdersProvider>

@@ -65,10 +65,13 @@ async function staff(role = 'sales') {
   return { Cookie: res.headers.get('set-cookie')!.split(';')[0]! };
 }
 
-/** An app user added by staff, and its phone placing orders and sending its profile. */
+let mobiles = 0;
+
+/** A customer who registered in the app, and their phone placing orders and sending its profile. */
 async function phone(label: string) {
-  const res = await send('/v1/admin/app-users', 'POST', { label }, await staff());
-  const { appUser, token } = (await res.json()) as { appUser: { id: number }; token: string };
+  const res = await send('/v1/app/register', 'POST', { name: label, phone: `97${String(++mobiles).padStart(8, '0')}`, password: 'phone password' });
+  const { customerId, token } = (await res.json()) as { customerId: string; token: string };
+  const appUser = { id: Number(customerId) };
   const auth = { Authorization: `Bearer ${token}` };
   let made = 0;
   return {
