@@ -48,3 +48,18 @@ export const formatFeetRoundedUp = (mm: number) => `${Math.ceil(mm / 304.8 - 1e-
 
 /** "39 3/16″ × 78 3/16″" */
 export const formatInchSize = (widthMm: number, heightMm: number) => `${formatInches(widthMm)} × ${formatInches(heightMm)}`;
+
+/**
+ * A 10-digit mobile number as it's typed: digits only, shown 5 + 5 ("98220 12345"). A pasted +91 or leading 0
+ * is dropped, and anything past 10 digits is ignored.
+ */
+export function formatPhone(text: string): string {
+  let digits = text.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+  else if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  digits = digits.slice(0, 10);
+  return digits.length > 5 ? `${digits.slice(0, 5)} ${digits.slice(5)}` : digits;
+}
+
+/** Whether a phone field holds all 10 digits. */
+export const isFullPhone = (text: string) => text.replace(/\D/g, '').length === 10;
