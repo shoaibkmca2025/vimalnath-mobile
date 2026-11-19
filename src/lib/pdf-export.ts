@@ -55,15 +55,35 @@ export async function savePdfFile(uri: string, fileName: string): Promise<SavePd
   return saveFile(namedCopy(uri, fileName), fileName);
 }
 
-/** On web there is no file to hand over, so open the browser print dialog, where "Save as PDF" is available. */
-async function printOnWeb(html: string) {
-  // printToFileAsync (not printAsync) is used here because on web it prints the given HTML rather than the page.
-  await withTimeout(Print.printToFileAsync({ html, ...A4 }), 20000, 'Opening print dialog');
+/**
+ * On web there is no file to hand over, so print the PDF's page: the print sheet has "Save as PDF", and on iPhone a Share button.
+ * expo-print's web version can't be used: it ignores the HTML and prints the app screen.
+ */
+function printOnWeb(html: string, fileName: string): Promise<void> {
+  // A new frame each time, so the same PDF twice still loads; the last one is done printing by now.
+  document.getElementById('pdf-print')?.remove();
+  const frame = document.createElement('iframe');
+  frame.id = 'pdf-print';
+  frame.title = fileName;
+  // Hidden but not display:none, which some browsers print as a blank page.
+  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
+  const printed = new Promise<void>((resolve) => {
+    frame.onload = () => {
+      const page = frame.contentWindow!;
+      page.document.title = fileName.replace(/\.pdf$/, ''); // The name "Save as PDF" suggests.
+      page.focus();
+      page.print();
+      resolve();
+    };
+  });
+  frame.srcdoc = html;
+  document.body.appendChild(frame);
+  return withTimeout(printed, 20000, 'Opening print dialog');
 }
 
 /** Opens the system share sheet (WhatsApp, Gmail, Drive, Bluetooth, …) with the PDF attached. */
 export async function sharePdf(html: string, fileName: string, dialogTitle: string): Promise<void> {
-  if (Platform.OS === 'web') return printOnWeb(html);
+  if (Platform.OS === 'web') return printOnWeb(html, fileName);
 
   const file = await renderPdf(html, fileName);
   if (!(await withTimeout(Sharing.isAvailableAsync(), 5000, 'Checking sharing availability'))) {
@@ -83,7 +103,7 @@ export type SavePdfOutcome = { saved: true; location: string } | { saved: false 
  */
 export async function savePdf(html: string, fileName: string): Promise<SavePdfOutcome> {
   if (Platform.OS === 'web') {
-    await printOnWeb(html);
+    await printOnWeb(html, fileName);
     return { saved: false };
   }
 

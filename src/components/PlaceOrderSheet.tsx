@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { Sheet } from '@/components/Sheet';
@@ -14,11 +15,26 @@ type Props = {
   onSubmit: (details: OrderDetails) => void;
 };
 
+/** Saved by logging in or creating an account, and by the User screen. */
+const PROFILE_KEY = 'vimalnath:profile';
+
 export function PlaceOrderSheet({ visible, summary, onClose, onSubmit }: Props) {
   const [customer, setCustomer] = useState('');
   const [phone, setPhone] = useState('');
   const [phoneDone, setPhoneDone] = useState(false);
   const [notes, setNotes] = useState('');
+
+  // Filled from the logged-in account each time the sheet opens, so ordering is one tap; still editable for a site's name.
+  useEffect(() => {
+    if (!visible) return;
+    AsyncStorage.getItem(PROFILE_KEY)
+      .then((raw) => {
+        const saved = (raw ? JSON.parse(raw) : {}) as { name?: string; business?: string; phone?: string };
+        setCustomer((current) => current || saved.business?.trim() || saved.name?.trim() || '');
+        setPhone((current) => current || formatPhone(saved.phone ?? ''));
+      })
+      .catch(() => {});
+  }, [visible]);
 
   // The name is required; the phone is optional, but if it's given it must be all 10 digits.
   const phoneOk = !phone || isFullPhone(phone);
@@ -37,7 +53,6 @@ export function PlaceOrderSheet({ visible, summary, onClose, onSubmit }: Props) 
           value={customer}
           onChangeText={setCustomer}
           placeholder="e.g. Sharma Glass Works"
-          autoFocus
           autoCapitalize="words"
           textContentType="organizationName"
           returnKeyType="next"
