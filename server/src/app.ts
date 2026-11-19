@@ -100,7 +100,8 @@ export function createApp({ adminOrigin, production, trustProxy, checkDatabase, 
       throw new HTTPException(413, { message: 'Choose a file under 25 MB.' });
     },
   });
-  app.use('/v1/*', (c, next) => (c.req.path === '/v1/admin/media' ? uploads : smallBodies)(c, next));
+  // A customer's photo from the app is a file too (refused over 5 MB by its route).
+  app.use('/v1/*', (c, next) => (c.req.path === '/v1/admin/media' || c.req.path === '/v1/app/photo' ? uploads : smallBodies)(c, next));
   app.use('/v1/admin/*', cors({ origin: adminOrigin, credentials: true }));
   // The app sends a token, not a cookie, so any address may call it (its web version runs on its own).
   app.use('/v1/app/*', cors());

@@ -17,6 +17,21 @@ const MAX_PIXELS = 150_000_000;
 const toWebp = async (input: Buffer, side: number) =>
   (await import('sharp')).default(input, { limitInputPixels: MAX_PIXELS }).rotate().resize({ width: side, height: side, fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toBuffer({ resolveWithObject: true });
 
+/**
+ * A customer's photo from the app, re-encoded as WebP (upright, camera details dropped): up to 800 px, and 240 px for
+ * lists. Refuses anything that isn't a JPG, PNG or WebP photo under 5 MB.
+ */
+export async function customerPhoto(type: string, body: Buffer) {
+  if (!IMAGE_TYPES.includes(type)) throw new HTTPException(400, { message: 'Choose a JPG, PNG or WebP photo.' });
+  if (!body.length) throw new HTTPException(400, { message: 'That photo is empty.' });
+  if (body.length > MAX_IMAGE) throw new HTTPException(413, { message: 'Choose a photo under 5 MB.' });
+  const large = await toWebp(body, SIZES.medium).catch(() => {
+    throw new HTTPException(400, { message: 'That file isn’t a readable photo.' });
+  });
+  const small = await toWebp(large.data, SIZES.small);
+  return { data: large.data, small: small.data };
+}
+
 /** POST /v1/admin/media: the file itself as the body, its type as Content-Type, its name in X-File-Name. */
 export function mediaAdminRoutes(sql: Sql) {
   const media = new Hono<Env>();

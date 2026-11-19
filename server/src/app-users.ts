@@ -8,6 +8,7 @@ import { clientOf } from './app.ts';
 import { readCalculators } from './calculators.ts';
 import { readCatalogue } from './catalogue.ts';
 import { readContent } from './content.ts';
+import { customerPhoto } from './media.ts';
 import { AppOrder, appOrders, placeOrder, respondToRequest } from './orders.ts';
 import { countAttempt, dummyHash, hashPassword, MAX_ATTEMPTS, newToken, only, passwordMatches, sha256, type Env } from './staff.ts';
 import { jsonBody, parse } from './validate.ts';
@@ -163,6 +164,18 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
     return c.json({ received: true });
   });
 
+  // The customer's own photo, from Create Account or the User screen: the photo itself as the body, its type as Content-Type.
+  // A new one replaces the old. Only staff can see it (App Users); it is never served publicly.
+  app.put('/photo', async (c) => {
+    const type = c.req.header('content-type')?.split(';')[0]?.trim() ?? '';
+    const photo = await customerPhoto(type, Buffer.from(await c.req.arrayBuffer()));
+    const [row] = await sql`
+      insert into app_user_photos ${sql({ device_id: c.get('deviceId'), ...photo })}
+      on conflict (device_id) do update set data = excluded.data, small = excluded.small, updated_at = now()
+      returning updated_at as "updatedAt"`;
+    return c.json({ updatedAt: row!.updatedAt });
+  });
+
   return app;
 }
 
@@ -176,13 +189,24 @@ export function appUserAdminRoutes(sql: Sql) {
     select d.id, d.label, d.name, d.business, d.phone, d.email, d.city, d.blocked,
       d.last_seen_at as "lastSeenAt", d.profile_updated_at as "profileUpdatedAt", d.created_at as "createdAt",
       (select count(*) from orders o where o.device_id = d.id)::int as orders,
-      (select count(*) from app_events e where e.device_id = d.id)::int as views
+      (select count(*) from app_events e where e.device_id = d.id)::int as views,
+      (select p.updated_at from app_user_photos p where p.device_id = d.id) as "photoAt"
     from app_devices d
     where ${where} order by d.created_at desc`;
   const one = async (id: number) => (await appUsers(sql`d.id = ${id}`))[0];
 
   // shortcut: sends every app user at once; page it on the server past a few thousand.
   admin.get('/', async (c) => c.json(await appUsers()));
+
+  // The customer's photo (?size=small for lists). Private: it needs a staff session, and browsers keep it for a day
+  // at most; the admin adds the photo's time to the address, so a new photo shows at once.
+  admin.get('/:id/photo', async (c) => {
+    const id = parse(AppUserId, c.req.param('id'));
+    const small = c.req.query('size') === 'small';
+    const [row] = await sql`select ${small ? sql`small` : sql`data`} as photo from app_user_photos where device_id = ${id}`;
+    if (!row) throw new HTTPException(404, { message: 'This app user has no photo.' });
+    return c.body(new Uint8Array(row.photo as Buffer), 200, { 'Content-Type': 'image/webp', 'Cache-Control': 'private, max-age=86400' });
+  });
 
   const Change = z.object({ label: Label.optional(), blocked: z.boolean().optional(), password: Password.optional() }).refine((change) => Object.keys(change).length > 0, 'Nothing to change.');
 

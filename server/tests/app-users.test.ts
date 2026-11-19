@@ -195,3 +195,38 @@ test('logout: the token stops working and the phone stops getting order updates;
   assert.equal((await sql`select push_token from app_devices where id = ${id}`)[0]!.push_token, null);
   assert.equal((await logIn(mobile, PHONE_PASSWORD)).status, 200);
 });
+
+test('photo: the customer adds and replaces their photo; only Owners and Sales see it, never the public', { skip }, async () => {
+  const mobile = `97${String(++next).padStart(8, '0')}`;
+  const { token, customerId } = (await (await send('/v1/app/register', 'POST', { name: 'Photo Co', phone: mobile, password: PHONE_PASSWORD })).json()) as { token: string; customerId: string };
+  const sharp = (await import('sharp')).default;
+  const jpeg = (r: number) => sharp({ create: { width: 1200, height: 900, channels: 3, background: { r, g: 120, b: 200 } } }).jpeg().toBuffer();
+  const put = (body: Uint8Array | string, type: string, auth = token) =>
+    app.request('/v1/app/photo', { method: 'PUT', body, headers: { 'Content-Type': type, Authorization: `Bearer ${auth}`, 'x-forwarded-for': '10.0.0.1' } });
+
+  const owner = await staff('owner');
+  assert.equal((await send(`/v1/admin/app-users/${customerId}/photo`, 'GET', undefined, owner)).status, 404);
+
+  assert.equal((await put(await jpeg(10), 'image/jpeg', 'not-a-token')).status, 401);
+  assert.equal((await put('hello', 'text/plain')).status, 400);
+  assert.equal((await put(new Uint8Array([1, 2, 3]), 'image/jpeg')).status, 400);
+  const first = await put(await jpeg(10), 'image/jpeg');
+  assert.equal(first.status, 200);
+
+  const listed = ((await (await send('/v1/admin/app-users', 'GET', undefined, owner)).json()) as { id: number; photoAt: string | null }[]).find((user) => user.id === Number(customerId))!;
+  assert.ok(listed.photoAt);
+  const photo = await send(`/v1/admin/app-users/${customerId}/photo`, 'GET', undefined, owner);
+  assert.equal(photo.headers.get('content-type'), 'image/webp');
+  const big = await sharp(Buffer.from(await photo.arrayBuffer())).metadata();
+  assert.deepEqual([big.format, Math.max(big.width!, big.height!)], ['webp', 800]);
+  const small = await sharp(Buffer.from(await (await send(`/v1/admin/app-users/${customerId}/photo?size=small`, 'GET', undefined, owner)).arrayBuffer())).metadata();
+  assert.equal(Math.max(small.width!, small.height!), 240);
+
+  // A new photo replaces the old one.
+  assert.equal((await put(await jpeg(250), 'image/jpeg')).status, 200);
+  assert.equal(Number(((await sql`select count(*) from app_user_photos where device_id = ${Number(customerId)}`)[0] as { count: string }).count), 1);
+
+  assert.equal((await send(`/v1/admin/app-users/${customerId}/photo`, 'GET', undefined, await staff('sales'))).status, 200);
+  assert.equal((await send(`/v1/admin/app-users/${customerId}/photo`, 'GET', undefined, await staff('catalogue'))).status, 403);
+  assert.equal((await send(`/v1/admin/app-users/${customerId}/photo`)).status, 401);
+});
