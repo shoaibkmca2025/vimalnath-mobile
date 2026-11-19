@@ -82,14 +82,18 @@ test('3 door sliding folding: (length − 92) ÷ 3 by height − 60, within 900�
   const row = (label: string, from = result) => from.materials.find((item) => item.label.startsWith(label))?.value;
   assert.deepEqual(
     ['Vertical Profile', 'Horizontal Profile', 'Top Track', 'Profile Corner End Cap', 'Anti-Collision Magnet', 'Hanging Wheel', 'Gasket', 'Outer Vertical Gasket', 'Top and Bottom Hinge'].map((label) => row(label)),
-    ['6 nos (2.5 m)', '2 nos (96″)', '1 nos (6 ft)', '12 nos', '6 pair', '1 nos', '8 nos (8mm)', '15 m each', '4 pair'],
+    ['6 nos (2.5 m)', '2 nos (96″)', '1 nos (6 ft)', '12 nos', '8 pair', '1 nos', '8 nos (8mm)', '15 m each', '4 pair'],
   );
   const tall = plan(name, 2700, 3000, 3);
   assert.deepEqual([tall.cuttingWidth, tall.cuttingHeight, row('Vertical Profile', tall), row('Outer Vertical Gasket', tall)], [869, 2940, '6 nos (3 m)', '18 m each']);
   for (const [width, height] of [[899, 2000], [2701, 2000], [1800, 999], [1800, 3001]] as const) assert.ok('error' in computeGlassPlan(name, width, height, 3));
-  // 2 doors keeps its own counts, a 2.5 m top track and no outer vertical gasket.
+  assert.equal(row('Lock and Rod'), '2 nos');
+  // 2 doors keeps its own counts and a 2.5 m top track.
   const two = plan('2 Door Sliding Folding System', 1200, 2100, 2);
-  assert.deepEqual([row('Vertical Profile', two), row('Top Track', two), row('Hanging Wheel', two), row('Outer Vertical Gasket', two)], ['4 nos (2.5 m)', '1 nos (2.5 m)', '1 nos', undefined]);
+  assert.deepEqual(
+    ['Vertical Profile', 'Top Track', 'Lock and Rod', 'Anti-Collision Magnet', 'Hanging Wheel', 'Outer Vertical Gasket'].map((label) => row(label, two)),
+    ['4 nos (2.5 m)', '1 nos (2.5 m)', '1 nos', '4 pair', '1 nos', '10 m each'],
+  );
 });
 
 test('4 door sliding folding: (length − 121) ÷ 4 by height − 60, within 1200–3600 × 1000–3000', () => {
@@ -99,7 +103,7 @@ test('4 door sliding folding: (length − 121) ÷ 4 by height − 60, within 120
   const row = (label: string, from = result) => from.materials.find((item) => item.label.startsWith(label))?.value;
   assert.deepEqual(
     ['Vertical Profile', 'Top Track', 'Lock and Rod', 'Profile Corner End Cap', 'Anti-Collision Magnet', 'Hanging Wheel', 'Outer Vertical Gasket', 'Top and Bottom Hinge'].map((label) => row(label)),
-    ['8 nos (2.5 m)', '1 nos (8 ft)', '2 nos', '16 nos', '8 pair', '2 nos', '20 m each', '6 pair'],
+    ['8 nos (2.5 m)', '1 nos (8 ft)', '2 nos', '16 nos', '12 pair', '2 nos', '20 m each', '6 pair'],
   );
   const tall = plan(name, 3600, 3000, 4);
   assert.deepEqual([tall.cuttingWidth, tall.cuttingHeight, row('Vertical Profile', tall), row('Top Track', tall), row('Outer Vertical Gasket', tall)], [870, 2940, '8 nos (3 m)', '1 nos (12 ft)', '24 m each']);
