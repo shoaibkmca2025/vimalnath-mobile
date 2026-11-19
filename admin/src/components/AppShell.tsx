@@ -206,16 +206,16 @@ export function AppShell() {
                   {group.items.map(({ to, label, icon: ItemIcon, end, count, alert, alertLabel }) => (
                     <li key={to}>
                       <NavLink to={to} end={end} className="nav-link">
-                        <span className="nav-link__icon">
-                          <ItemIcon size={18} aria-hidden />
-                          {alert && count ? (
-                            <span className="alert-badge num" aria-hidden>
+                        <ItemIcon size={18} aria-hidden />
+                        {label}
+                        {alert && count ? (
+                          <>
+                            <span className="visually-hidden"> ({alertLabel ? `${count} ${alertLabel}` : count === 1 ? '1 new update' : `${count} new updates`})</span>
+                            <span className="nav-link__alert num" aria-hidden>
                               {count > 99 ? '99+' : count}
                             </span>
-                          ) : null}
-                        </span>
-                        {label}
-                        {alert && count ? <span className="visually-hidden"> ({alertLabel ? `${count} ${alertLabel}` : count === 1 ? '1 new update' : `${count} new updates`})</span> : null}
+                          </>
+                        ) : null}
                         {!alert && count ? (
                           <span className="nav-link__count num" aria-label={`${count} new`}>
                             {count}

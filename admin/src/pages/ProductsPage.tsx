@@ -11,7 +11,7 @@ import { SearchInput } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
-import { lowestPrice, productTitle } from '@/data/products';
+import { lowestPrice, productTitle, searchProducts } from '@/data/products';
 import { useData } from '@/data/useData';
 import type { Product } from '@/data/types';
 import { downloadCsv } from '@/lib/csv';
@@ -47,15 +47,15 @@ export default function ProductsPage() {
   const categoryLabel = useMemo(() => new Map(db.categories.map((item) => [item.id, item.label])), [db.categories]);
 
   const rows = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return db.products.filter((product) => {
+    const filtered = db.products.filter((product) => {
       if (category !== 'all' && product.category !== category) return false;
       if (view === 'missing-price' && product.options.length) return false;
       if (view === 'missing-photo' && product.image) return false;
       if (view === 'hidden' && product.visible) return false;
       if (view === 'featured' && !product.featured) return false;
-      return !needle || [product.code, product.name, product.section].some((field) => field.toLowerCase().includes(needle));
+      return true;
     });
+    return query.trim() ? searchProducts(filtered, query).products : filtered;
   }, [db.products, query, category, view]);
 
   const setVisibility = async (ids: string[], visible: boolean) => {

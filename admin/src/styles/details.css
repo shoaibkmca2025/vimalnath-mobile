@@ -472,6 +472,12 @@
   font-weight: 700;
 }
 
+/* The totals row sits on the card's own bottom edge: no line under any of its cells. */
+.table tfoot th,
+.table tfoot td {
+  border-bottom: 0;
+}
+
 .table--items .cell-media {
   align-items: flex-start;
 }
@@ -947,6 +953,11 @@
   align-items: flex-start;
 }
 
+/* Fits the products card beside "Send to" without scrolling sideways; scrolls only on narrow screens. */
+.table-scroll .table--request {
+  min-width: 540px;
+}
+
 /* ---------- Inventory: one card per order, a packing list inside ---------- */
 
 .inventory-list {
@@ -1034,13 +1045,24 @@
   min-width: 0;
 }
 
-/* ---------- Order Requests: a red badge for new customer updates ---------- */
+/* ---------- Red notification counts ---------- */
 
-.nav-link__icon {
-  position: relative;
-  display: inline-flex;
+/* In the menu: at the right end of the row (Orders: orders not delivered yet). */
+.nav-link__alert {
+  margin-left: auto;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-full);
+  background: var(--badge);
+  color: var(--on-badge);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
 }
 
+/* On the top-right corner of a button (the bell). */
 .alert-badge {
   position: absolute;
   top: -8px;
@@ -1050,8 +1072,8 @@
   padding: 0 5px;
   border: 2px solid var(--surface);
   border-radius: var(--radius-full);
-  background: var(--danger);
-  color: #fff;
+  background: var(--badge);
+  color: var(--on-badge);
   font-size: 10px;
   font-weight: 700;
   line-height: 14px;

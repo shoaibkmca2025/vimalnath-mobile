@@ -9,11 +9,12 @@ import { SearchInput, SelectField, TextAreaField, TextField } from '@/components
 import { PageHeader } from '@/components/PageHeader';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
-import { lowestPrice, productTitle } from '@/data/products';
+import { lowestPrice, productTitle, searchProducts } from '@/data/products';
 import { useData } from '@/data/useData';
 import type { Order, Product } from '@/data/types';
 import { formatPhone, isFullPhone } from '@/generated/app-lib/format';
 import { ApiError, api } from '@/lib/api';
+import { NO_AUTOFILL } from '@/lib/autofill';
 import { formatINR, plural } from '@/lib/format';
 
 type AppUser = { id: number; label: string; name: string; business: string; phone: string; blocked: boolean; lastSeenAt: string | null };
@@ -21,6 +22,7 @@ type Line = { key: number; productId: string; option?: string; qty: string; note
 type Errors = Partial<Record<'appUserId' | 'customer' | 'phone' | 'notes' | 'lines', string>> & Record<string, string | undefined>;
 
 const RESULTS = 8;
+const MORE = 20;
 let nextKey = 0;
 
 const quantity = (text: string) => (/^\d+$/.test(text.trim()) ? Number(text) : NaN);
@@ -59,13 +61,15 @@ export default function NewOrderRequestPage() {
 
   const products = useMemo(() => new Map(db.products.map((product) => [product.id, product])), [db.products]);
 
-  const results = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return [];
-    return db.products
-      .filter((product) => product.visible && [product.code, product.name, product.section, ...product.options.map((option) => option.code ?? '')].some((field) => field.toLowerCase().includes(needle)))
-      .slice(0, RESULTS);
-  }, [db.products, query]);
+  const found = useMemo(() => searchProducts(db.products.filter((product) => product.visible), query), [db.products, query]);
+  const [shown, setShown] = useState(RESULTS);
+  const search = (value: string) => {
+    setQuery(value);
+    setShown(RESULTS);
+  };
+  const results = found.products.slice(0, shown);
+  const more = found.products.length - results.length;
+  const closeNote = `Nothing matches “${query.trim()}” exactly.`;
 
   function fillFrom(user: AppUser) {
     setCustomer(user.business || user.name || user.label);
@@ -80,9 +84,18 @@ export default function NewOrderRequestPage() {
   };
 
   const add = (product: Product) => {
-    setLines((current) => [...current, { key: ++nextKey, productId: product.id, option: product.options[0]?.label, qty: '1', note: '' }]);
+    const option = product.options[0]?.label;
+    // Adding a product that's already in the list (same option, no note) adds one to that line instead of a second line.
+    const same = lines.find((line) => line.productId === product.id && line.option === option && !line.note.trim() && quantity(line.qty) >= 1);
+    if (same) {
+      const qty = String(quantity(same.qty) + 1);
+      change(same.key, { qty });
+      toast({ message: `${product.code} was already in the list. Quantity is now ${qty}.` });
+    } else {
+      setLines((current) => [...current, { key: ++nextKey, productId: product.id, option, qty: '1', note: '' }]);
+    }
     setErrors((current) => ({ ...current, lines: undefined }));
-    setQuery('');
+    search('');
   };
   const change = (key: number, patch: Partial<Line>) => setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   const remove = (key: number) => setLines((current) => current.filter((line) => line.key !== key));
@@ -171,7 +184,11 @@ export default function NewOrderRequestPage() {
           <Card aria-labelledby="products-title">
             <CardHeader id="products-title" title="Products" description={lines.length ? `${plural(lines.length, 'line')} · ${plural(items, 'item')}` : 'Search by code or name, then add.'} />
             <div className="card__body stack">
-              <SearchInput label="Search products" placeholder="Product code or name, e.g. TGH-55" value={query} onChange={setQuery} />
+              <SearchInput label="Search products" placeholder="Product code or name, e.g. TGH-55" value={query} onChange={search} />
+              <p className="visually-hidden" aria-live="polite">
+                {!query.trim() ? '' : found.close ? `${closeNote} ${plural(found.products.length, 'close match', 'close matches')}.` : `${plural(found.products.length, 'product')} found.`}
+              </p>
+              {found.close && <p className="field__hint">{closeNote} Showing close matches:</p>}
               {query.trim() && (
                 <ul className="list" aria-label="Matching products">
                   {results.length ? (
@@ -196,7 +213,17 @@ export default function NewOrderRequestPage() {
                       );
                     })
                   ) : (
-                    <li className="list-row muted">No products match “{query.trim()}”.</li>
+                    <li className="list-row muted">No products match “{query.trim()}”. Check the spelling, or search by the code.</li>
+                  )}
+                  {more > 0 && (
+                    <li className="list-row">
+                      <span className="cell-sub">
+                        Showing {results.length} of {found.products.length}
+                      </span>
+                      <Button size="sm" variant="plain" onClick={() => setShown((count) => count + MORE)}>
+                        Show {Math.min(MORE, more)} More
+                      </Button>
+                    </li>
                   )}
                 </ul>
               )}
@@ -256,7 +283,7 @@ export default function NewOrderRequestPage() {
                                 ) : (
                                   <span className="cell-sub">Priced from the catalogue page</span>
                                 )}
-                                <TextField label={`Note for ${title}`} className="field--compact" value={line.note} maxLength={500} placeholder="Optional, e.g. finish or size" onChange={(event) => change(line.key, { note: event.target.value })} />
+                                <TextField label={`Note for ${title}`} className="field--compact" value={line.note} maxLength={500} placeholder="Optional, e.g. finish or size" autoComplete={NO_AUTOFILL} onChange={(event) => change(line.key, { note: event.target.value })} />
                               </div>
                             </div>
                           </td>
@@ -265,6 +292,7 @@ export default function NewOrderRequestPage() {
                               label={`Quantity of ${title}`}
                               className="field--compact field--qty"
                               inputMode="numeric"
+                              autoComplete={NO_AUTOFILL}
                               value={line.qty}
                               error={errors[`qty-${line.key}`]}
                               onChange={(event) => change(line.key, { qty: event.target.value.replace(/\D/g, '').slice(0, 6) })}
@@ -315,12 +343,12 @@ export default function NewOrderRequestPage() {
                 ]}
                 hint={chosen && !chosen.lastSeenAt ? 'This customer hasn’t opened the app since registering. They’ll see the request when they next log in.' : undefined}
               />
-              <TextField label="Customer or site name" required value={customer} maxLength={200} error={errors.customer} onChange={(event) => setCustomer(event.target.value)} />
+              <TextField label="Customer or site name" required value={customer} maxLength={200} error={errors.customer} autoComplete={NO_AUTOFILL} onChange={(event) => setCustomer(event.target.value)} />
               <TextField
                 label="Phone"
                 value={phone}
                 inputMode="numeric"
-                autoComplete="tel"
+                autoComplete={NO_AUTOFILL}
                 placeholder="98220 12345"
                 error={errors.phone}
                 hint="10-digit mobile number."
@@ -329,7 +357,7 @@ export default function NewOrderRequestPage() {
                   setErrors((current) => ({ ...current, phone: undefined }));
                 }}
               />
-              <TextAreaField label="Delivery notes" value={notes} maxLength={2000} rows={3} error={errors.notes} placeholder="Delivery address, timing…" onChange={(event) => setNotes(event.target.value)} />
+              <TextAreaField label="Delivery notes" value={notes} maxLength={2000} rows={3} error={errors.notes} placeholder="Delivery address, timing…" autoComplete={NO_AUTOFILL} onChange={(event) => setNotes(event.target.value)} />
             </div>
           </Card>
 

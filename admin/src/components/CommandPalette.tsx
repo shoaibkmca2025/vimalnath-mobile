@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router';
 import { OrderStatusBadge } from '@/components/Badge';
 import { useModal, usePresence } from '@/hooks/useModal';
 import { customersFromOrders } from '@/data/orders';
-import { productTitle } from '@/data/products';
+import { productTitle, searchProducts } from '@/data/products';
 import { useData } from '@/data/useData';
 import type { OrderStatus } from '@/data/types';
 import { NO_AUTOFILL } from '@/lib/autofill';
@@ -70,9 +70,8 @@ function PaletteBody({ onClose, destinations }: { onClose: () => void; destinati
       .filter((customer) => customer.name.toLowerCase().includes(needle) || (digits.length >= 4 && (customer.phone ?? '').replace(/\D/g, '').includes(digits)))
       .slice(0, PER_GROUP)
       .map((customer) => ({ id: `customer-${customer.key}`, to: `/customers/${customer.key}`, title: customer.name, meta: customer.phone ?? 'No phone', icon: UserIcon, group: 'Customers' }));
-    const products = db.products
-      .filter((product) => product.code.toLowerCase().includes(needle) || productTitle(product).toLowerCase().includes(needle))
-      .slice(0, PER_GROUP)
+    const products = searchProducts(db.products, needle)
+      .products.slice(0, PER_GROUP)
       .map((product) => ({ id: `product-${product.id}`, to: `/products/${product.id}`, title: productTitle(product), meta: product.code, icon: PackageIcon, group: 'Products' }));
     return [...pages.slice(0, 4), ...orders, ...people, ...products];
   }, [query, destinations, db.orders, db.products, customers]);

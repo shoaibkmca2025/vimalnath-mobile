@@ -47,6 +47,9 @@
   /* App: red, redFill. */
   --danger: #d70015;
   --danger-soft: rgba(215, 0, 21, 0.1);
+  /* Notification counts: the same strong red in light and dark, so white numbers stay readable (5.4:1). */
+  --badge: #d70015;
+  --on-badge: #fff;
   --info: var(--tint);
   --info-soft: var(--tint-soft);
   --neutral: #5e5e63;

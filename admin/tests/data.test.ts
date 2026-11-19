@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { customersFromOrders, nextStatus, whatsappLink } from '../src/data/orders.ts';
+import { searchProducts } from '../src/data/products.ts';
 import { inOrders, isNew, requestState, requestUpdates, updateLabel } from '../src/data/requests.ts';
-import type { Order } from '../src/data/types.ts';
+import type { Order, Product } from '../src/data/types.ts';
 import { escapeHtml, withTimeout } from '../src/generated/app-lib/pdf-html.ts';
 import { toCsv } from '../src/lib/csv.ts';
 
@@ -98,4 +99,39 @@ test('app PDFs: text typed by a customer can’t become HTML in the order PDF', 
 test('app PDFs: a stuck PDF step gives up instead of spinning forever', async () => {
   assert.equal(await withTimeout(Promise.resolve('done'), 50, 'PDF'), 'done');
   await assert.rejects(withTimeout(new Promise(() => {}), 20, 'PDF'), /PDF timed out/);
+});
+
+const product = (id: string, code: string, name: string, section: string) =>
+  ({ id, code, name, section, category: 'hardware', image: null, catalogPage: { source: 'master', page: 1 }, options: [], specs: [], featured: false, visible: true }) as Product;
+const catalogue = [
+  product('hinge', 'TCFH-100', 'Hydraulic Floor Hinge', 'Floor Springs'),
+  product('spring', 'TFS-8400', 'Double Cylinder Floor Spring', 'Floor Springs'),
+  product('spring-2', 'TFS-84', 'Floor Spring Accessory', 'Floor Springs'),
+  product('handle', 'TGH-55', 'H Type Handle', 'Door Handles'),
+  product('lock', 'TAGHL-33-K2K', '', 'Office Partition Hardware'),
+];
+const ids = (query: string) => searchProducts(catalogue, query).products.map((item) => item.id);
+
+test('product search: every word, in any order, with or without the dash in a code', () => {
+  assert.deepEqual(ids('floor spring'), ['hinge', 'spring', 'spring-2']);
+  assert.deepEqual(ids('spring double'), ['spring']);
+  assert.deepEqual(ids('TFS 8400'), ['spring']);
+  assert.deepEqual(ids('tfs8400'), ['spring']);
+  assert.deepEqual(ids('office partition'), ['lock']);
+  assert.deepEqual(ids('   '), []);
+});
+
+test('product search: the exact code comes first, then codes starting with it', () => {
+  assert.deepEqual(ids('TFS-84'), ['spring-2', 'spring']);
+  assert.deepEqual(ids('tfs'), ['spring', 'spring-2']);
+});
+
+test('product search: a spelling slip finds close matches, flagged as close; short words and numbers stay exact', () => {
+  assert.deepEqual(searchProducts(catalogue, 'florr spring'), { products: [catalogue[0], catalogue[1], catalogue[2]], close: true });
+  assert.deepEqual(ids('sprng'), ['hinge', 'spring', 'spring-2']);
+  assert.deepEqual(ids('hydarulic'), ['hinge']);
+  assert.deepEqual(ids('hndle'), ['handle']);
+  assert.deepEqual(ids('8401'), []);
+  assert.deepEqual(ids('tgx'), []);
+  assert.equal(searchProducts(catalogue, 'floor').close, false);
 });
