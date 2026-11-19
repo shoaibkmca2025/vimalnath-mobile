@@ -62,8 +62,10 @@ export function AppShell() {
   const undelivered = db.orders.filter((order) => inOrders(order) && ['placed', 'confirmed', 'packed', 'dispatched'].includes(order.status)).length;
   // Customers answering or receiving order requests since this person last opened Order Requests.
   const { count: requestUpdates } = useRequestNotifications(db.orders);
-  const toPack = db.orders.filter((order) => order.status === 'confirmed').length;
-  const inventoryItem: NavItem = { to: '/inventory', label: 'Inventory', icon: WarehouseIcon, count: toPack };
+  // Orders still with the inventory team (pending, packed or dispatched); each drops off once delivered.
+  const withInventory = db.orders.filter((order) => order.status === 'confirmed' || order.status === 'packed' || order.status === 'dispatched').length;
+  // Every count is a red notification badge, the same everywhere.
+  const inventoryItem: NavItem = { to: '/inventory', label: 'Inventory', icon: WarehouseIcon, count: withInventory, alert: true, alertLabel: 'not delivered yet' };
   // The inventory team only works on its own panel (and its password, under Settings).
   const inventoryOnly = session?.role === 'inventory';
 
@@ -162,6 +164,9 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // On a phone the sidebar is hidden, so the menu button carries a red dot while any count in it is above zero.
+  const alerts = groups.flatMap((group) => group.items).reduce((sum, item) => sum + (item.alert ? (item.count ?? 0) : 0), 0);
+
   const allowed = !inventoryOnly || location.pathname.startsWith('/inventory') || location.pathname.startsWith('/settings');
 
   const signOut = async () => {
@@ -244,13 +249,13 @@ export function AppShell() {
             <span className="topbar__menu-wrap">
               <IconButton
                 icon={ListIcon}
-                label={menuOpen ? 'Close menu' : requestUpdates && !inventoryOnly ? `Open menu, ${requestUpdates} new order request ${requestUpdates === 1 ? 'update' : 'updates'}` : 'Open menu'}
+                label={menuOpen ? 'Close menu' : alerts ? `Open menu, ${alerts} ${alerts === 1 ? 'notification' : 'notifications'}` : 'Open menu'}
                 className="topbar__menu"
                 aria-expanded={menuOpen}
                 aria-controls="sidebar"
                 onClick={() => setMenuOpen((open) => !open)}
               />
-              {requestUpdates > 0 && !inventoryOnly && !menuOpen && <span className="alert-dot" aria-hidden />}
+              {alerts > 0 && !menuOpen && <span className="alert-dot" aria-hidden />}
             </span>
             <nav aria-label="Breadcrumb" style={{ minWidth: 0, flex: 1 }}>
               <ol className="breadcrumbs">
