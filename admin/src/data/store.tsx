@@ -31,7 +31,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Catalogue editors don't work with orders, and the server refuses them.
     const orders = readSession()?.role === 'catalogue' ? Promise.resolve<Order[]>([]) : api<Order[]>('/orders');
     // Stock is for Owners, Sales and the inventory team; the others' lists stay empty.
-    const stock = seesStock(readSession()?.role) ? api<StockItem[]>('/stock') : Promise.resolve<StockItem[]>([]);
+    // An API from before stock answers 404: the admin still opens, with an empty stock list, rather than not at all.
+    const stock = seesStock(readSession()?.role) ? api<StockItem[]>('/stock').catch(() => []) : Promise.resolve<StockItem[]>([]);
     // Versions before the lists: a save that lands in between then makes this tab ask for a reload, never overwrite it.
     api<Record<string, number>>('/versions')
       .then((loaded) => {
