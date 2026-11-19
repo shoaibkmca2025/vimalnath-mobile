@@ -34,6 +34,7 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { PageMetaContext, type PageMeta } from '@/components/pageMeta';
 import { ThemeSwitch } from '@/components/ThemeSwitch';
 import { useRequestNotifications } from '@/data/requestNotifications';
+import { inOrders } from '@/data/requests';
 import { endSession, readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import { initials } from '@/lib/format';
@@ -41,7 +42,7 @@ import { initials } from '@/lib/format';
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
 /** `alert` shows the count as a red badge on the icon: new updates, not just work waiting. */
-type NavItem = { to: string; label: string; icon: Icon; end?: boolean; count?: number; alert?: boolean };
+type NavItem = { to: string; label: string; icon: Icon; end?: boolean; count?: number; alert?: boolean; alertLabel?: string };
 
 export function AppShell() {
   const { db } = useData();
@@ -57,7 +58,8 @@ export function AppShell() {
   const firstRoute = useRef(true);
 
   const setMeta = useCallback((next: PageMeta) => setMetaState(next), []);
-  const newOrders = db.orders.filter((order) => order.status === 'placed').length;
+  // Orders still on their way to the customer: new, confirmed, packed or dispatched. Each drops off once delivered.
+  const undelivered = db.orders.filter((order) => inOrders(order) && ['placed', 'confirmed', 'packed', 'dispatched'].includes(order.status)).length;
   // Customers answering or receiving order requests since this person last opened Order Requests.
   const { count: requestUpdates } = useRequestNotifications(db.orders);
   const toPack = db.orders.filter((order) => order.status === 'confirmed').length;
@@ -75,7 +77,7 @@ export function AppShell() {
     {
       title: 'Sales',
       items: [
-        { to: '/orders', label: 'Orders', icon: ReceiptIcon, count: newOrders },
+        { to: '/orders', label: 'Orders', icon: ReceiptIcon, count: undelivered, alert: true, alertLabel: 'not delivered yet' },
         ...(session?.role === 'catalogue' ? [] : [{ to: '/order-requests', label: 'Order Requests', icon: PaperPlaneTiltIcon, count: requestUpdates, alert: true }, inventoryItem]),
         { to: '/customers', label: 'Customers', icon: UsersThreeIcon },
         ...(session?.role === 'catalogue' ? [] : [{ to: '/app-users', label: 'App Users', icon: DeviceMobileIcon }]),
@@ -191,7 +193,7 @@ export function AppShell() {
                   {group.title}
                 </p>
                 <ul className="nav-list" aria-labelledby={`nav-${group.title}`}>
-                  {group.items.map(({ to, label, icon: ItemIcon, end, count, alert }) => (
+                  {group.items.map(({ to, label, icon: ItemIcon, end, count, alert, alertLabel }) => (
                     <li key={to}>
                       <NavLink to={to} end={end} className="nav-link">
                         <span className="nav-link__icon">
@@ -203,7 +205,7 @@ export function AppShell() {
                           ) : null}
                         </span>
                         {label}
-                        {alert && count ? <span className="visually-hidden"> ({count === 1 ? '1 new update' : `${count} new updates`})</span> : null}
+                        {alert && count ? <span className="visually-hidden"> ({alertLabel ? `${count} ${alertLabel}` : count === 1 ? '1 new update' : `${count} new updates`})</span> : null}
                         {!alert && count ? (
                           <span className="nav-link__count num" aria-label={`${count} new`}>
                             {count}

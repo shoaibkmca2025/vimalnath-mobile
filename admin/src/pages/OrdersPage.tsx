@@ -45,7 +45,8 @@ export default function OrdersPage() {
 
   const counts = useMemo(() => {
     const scoped = productId ? all.filter((order) => order.lines.some((line) => line.productId === productId)) : all;
-    const map: Record<string, number> = { all: scoped.length };
+    // All counts what's still in progress (or cancelled); delivered orders are only under Delivered.
+    const map: Record<string, number> = { all: scoped.filter((order) => order.status !== 'delivered').length };
     for (const order of scoped) map[order.status] = (map[order.status] ?? 0) + 1;
     return map;
   }, [all, productId]);
@@ -56,7 +57,7 @@ export default function OrdersPage() {
     const digits = needle.replace(/\D/g, '');
     return all.filter(
       (order) =>
-        (status === 'all' || order.status === status) &&
+        (status === 'all' ? order.status !== 'delivered' : order.status === status) &&
         (!productId || order.lines.some((line) => line.productId === productId)) &&
         (!needle ||
           [order.number, order.customer, order.notes ?? '', ...order.lines.flatMap((line) => [line.code, line.optionCode ?? ''])].some((field) => field.toLowerCase().includes(needle)) ||
@@ -186,6 +187,7 @@ export default function OrdersPage() {
         )}
         <span className="muted" aria-live="polite">
           {plural(rows.length, 'order')} · {formatINR(shownValue)} at MRP{rows.some((order) => order.status === 'cancelled') ? ', cancelled left out' : ''}
+          {status === 'all' && (counts.delivered ?? 0) > 0 ? ` · ${plural(counts.delivered ?? 0, 'delivered order')} under Delivered` : ''}
         </span>
       </div>
 
