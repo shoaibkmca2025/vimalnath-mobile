@@ -17,30 +17,38 @@ type Props = {
 
 /** Saved by logging in or creating an account, and by the User screen. */
 const PROFILE_KEY = 'vimalnath:profile';
+/** The last delivery address used on this phone; logging out clears it (admin-sync). */
+const ADDRESS_KEY = 'vimalnath:delivery-address';
 
 export function PlaceOrderSheet({ visible, summary, onClose, onSubmit }: Props) {
   const [customer, setCustomer] = useState('');
   const [phone, setPhone] = useState('');
   const [phoneDone, setPhoneDone] = useState(false);
+  const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
 
-  // Filled from the logged-in account each time the sheet opens, so ordering is one tap; still editable for a site's name.
+  // Filled from the logged-in account and the last order each time the sheet opens, so a repeat order is one tap.
   useEffect(() => {
     if (!visible) return;
-    AsyncStorage.getItem(PROFILE_KEY)
-      .then((raw) => {
-        const saved = (raw ? JSON.parse(raw) : {}) as { name?: string; business?: string; phone?: string };
+    AsyncStorage.multiGet([PROFILE_KEY, ADDRESS_KEY])
+      .then(([[, profile], [, lastAddress]]) => {
+        const saved = (profile ? JSON.parse(profile) : {}) as { name?: string; business?: string; phone?: string };
         setCustomer((current) => current || saved.business?.trim() || saved.name?.trim() || '');
         setPhone((current) => current || formatPhone(saved.phone ?? ''));
+        setAddress((current) => current || lastAddress || '');
       })
       .catch(() => {});
   }, [visible]);
 
-  // The name is required; the phone is optional, but if it's given it must be all 10 digits.
+  // Name and address are required; the phone is optional, but if it's given it must be all 10 digits.
   const phoneOk = !phone || isFullPhone(phone);
-  const ready = customer.trim().length > 0 && phoneOk;
+  const ready = customer.trim().length > 0 && address.trim().length > 0 && phoneOk;
   const submit = () => {
-    if (ready) onSubmit({ customer: customer.trim(), phone: phone.trim(), notes: notes.trim() });
+    if (!ready) return;
+    const deliverTo = address.trim().replace(/\s*\n\s*/g, ', ');
+    void AsyncStorage.setItem(ADDRESS_KEY, deliverTo).catch(() => {});
+    // The shop keeps one "delivery notes" text per order (admin, PDF, app), so the address leads it.
+    onSubmit({ customer: customer.trim(), phone: phone.trim(), notes: [`Deliver to: ${deliverTo}`, notes.trim()].filter(Boolean).join(' · ') });
   };
 
   return (
@@ -72,11 +80,24 @@ export function PlaceOrderSheet({ visible, summary, onClose, onSubmit }: Props) 
           containerStyle={styles.field}
         />
         <TextField
+          label="Delivery address"
+          value={address}
+          onChangeText={setAddress}
+          placeholder="Shop or site address, area, city"
+          multiline
+          maxLength={400}
+          autoComplete="street-address"
+          textContentType="fullStreetAddress"
+          accessibilityLabel="Delivery address, required"
+          containerStyle={styles.field}
+        />
+        <TextField
           label="Notes (optional)"
           value={notes}
           onChangeText={setNotes}
-          placeholder="Delivery address, timing…"
+          placeholder="Timing, contact person at site…"
           multiline
+          maxLength={1500}
           containerStyle={styles.field}
         />
       </ScrollView>

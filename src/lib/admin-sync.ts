@@ -243,7 +243,8 @@ export async function logOut(): Promise<void> {
   await request({ ...connection }, 'logout', {});
   await locked(async () => {
     // Orders go before the account: if the app stops in between, no other account can pick them up.
-    await AsyncStorage.multiRemove([ORDERS_KEY, PROFILE_KEY]);
+    // Also the last delivery address (PlaceOrderSheet), so the next account on this phone doesn't see it.
+    await AsyncStorage.multiRemove([ORDERS_KEY, PROFILE_KEY, 'vimalnath:delivery-address']);
     connection = { ...DEFAULT };
     outbox = { deviceId: outbox.deviceId, events: [] };
     await AsyncStorage.multiSet([[OUTBOX_KEY, JSON.stringify(outbox)], [CONNECTION_KEY, JSON.stringify(connection)]]);
