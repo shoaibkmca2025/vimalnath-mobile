@@ -11,7 +11,7 @@ const sql = connect(config.DATABASE_URL);
 const app = buildApi(sql, config);
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, ({ port }) => console.log(`API listening on port ${port}`));
-const stopNotifier = startNotifier(sql, realSenders(config));
+const stopNotifier = startNotifier(sql, realSenders(config, sql));
 
 // Let requests in flight finish before the host replaces this process.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

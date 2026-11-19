@@ -1,3 +1,5 @@
+import { createCipheriv, createECDH, createPrivateKey, generateKeyPairSync, hkdfSync, randomBytes, sign, type KeyObject } from 'node:crypto';
+
 import { Hono } from 'hono';
 import nodemailer from 'nodemailer';
 import type { Sql, TransactionSql } from 'postgres';
@@ -16,11 +18,104 @@ import { jsonBody } from './validate.ts';
 const PUSH_EVENTS = ['confirmed', 'dispatched', 'delivered', 'cancelled'];
 const MAX_ATTEMPTS = 3;
 
-export type Message = { id: number; channel: 'push' | 'email'; recipient: string; title: string; body: string; data: Record<string, unknown> | null; attempts: number };
+/** `badge`: the customer's unread count, the number for the app's icon. */
+export type Message = { id: number; channel: 'push' | 'email'; recipient: string; title: string; body: string; data: Record<string, unknown> | null; attempts: number; badge: number };
 /** A send function per channel; one left out isn't set up yet, and its messages are logged as skipped. */
 export type Senders = { push?: (message: Message) => Promise<void>; email?: (message: Message) => Promise<void> };
-/** Expo's answer that this phone no longer takes notifications: stop sending to its address. */
+/** The push service's answer that this phone no longer takes notifications: stop sending to its address. */
 export class DeviceGone extends Error {}
+
+// --- Web Push (RFC 8291 and 8292), for the web app on a home screen. Node's own crypto; no library.
+
+/** A browser's push subscription, as the app sends it: where to post, and its keys for encrypting to it. */
+export type WebSubscription = { endpoint: string; keys: { p256dh: string; auth: string } };
+type WebPushKeys = { publicKey: string; privateKey: KeyObject };
+
+/**
+ * The browsers' own push services (Chrome, Safari, Firefox, Edge). A subscription naming any other address is refused,
+ * so the server only ever posts to these, never to an address a phone made up.
+ */
+const PUSH_SERVICES = /(^|\.)(fcm\.googleapis\.com|push\.apple\.com|push\.services\.mozilla\.com|notify\.windows\.com)$/;
+export function isPushService(endpoint: string) {
+  try {
+    const url = new URL(endpoint);
+    return url.protocol === 'https:' && PUSH_SERVICES.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+const keyCache = new WeakMap<Sql, Promise<WebPushKeys>>();
+/** The shop's key pair: made the first time it's needed (two servers at once keep the first), then read from the database. */
+export function webPushKeys(sql: Sql): Promise<WebPushKeys> {
+  let keys = keyCache.get(sql);
+  if (!keys) {
+    keys = (async () => {
+      const made = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ format: 'jwk' });
+      await sql`insert into web_push_keys (private_jwk) values (${sql.json(made as Record<string, string>)}) on conflict do nothing`;
+      const [row] = await sql`select private_jwk from web_push_keys`;
+      const jwk = row!.private_jwk as { x: string; y: string };
+      // The public half as browsers want it: an uncompressed P-256 point.
+      const publicKey = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, 'base64url'), Buffer.from(jwk.y, 'base64url')]).toString('base64url');
+      return { publicKey, privateKey: createPrivateKey({ key: row!.private_jwk, format: 'jwk' }) };
+    })();
+    keyCache.set(sql, keys);
+    keys.catch(() => keyCache.delete(sql));
+  }
+  return keys;
+}
+
+/** RFC 8291: the message encrypted so only that browser can read it (aes128gcm, one record). */
+export function encryptForBrowser(payload: string, subscription: WebSubscription): Buffer {
+  const browserKey = Buffer.from(subscription.keys.p256dh, 'base64url');
+  const authSecret = Buffer.from(subscription.keys.auth, 'base64url');
+  const ours = createECDH('prime256v1');
+  const ourKey = ours.generateKeys();
+  const shared = ours.computeSecret(browserKey);
+  const salt = randomBytes(16);
+  const ikm = Buffer.from(hkdfSync('sha256', shared, authSecret, Buffer.concat([Buffer.from('WebPush: info\0'), browserKey, ourKey]), 32));
+  const key = Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16));
+  const nonce = Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12));
+  const cipher = createCipheriv('aes-128-gcm', key, nonce);
+  // 2: this is the last (and only) record.
+  const sealed = Buffer.concat([cipher.update(Buffer.concat([Buffer.from(payload), Buffer.from([2])])), cipher.final(), cipher.getAuthTag()]);
+  const header = Buffer.alloc(21);
+  salt.copy(header);
+  header.writeUInt32BE(4096, 16);
+  header.writeUInt8(ourKey.length, 20);
+  return Buffer.concat([header, ourKey, sealed]);
+}
+
+/** RFC 8292: proves the message comes from this shop's server (a signed token the push service checks), valid 12 hours. */
+function vapidAuthorization(endpoint: string, keys: WebPushKeys, contact: string) {
+  const part = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const unsigned = `${part({ typ: 'JWT', alg: 'ES256' })}.${part({ aud: new URL(endpoint).origin, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: contact })}`;
+  const signature = sign('sha256', Buffer.from(unsigned), { key: keys.privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url');
+  return `vapid t=${unsigned}.${signature}, k=${keys.publicKey}`;
+}
+
+/** Posts one message to a browser's push service. What the phone shows: title, body, the order to open, the icon's number. */
+async function sendWebPush(sql: Sql, message: Message, contact: string) {
+  const subscription = JSON.parse(message.recipient) as WebSubscription;
+  if (!isPushService(subscription.endpoint)) throw new DeviceGone('Not a browser push service.');
+  const res = await fetch(subscription.endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: vapidAuthorization(subscription.endpoint, await webPushKeys(sql), contact),
+      'Content-Encoding': 'aes128gcm',
+      'Content-Type': 'application/octet-stream',
+      // Kept a day for a phone that's off; sent at once, so the phone wakes for it.
+      TTL: '86400',
+      Urgency: 'high',
+    },
+    body: new Uint8Array(encryptForBrowser(JSON.stringify({ title: message.title, body: message.body, data: message.data ?? {}, badge: message.badge }), subscription)),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (res.ok) return;
+  // Notifications turned off or the app removed: the browser dropped this address.
+  if (res.status === 404 || res.status === 410) throw new DeviceGone('This phone no longer accepts notifications.');
+  throw new Error(`The push service answered ${res.status}. ${(await res.text().catch(() => '')).slice(0, 200)}`.trim());
+}
 
 const money = (amount: number) => `₹${Math.round(amount).toLocaleString('en-IN')}`;
 /** Why a customer's message wasn't sent as a push: it is still on the app's Notifications screen. */
@@ -66,7 +161,8 @@ export async function sendQueued(sql: Sql, senders: Senders, limit = 50) {
   const batch = await sql<Message[]>`
     update notification_log set attempts = attempts + 1
     where id in (select id from notification_log where status = 'pending' order by id limit ${limit} for update skip locked)
-    returning id, channel, recipient, title, body, data, attempts`;
+    returning id, channel, recipient, title, body, data, attempts,
+      (select count(*)::int from notification_log u where u.device_id = notification_log.device_id and u.channel = 'push' and u.read_at is null) as badge`;
   for (const message of batch) {
     const send = senders[message.channel];
     if (!send) {
@@ -87,19 +183,22 @@ export async function sendQueued(sql: Sql, senders: Senders, limit = 50) {
 }
 
 /**
- * The real senders. Push goes through Expo's service, which needs nothing here; phones only have an address once the
- * app is built with an EAS project. Email needs SMTP_URL, e.g. smtps://user:password@smtp.gmail.com.
+ * The real senders. Push goes to the web app's browser (Web Push, signed with the shop's own key) or through Expo's
+ * service for the native app; neither needs anything set up here, though the native app has an address only once built
+ * with an EAS project. Email needs SMTP_URL, e.g. smtps://user:password@smtp.gmail.com.
  */
-export function realSenders(config: { SMTP_URL?: string; MAIL_FROM?: string; EXPO_ACCESS_TOKEN?: string }): Senders {
+export function realSenders(config: { SMTP_URL?: string; MAIL_FROM?: string; EXPO_ACCESS_TOKEN?: string; ADMIN_ORIGIN: string }, sql: Sql): Senders {
   const mailer = config.SMTP_URL ? nodemailer.createTransport(config.SMTP_URL) : null;
   const from = config.MAIL_FROM ?? (config.SMTP_URL ? decodeURIComponent(new URL(config.SMTP_URL).username) : '');
   return {
     // shortcut: trusts Expo's ticket ("received"); fetch receipts about 15 minutes later to also catch phones that refused it.
     push: async (message) => {
+      // A browser's address is its subscription, as JSON; the push service may contact the shop at its admin's address.
+      if (message.recipient.startsWith('{')) return sendWebPush(sql, message, config.ADMIN_ORIGIN);
       const res = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(config.EXPO_ACCESS_TOKEN ? { Authorization: `Bearer ${config.EXPO_ACCESS_TOKEN}` } : {}) },
-        body: JSON.stringify({ to: message.recipient, title: message.title, body: message.body, data: message.data ?? {}, sound: 'default', channelId: 'orders' }),
+        body: JSON.stringify({ to: message.recipient, title: message.title, body: message.body, data: message.data ?? {}, sound: 'default', channelId: 'orders', badge: message.badge }),
         signal: AbortSignal.timeout(15_000),
       });
       const answer = (await res.json().catch(() => null)) as { data?: { status: string; message?: string; details?: { error?: string } } | { status: string; message?: string; details?: { error?: string } }[]; errors?: { message: string }[] } | null;

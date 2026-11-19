@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { NotificationPrompt } from '@/components/NotificationPrompt';
 import { getAdminSyncStatus, initializeAdminSync, startAdminSync, subscribeAdminSync } from '@/lib/admin-sync';
 import { loadSavedContent, startContentSync } from '@/lib/content-sync';
 import { startProfilePhotoSync } from '@/lib/profile-photo';
@@ -89,6 +90,7 @@ export default function RootLayout() {
                 <Stack.Screen name="pdf/[id]" />
               </Stack.Protected>
             </Stack>
+            {loggedIn && <NotificationPrompt />}
           </AppUIProvider>
         </OrdersProvider>
       </CartProvider>

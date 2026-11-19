@@ -327,7 +327,7 @@ export function orderAdminRoutes(sql: Sql) {
       if (changed.length) await tx`insert into order_events ${tx(changed.map((row) => ({ order_id: row.id, status, by })))}`;
       // Delivered orders take their items from stock; one moved back from delivered puts them back.
       await moveStockForOrders(tx, changed.map((row) => ({ id: row.id as number, was: row.was as string, now: status })), by);
-      // Module 10: the customer hears about it (if their phone takes notifications); sent after this commits.
+      // Module 10: the customer hears about it on the app's Notifications screen, and as a push if their phone takes them.
       for (const row of changed) await queueOrderEvent(tx, row.id, status);
     });
     return c.json({ orders: await orders(sql`o.id in ${sql(ids)}`, !inventory(role)) });

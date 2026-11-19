@@ -1,14 +1,15 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { IconName } from '@/components/Button';
+import { Button, type IconName } from '@/components/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { InsetGroup } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
 import { fetchNotifications, markNotificationsRead, type AppNotification } from '@/lib/admin-sync';
 import { formatOrderDate } from '@/lib/format';
+import { notificationAccess, turnOnNotifications, type NotificationAccess } from '@/lib/push';
 import { colors, type } from '@/theme';
 
 /** Each kind of message gets its own symbol and colour, as Settings and Mail do. */
@@ -34,9 +35,12 @@ function when(iso: string) {
 export default function NotificationsScreen() {
   const [items, setItems] = useState<AppNotification[]>();
   const [error, setError] = useState<string>();
+  const [access, setAccess] = useState<NotificationAccess>(notificationAccess);
 
   const load = useCallback(async () => {
     setError(undefined);
+    // Also re-read whether phone alerts are on: the customer may have changed it in Settings.
+    setAccess(notificationAccess());
     try {
       const list = await fetchNotifications();
       // Shown as they were, so what's new stays marked while the customer reads it.
@@ -60,6 +64,7 @@ export default function NotificationsScreen() {
 
   return (
     <Screen title="Notifications" back={{ fallback: '/' }} trailing={null} grouped>
+      <PhoneAlerts access={access} onChange={setAccess} />
       {error && !items ? (
         <EmptyState icon="cloud-offline-outline" title="Couldn’t Load Notifications" message={error} action={{ label: 'Try Again', onPress: () => void load() }} />
       ) : !items ? (
@@ -67,10 +72,7 @@ export default function NotificationsScreen() {
       ) : items.length === 0 ? (
         <EmptyState icon="notifications-outline" title="No Notifications Yet" message="When the shop confirms, sends or delivers an order, or has news for you, it shows here." />
       ) : (
-        <InsetGroup
-          separatorInset={60}
-          footer={Platform.OS === 'web' ? 'Updates from the shop collect here. The installed app also alerts you on your phone.' : undefined}
-        >
+        <InsetGroup separatorInset={60}>
           {items.map((item) => {
             const look = LOOK[item.event] ?? DEFAULT_LOOK;
             const linked = Boolean(item.data.orderId || item.data.shopOrderId);
@@ -105,8 +107,43 @@ export default function NotificationsScreen() {
   );
 }
 
+/** Whether this phone also rings for them, and how to change that. Nothing when they're on. */
+function PhoneAlerts({ access, onChange }: { access: NotificationAccess; onChange: (access: NotificationAccess) => void }) {
+  const [busy, setBusy] = useState(false);
+  if (access === 'on') return null;
+  const turnOn = async () => {
+    setBusy(true);
+    try {
+      onChange(await turnOnNotifications());
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <InsetGroup>
+      <View style={styles.alerts}>
+        <Ionicons name={access === 'ask' ? 'notifications-outline' : 'notifications-off-outline'} size={22} color={access === 'ask' ? colors.tint : colors.secondaryLabel} />
+        <View style={styles.copy}>
+          <Text style={styles.alertsTitle}>{access === 'ask' ? 'Get Alerts on Your Phone' : access === 'off' ? 'Phone Alerts Are Off' : 'Alerts Need the Home Screen App'}</Text>
+          <Text style={styles.body}>
+            {access === 'ask'
+              ? 'A notification with sound for each update, even when the app is closed.'
+              : access === 'off'
+                ? 'You’ll still see updates here. To get alerts, allow notifications for Vimalnath in your phone’s Settings.'
+                : 'On iPhone, add this app to your Home Screen (tap Share, then Add to Home Screen) and open it from there.'}
+          </Text>
+          {access === 'ask' && <Button label="Turn On Notifications" size="medium" onPress={() => void turnOn()} loading={busy} style={styles.alertsButton} />}
+        </View>
+      </View>
+    </InsetGroup>
+  );
+}
+
 const styles = StyleSheet.create({
   loading: { marginTop: 48 },
+  alerts: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16 },
+  alertsTitle: { ...type.headline },
+  alertsButton: { alignSelf: 'flex-start', marginTop: 12 },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, paddingLeft: 16, paddingRight: 12 },
   pressed: { backgroundColor: colors.fill },
   icon: { width: 32, height: 32, marginTop: 2, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
