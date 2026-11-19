@@ -153,14 +153,14 @@ export async function request<T>(config: AdminConnection, path: string, body?: R
       signal: controller.signal,
     });
     if (!response.ok) {
-      // The token stopped working: logged in on another phone, or the shop set a new password. Back to the login screen.
-      if (response.status === 401 && config.deviceToken && config.deviceToken === connection.deviceToken) void endSession();
       if (response.status === 429) throw new Error('The shop server is busy. Try again in a moment.');
       let detail = '';
       try {
         const failure = await response.json() as { error?: { message?: unknown } };
         if (typeof failure.error?.message === 'string') detail = failure.error.message.slice(0, 300);
       } catch { /* A proxy may return an HTML error page instead of JSON. */ }
+      // The token stopped working: logged in on another phone, or the shop set a new password. Back to the login screen.
+      if (response.status === 401 && config.deviceToken && config.deviceToken === connection.deviceToken) void endSession(detail || 'You were logged out. Log in again.');
       throw new Error(detail || `Shop server returned ${response.status}. Pending items remain saved for retry.`);
     }
     return await response.json() as T;
@@ -222,12 +222,13 @@ export const registerAccount = (details: Profile & { password: string }) => sign
 export const logIn = (phone: string, password: string) => signIn('login', { phone, password });
 
 /** The shop no longer accepts this phone's token. Pending orders stay, to be sent once the same account logs back in. */
-async function endSession() {
+async function endSession(reason: string) {
   await locked(async () => {
     if (!connection.enabled) return;
     connection = { ...connection, enabled: false, deviceToken: '' };
     await AsyncStorage.setItem(CONNECTION_KEY, JSON.stringify(connection));
-    publish({ connected: false });
+    // The reason goes out with the switch to the login screen, which shows it as that screen opens.
+    publish({ connected: false, error: reason });
   });
 }
 
