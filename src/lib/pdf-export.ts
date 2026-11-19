@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
 import { withTimeout } from '@/lib/pdf-html';
+import { shareHtmlAsPdf } from '@/lib/web-pdf';
 
 const PDF_MIME = 'application/pdf';
 // A4 at 72 PPI.
@@ -55,35 +56,10 @@ export async function savePdfFile(uri: string, fileName: string): Promise<SavePd
   return saveFile(namedCopy(uri, fileName), fileName);
 }
 
-/**
- * On web there is no file to hand over, so print the PDF's page: the print sheet has "Save as PDF", and on iPhone a Share button.
- * expo-print's web version can't be used: it ignores the HTML and prints the app screen.
- */
-function printOnWeb(html: string, fileName: string): Promise<void> {
-  // A new frame each time, so the same PDF twice still loads; the last one is done printing by now.
-  document.getElementById('pdf-print')?.remove();
-  const frame = document.createElement('iframe');
-  frame.id = 'pdf-print';
-  frame.title = fileName;
-  // Hidden but not display:none, which some browsers print as a blank page.
-  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
-  const printed = new Promise<void>((resolve) => {
-    frame.onload = () => {
-      const page = frame.contentWindow!;
-      page.document.title = fileName.replace(/\.pdf$/, ''); // The name "Save as PDF" suggests.
-      page.focus();
-      page.print();
-      resolve();
-    };
-  });
-  frame.srcdoc = html;
-  document.body.appendChild(frame);
-  return withTimeout(printed, 20000, 'Opening print dialog');
-}
-
 /** Opens the system share sheet (WhatsApp, Gmail, Drive, Bluetooth, …) with the PDF attached. */
 export async function sharePdf(html: string, fileName: string, dialogTitle: string): Promise<void> {
-  if (Platform.OS === 'web') return printOnWeb(html, fileName);
+  // Web (incl. the home-screen app): expo-print can't make a file there, so the PDF is built in the browser.
+  if (Platform.OS === 'web') return shareHtmlAsPdf(html, fileName);
 
   const file = await renderPdf(html, fileName);
   if (!(await withTimeout(Sharing.isAvailableAsync(), 5000, 'Checking sharing availability'))) {
@@ -99,11 +75,11 @@ export type SavePdfOutcome = { saved: true; location: string } | { saved: false 
  * Saves the PDF to the phone's storage.
  * - Android: the person picks a folder (e.g. Download or Documents) and the PDF is written there.
  * - iOS: apps can't write to shared storage directly, so the share sheet opens; "Save to Files" is in it.
- * - Web: the print dialog opens, where "Save as PDF" is available.
+ * - Web: the share sheet opens with the PDF ("Save to Files" on iPhone); a computer downloads it.
  */
 export async function savePdf(html: string, fileName: string): Promise<SavePdfOutcome> {
   if (Platform.OS === 'web') {
-    await printOnWeb(html, fileName);
+    await shareHtmlAsPdf(html, fileName);
     return { saved: false };
   }
 
