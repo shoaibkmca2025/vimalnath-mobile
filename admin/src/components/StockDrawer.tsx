@@ -1,9 +1,8 @@
+import { PencilSimpleIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
 import { Badge } from '@/components/Badge';
-import { PencilSimpleIcon } from '@phosphor-icons/react';
-
 import { Button, ButtonLink } from '@/components/Button';
 import { ConfirmDialog } from '@/components/Dialog';
 import { Drawer } from '@/components/Drawer';
