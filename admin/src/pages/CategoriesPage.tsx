@@ -1,4 +1,4 @@
-import { ArrowDownIcon, ArrowUpIcon, EyeIcon, EyeSlashIcon, PencilSimpleIcon } from '@phosphor-icons/react';
+import { ArrowDownIcon, ArrowUpIcon, EyeIcon, EyeSlashIcon, PencilSimpleIcon, PlusIcon } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 
@@ -7,6 +7,7 @@ import { Button, IconButton } from '@/components/Button';
 import { Card, CardHeader } from '@/components/Card';
 import { Drawer } from '@/components/Drawer';
 import { Segmented, Switch, TextField } from '@/components/Field';
+import { ImagePicker } from '@/components/ImagePicker';
 import { PageHeader } from '@/components/PageHeader';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
@@ -15,12 +16,32 @@ import type { Category } from '@/data/types';
 import { useDrawerItem } from '@/hooks/useDrawerItem';
 import { plural } from '@/lib/format';
 
+/** The server keeps up to 100. */
+const MAX_CATEGORIES = 100;
+
+/** A new category's id, from its name: "Glass Railings" → glass-railings, made unique with -2, -3… */
+function idFor(label: string, taken: string[]) {
+  const base =
+    label
+      .normalize('NFKD')
+      .toLowerCase()
+      .replace(/&/g, ' and ')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 50) || 'category';
+  let id = base;
+  for (let count = 2; taken.some((other) => other.toLowerCase() === id.toLowerCase()); count += 1) id = `${base}-${count}`;
+  return id;
+}
+
 export default function CategoriesPage() {
   const { db, update } = useData();
   const toast = useToast();
-  const drawer = useDrawerItem<Category>();
+  const drawer = useDrawerItem<Category | 'new'>();
   const [draft, setDraft] = useState<Category | null>(null);
   const [touched, setTouched] = useState(false);
+  const isNew = drawer.item === 'new';
+  const full = db.categories.length >= MAX_CATEGORIES;
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();
@@ -50,26 +71,52 @@ export default function CategoriesPage() {
     if (ok) toast({ message: `${moved.label} moved ${direction < 0 ? 'up' : 'down'}.`, tone: 'info' });
   };
 
-  const labelError = draft && !draft.label.trim() ? 'Enter a name for this category.' : null;
-  const dirty = Boolean(draft && drawer.item && JSON.stringify(draft) !== JSON.stringify(drawer.item));
+  const add = () => {
+    setDraft({ id: '', label: '', image: '', fit: 'cover', visible: true });
+    setTouched(false);
+    drawer.show('new');
+  };
+
+  const label = draft?.label.trim() ?? '';
+  const labelError = !draft
+    ? null
+    : !label
+      ? 'Enter a name for this category.'
+      : label.length > 60
+        ? 'Use 60 characters or fewer.'
+        : db.categories.some((category) => category.id !== draft.id && category.label.trim().toLowerCase() === label.toLowerCase())
+          ? 'Another category has this name.'
+          : null;
+  const imageError = draft && !draft.image ? 'Choose a photo for the tile.' : null;
+  const dirty = Boolean(draft && drawer.item && (isNew ? draft.label.trim() || draft.image : JSON.stringify(draft) !== JSON.stringify(drawer.item)));
 
   const save = async () => {
     setTouched(true);
-    if (!draft || labelError) return;
-    const saved = { ...draft, label: draft.label.trim() };
-    const ok = await update('categories', (categories) => categories.map((category) => (category.id === saved.id ? saved : category)), {
-      area: 'catalogue',
-      summary: `Edited the ${saved.label} category${saved.visible ? '' : ' (hidden)'}`,
-      to: '/categories',
-    });
+    if (!draft || labelError || imageError) return;
+    const saved = { ...draft, label, id: isNew ? idFor(label, db.categories.map((category) => category.id)) : draft.id };
+    const ok = isNew
+      ? await update('categories', (categories) => [...categories, saved], { area: 'catalogue', summary: `Added the ${saved.label} category${saved.visible ? '' : ' (hidden)'}`, to: '/categories' })
+      : await update('categories', (categories) => categories.map((category) => (category.id === saved.id ? saved : category)), {
+          area: 'catalogue',
+          summary: `Edited the ${saved.label} category${saved.visible ? '' : ' (hidden)'}`,
+          to: '/categories',
+        });
     if (!ok) return;
     drawer.close();
-    toast({ message: `${saved.label} saved.` });
+    toast({ message: isNew ? `${saved.label} added at the end of the list. File products under it from Products.` : `${saved.label} saved.` });
   };
 
   return (
     <>
-      <PageHeader title="Categories" description="The category tiles at the top of the app’s Shop, in the order they appear." />
+      <PageHeader
+        title="Categories"
+        description="The category tiles at the top of the app’s Shop, in the order they appear."
+        actions={
+          <Button variant="primary" icon={PlusIcon} onClick={add} disabled={full} title={full ? `Up to ${MAX_CATEGORIES} categories.` : undefined}>
+            Add Category
+          </Button>
+        }
+      />
 
       <Card aria-labelledby="category-list">
         <CardHeader id="category-list" title="Shop categories" description={`${plural(db.categories.length, 'category', 'categories')} · products are filed under these in the catalogue`} />
@@ -112,21 +159,39 @@ export default function CategoriesPage() {
         onClose={drawer.close}
         onSubmit={save}
         dirty={dirty}
-        title="Edit category"
-        description={drawer.item?.label}
+        title={isNew ? 'Add category' : 'Edit category'}
+        description={isNew ? 'A new tile in the app’s Shop, added at the end. Move it up afterwards.' : drawer.item !== 'new' ? drawer.item?.label : undefined}
         footer={
           <>
             <Button onClick={drawer.close}>Cancel</Button>
             <Button type="submit" variant="primary">
-              Save
+              {isNew ? 'Add Category' : 'Save'}
             </Button>
           </>
         }
       >
         {draft && (
           <div className="stack-lg">
-            <TextField label="Name" required value={draft.label} onChange={(event) => setDraft({ ...draft, label: event.target.value })} onBlur={() => setTouched(true)} error={touched ? labelError : null} data-autofocus />
+            <TextField
+              label="Name"
+              required
+              maxLength={60}
+              value={draft.label}
+              onChange={(event) => setDraft({ ...draft, label: event.target.value })}
+              onBlur={() => setTouched(true)}
+              error={touched ? labelError : null}
+              placeholder={isNew ? 'e.g. Glass Railings' : undefined}
+              data-autofocus
+            />
             <Switch label="Show in the Shop" description="Hidden categories keep their products, but the tile disappears." checked={draft.visible} onChange={(visible) => setDraft({ ...draft, visible })} />
+            <div>
+              <ImagePicker label="Tile photo" value={draft.image || null} onChange={(image) => image && setDraft({ ...draft, image })} allowRemove={false} hint="JPG, PNG or WebP. A room photo, or a product on white." />
+              {touched && imageError && (
+                <p className="field__error" role="alert">
+                  {imageError}
+                </p>
+              )}
+            </div>
             <div className="field">
               <span className="field__label" id="fit-label">
                 Tile image
@@ -141,7 +206,7 @@ export default function CategoriesPage() {
                 ]}
               />
               <p className="field__hint">Room photos look best filling the tile; product photos on white look best shown whole.</p>
-              <Thumb src={draft.image} size="lg" fit={draft.fit} />
+              {draft.image && <Thumb src={draft.image} size="lg" fit={draft.fit} />}
             </div>
           </div>
         )}
