@@ -81,12 +81,43 @@ test('staff moving an order on queues a push for a phone that takes notification
     { channel: push!.channel, recipient: push!.recipient, title: push!.title, body: push!.body, data: push!.data },
     { channel: 'push', recipient: TOKEN, title: `Order ${order.number} confirmed`, body: `Vimalnath has confirmed your order ${order.number}.`, data: { orderId: order.phoneOrderId } },
   );
-  // Packing is the warehouse's step, not news for the customer; a phone without notifications gets nothing.
+  // Packing is the warehouse's step, not news for the customer.
   await send('/v1/admin/orders/status', 'POST', { ids: [order.id], status: 'packed' }, owner);
   assert.equal((await queued(order.id)).length, 1);
+  // A phone without a push address (the web app) keeps it for its Notifications screen, and nothing is sent.
   const quiet = await phoneWithOrder(owner);
   await send('/v1/admin/orders/status', 'POST', { ids: [quiet.id], status: 'dispatched' }, owner);
-  assert.equal((await queued(quiet.id)).length, 0);
+  assert.deepEqual((await queued(quiet.id)).map((row) => [row.channel, row.recipient, row.status]), [['push', '', 'skipped']]);
+});
+
+test('the app’s Notifications screen: this account’s updates and the shop’s messages, newest first; opening it clears the bell', { skip }, async () => {
+  const owner = await staff('owner');
+  const mine = await phoneWithOrder(owner);
+  const theirs = await phoneWithOrder(owner);
+  const bell = async (auth: Record<string, string>) => ((await (await send('/v1/app/orders', 'GET', undefined, auth)).json()) as { unread: number }).unread;
+  type Item = { event: string; title: string; data: Record<string, string>; read: boolean };
+  const inbox = async (auth: Record<string, string>) => ((await (await send('/v1/app/notifications', 'GET', undefined, auth)).json()) as { notifications: Item[] }).notifications;
+  assert.equal(await bell(mine.auth), 0);
+
+  await send('/v1/admin/orders/status', 'POST', { ids: [mine.id], status: 'confirmed' }, owner);
+  await send('/v1/admin/orders/status', 'POST', { ids: [mine.id], status: 'dispatched' }, owner);
+  const broadcast = await send('/v1/admin/notifications/broadcast', 'POST', { title: 'Closed on Sunday', body: 'For Diwali.' }, owner);
+  assert.equal(((await broadcast.json()) as { users: number }).users > 0, true);
+  assert.equal(await bell(mine.auth), 3);
+  const items = await inbox(mine.auth);
+  assert.deepEqual(
+    items.map((item) => [item.event, item.title, item.read]),
+    [['broadcast', 'Closed on Sunday', false], ['dispatched', `Order ${mine.number} dispatched`, false], ['confirmed', `Order ${mine.number} confirmed`, false]],
+  );
+  assert.deepEqual(items[1]!.data, { orderId: mine.phoneOrderId });
+  // Only this account's orders: the other customer sees the shop's message, not this order.
+  assert.deepEqual((await inbox(theirs.auth)).map((item) => item.event), ['broadcast']);
+
+  assert.equal((await send('/v1/app/notifications/read', 'POST', {}, mine.auth)).status, 200);
+  assert.equal(await bell(mine.auth), 0);
+  assert.deepEqual((await inbox(mine.auth)).map((item) => item.read), [true, true, true]);
+  assert.equal(await bell(theirs.auth), 1);
+  assert.equal((await send('/v1/app/notifications', 'GET', undefined, { Authorization: 'Bearer nope' })).status, 401);
 });
 
 test('sending: delivered once; a failure is tried three times; email without SMTP is skipped; a phone Expo no longer knows is dropped', { skip }, async () => {
@@ -140,7 +171,9 @@ test('the Owner edits wording and recipients and broadcasts; others can’t; bad
   await phoneWithOrder(owner, 'ExponentPushToken[blocked]');
   await sql`update app_devices set blocked = true where push_token = 'ExponentPushToken[blocked]'`;
   const devices = Number((await sql`select count(*) from app_devices where push_token is not null and not blocked`)[0]!.count);
-  const broadcast = (await (await send('/v1/admin/notifications/broadcast', 'POST', { title: 'New price list', body: 'The Feb 2027 prices are in the app.' }, owner)).json()) as { queued: number };
+  const users = Number((await sql`select count(*) from app_devices where not blocked`)[0]!.count);
+  const broadcast = (await (await send('/v1/admin/notifications/broadcast', 'POST', { title: 'New price list', body: 'The Feb 2027 prices are in the app.' }, owner)).json()) as { queued: number; users: number };
   assert.equal(broadcast.queued, devices);
-  assert.ok(devices > 0);
+  assert.equal(broadcast.users, users);
+  assert.ok(devices > 0 && users > devices);
 });

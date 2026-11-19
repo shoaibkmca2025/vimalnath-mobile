@@ -23,6 +23,8 @@ export type Senders = { push?: (message: Message) => Promise<void>; email?: (mes
 export class DeviceGone extends Error {}
 
 const money = (amount: number) => `₹${Math.round(amount).toLocaleString('en-IN')}`;
+/** Why a customer's message wasn't sent as a push: it is still on the app's Notifications screen. */
+const APP_ONLY = 'No push address (e.g. the web app): shown on the app’s Notifications screen only.';
 
 /** Queues the messages an order event causes, inside the caller's transaction. Nothing is queued for nobody. */
 export async function queueOrderEvent(tx: TransactionSql, orderId: number, event: string) {
@@ -39,11 +41,24 @@ export async function queueOrderEvent(tx: TransactionSql, orderId: number, event
   if (template.channel === 'email') {
     const recipients = await tx`select email from staff_alert_recipients order by email`;
     if (recipients.length) await tx`insert into notification_log ${tx(recipients.map(({ email }) => ({ ...message, channel: 'email', recipient: email })))}`;
-  } else if (order.push_token) {
+  } else {
     // A tap opens the order: the phone's own copy if it placed it, otherwise the one the shop sent.
     const data = order.client_order_id ? { orderId: order.client_order_id } : { shopOrderId: String(order.id) };
-    await tx`insert into notification_log ${tx({ ...message, channel: 'push', recipient: order.push_token, device_id: order.device_id, data: tx.json(data) })}`;
+    // Always kept for the app's Notifications screen; pushed only to a phone that gave an address.
+    const delivery = order.push_token ? { recipient: order.push_token } : { recipient: '', status: 'skipped', error: APP_ONLY };
+    await tx`insert into notification_log ${tx({ ...message, ...delivery, channel: 'push', device_id: order.device_id, data: tx.json(data) })}`;
   }
+}
+
+/** The app's Notifications screen: this account's order updates and the shop's messages, newest first. */
+export const appInbox = (sql: Sql, deviceId: number) => sql`
+  select l.id::text as id, l.event, l.title, l.body, coalesce(l.data, '{}') as data, l.created_at as "createdAt", l.read_at is not null as read
+  from notification_log l where l.device_id = ${deviceId} and l.channel = 'push' order by l.id desc limit 100`;
+
+/** The number on the app's bell, sent with every sync. */
+export async function appUnread(sql: Sql, deviceId: number) {
+  const [row] = await sql`select count(*)::int as unread from notification_log where device_id = ${deviceId} and channel = 'push' and read_at is null`;
+  return row!.unread as number;
 }
 
 /** Sends up to `limit` queued messages. Run on a timer; several servers can run it at once without sending twice. */
@@ -148,14 +163,17 @@ export function notificationRoutes(sql: Sql, setup: { email: boolean }) {
     return c.body(null, 204);
   });
 
-  // 10.5: one message to every linked phone that takes notifications, e.g. a new price list.
+  // 10.5: one message to every app user, e.g. a new price list: on each one's Notifications screen, and as a push where
+  // the phone takes them. `queued` counts the pushes, `users` everyone who gets it.
   notifications.post('/broadcast', jsonBody(Template.omit({ event: true })), async (c) => {
     const { title, body } = c.req.valid('json');
-    const queued = await sql`
-      insert into notification_log (event, channel, recipient, device_id, title, body)
-      select 'broadcast', 'push', push_token, id, ${title}, ${body} from app_devices where push_token is not null and not blocked
-      returning id`;
-    return c.json({ queued: queued.length });
+    const rows = await sql`
+      insert into notification_log (event, channel, recipient, device_id, title, body, status, error)
+      select 'broadcast', 'push', coalesce(push_token, ''), id, ${title}, ${body},
+        case when push_token is null then 'skipped' else 'pending' end, case when push_token is null then ${APP_ONLY} end
+      from app_devices where not blocked
+      returning status`;
+    return c.json({ queued: rows.filter((row) => row.status === 'pending').length, users: rows.length });
   });
 
   return notifications;

@@ -178,3 +178,20 @@ test('renamed options: the stock left behind is marked, and an Owner can stop tr
   assert.equal((await send('/v1/admin/stock/item?productId=p4&option=Gold', 'DELETE', undefined, owner.headers)).status, 200);
   assert.equal(await find(owner.headers, 'p4', 'Gold'), undefined);
 });
+
+test('the app: items that are out or low reach phones as just that word; an order for one that is out arrives flagged', { skip }, async () => {
+  const owner = await staff('owner');
+  await send('/v1/admin/stock', 'PUT', { items: [item('p1', 'BM', { quantity: 0 }), item('p3', '', { quantity: 2, minStock: 2 }), item('p2', 'SSS', { quantity: 50, minStock: 5 })] }, owner.headers);
+  const token = `token-${++next}`;
+  await sql`insert into app_devices (label, token_hash) values ('Stock phone', ${sha256(token)})`;
+  const download = (await (await send('/v1/app/content', 'GET', undefined, { Authorization: `Bearer ${token}` })).json()) as { content: { stock: Record<string, Record<string, string>> } };
+  const { stock } = download.content;
+  assert.deepEqual([stock.p1?.BM, stock.p3?.[''], stock.p2?.SSS], ['out', 'low', undefined]);
+  // Only the word: no counts, prices or racks go to phones.
+  assert.ok(Object.values(stock).every((options) => Object.values(options).every((state) => state === 'out' || state === 'low')));
+
+  // Sent anyway (offline, or from an older catalogue): kept, and staff see why.
+  const placed = await order(owner.headers, [{ productId: 'p1', option: 'BM', qty: 1 }, { productId: 'p2', option: 'SSS', qty: 1 }]);
+  const lines = await sql`select option, problem from order_lines where order_id = ${placed.id} order by position`;
+  assert.deepEqual(lines.map((line) => [line.option, line.problem]), [['BM', 'Out of stock'], ['SSS', null]]);
+});

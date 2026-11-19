@@ -44,8 +44,11 @@ export type ShopSettings = {
   announcementTo: string;
   developer: string;
 };
+/** Items the shop has counted as out or low, by product and option ('' for a product without options). */
+export type StockStates = Record<string, Record<string, 'out' | 'low'>>;
 export type AppContent = {
   products: ShopProduct[];
+  stock: StockStates;
   categories: ShopCategory[];
   catalogPages: Record<string, ImageSourcePropType>;
   catalogues: Catalogue[];
@@ -61,6 +64,8 @@ export type AppContent = {
 /** What GET /v1/app/content sends: the admin's data, with images named by path. */
 type Path = string | null;
 type ServerContent = {
+  /** Missing from a shop server older than stock tracking. */
+  stock?: StockStates;
   products: { id: string; code: string; name: string; category: string; section: string; image: Path; catalogPage: { source: CatalogSource; page: number }; options: ProductOption[]; specs: { label: string; value: string }[]; featured: boolean }[];
   categories: { id: string; label: string; image: Path; fit: 'cover' | 'contain' }[];
   catalogPages: Record<string, string>;
@@ -79,6 +84,7 @@ const KEY = 'vimalnath:content:v1';
 /** Module 11.5: what ships in the app, for the first launch and for phones not linked to the shop. */
 const BUILT_IN: AppContent = {
   products: shopProducts,
+  stock: {},
   categories: shopCategories,
   catalogPages,
   catalogues,
@@ -133,6 +139,7 @@ function fromServer(content: ServerContent, baseUrl: string): AppContent {
   const configurations = (list: { name: string; image: string }[]) => list.map((item) => ({ name: item.name, image: image(item.image) ?? {} }));
   return {
     products,
+    stock: content.stock ?? {},
     categories: content.categories.map(({ id, label, image: path, fit }) => ({
       id: id as ShopCategoryId,
       label,
@@ -182,6 +189,11 @@ const subscribe = (listener: () => void) => {
   };
 };
 const snapshot = () => live;
+
+/** 'out', 'low', or undefined when there's enough (or the shop doesn't count it). */
+export function stockOf(stock: StockStates, productId: string, option: string | undefined) {
+  return stock[productId]?.[option ?? ''];
+}
 
 /** Everything the app shows, from the shop's last download or else the app itself. Screens update when a download lands. */
 export function useAppContent(): AppContent {

@@ -13,7 +13,7 @@ import { Screen } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
 import { findShopProduct, formatINR, productTitle } from '@/data/shop';
 import { trackAdminActivity } from '@/lib/admin-sync';
-import { useAppContent } from '@/lib/content-sync';
+import { stockOf, useAppContent } from '@/lib/content-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { useCart } from '@/providers/CartProvider';
 import { colors, radius, tabularNums, type } from '@/theme';
@@ -26,7 +26,7 @@ const SOURCE_NAMES = { master: 'Master Catalogue', office: 'Office Partition Pri
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   // Subscribing also re-reads the product when a download from the shop lands.
-  const { catalogPages } = useAppContent();
+  const { catalogPages, stock } = useAppContent();
   const product = findShopProduct(id ?? '');
   const { showToast } = useAppUI();
   const { add } = useCart();
@@ -58,6 +58,8 @@ export default function ProductScreen() {
   }
 
   const option = product.options?.[optionIndex];
+  // The shop's count for the chosen option (or the product): 'out' can't be ordered, 'low' is a heads-up.
+  const state = stockOf(stock, product.id, option?.label);
   const pageImage = catalogPages[`${product.catalogPage.source}-${product.catalogPage.page}`];
   const pageTitle = `${SOURCE_NAMES[product.catalogPage.source]} · page ${product.catalogPage.page}`;
 
@@ -104,12 +106,13 @@ export default function ProductScreen() {
                 onPress={() => setOptionIndex(index)}
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
-                accessibilityLabel={`${item.label}, ${formatINR(item.mrp)}`}
+                accessibilityLabel={[item.label, formatINR(item.mrp), STOCK_LABEL[stockOf(stock, product.id, item.label) ?? '']].filter(Boolean).join(', ')}
                 style={({ pressed }) => [styles.option, pressed && styles.rowPressed]}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={type.body}>{item.label}</Text>
                   {item.code && <Text style={styles.optionCode}>{item.code}</Text>}
+                  <StockNote state={stockOf(stock, product.id, item.label)} />
                 </View>
                 <Text style={styles.optionPrice}>{formatINR(item.mrp)}</Text>
                 <View style={styles.check}>{selected && <Ionicons name="checkmark" size={20} color={colors.tint} />}</View>
@@ -130,9 +133,17 @@ export default function ProductScreen() {
         />
       )}
 
+      {state && (
+        <View style={[styles.stockBox, state === 'out' && styles.stockBoxOut]} accessibilityRole="text">
+          <Ionicons name={state === 'out' ? 'close-circle' : 'alert-circle'} size={18} color={state === 'out' ? colors.red : colors.orange} />
+          <Text style={styles.stockText}>
+            {state === 'out' ? 'Out of stock. Call the shop to ask when it’s back.' : 'Low stock: only a few left at the shop.'}
+          </Text>
+        </View>
+      )}
       <View style={styles.buyRow}>
         <QtyStepper value={qty} onChange={setQty} label={product.code} />
-        <Button label="Add to Cart" icon="cart" onPress={addToCart} style={styles.addButton} />
+        <Button label={state === 'out' ? 'Out of Stock' : 'Add to Cart'} icon="cart" onPress={addToCart} disabled={state === 'out'} style={styles.addButton} />
       </View>
       <Button label="View Cart" variant="plain" size="medium" onPress={() => router.push('/cart')} style={styles.viewCart} />
 
@@ -170,6 +181,14 @@ export default function ProductScreen() {
   );
 }
 
+const STOCK_LABEL: Record<string, string> = { out: 'Out of stock', low: 'Low stock' };
+
+/** Under an option's name: words and colour, so it doesn't rely on colour alone. */
+function StockNote({ state }: { state: 'out' | 'low' | undefined }) {
+  if (!state) return null;
+  return <Text style={[styles.stockNote, state === 'out' && styles.stockNoteOut]}>{STOCK_LABEL[state]}</Text>;
+}
+
 const styles = StyleSheet.create({
   media: {
     aspectRatio: 1,
@@ -195,6 +214,11 @@ const styles = StyleSheet.create({
   optionPrice: { ...type.body, flexShrink: 0, color: colors.secondaryLabel, ...tabularNums },
   check: { width: 22, alignItems: 'center' },
   buyRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 24 },
+  stockBox: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 20, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: colors.orangeFill, borderRadius: radius.md },
+  stockBoxOut: { backgroundColor: colors.redFill },
+  stockText: { ...type.subheadline, flex: 1 },
+  stockNote: { ...type.footnote, marginTop: 1, fontWeight: '600', color: colors.orange },
+  stockNoteOut: { color: colors.red },
   addButton: { flex: 1 },
   viewCart: { marginTop: 6, alignSelf: 'center' },
   pageRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingLeft: 12, paddingRight: 12 },

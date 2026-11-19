@@ -9,8 +9,10 @@ import { readCalculators } from './calculators.ts';
 import { readCatalogue } from './catalogue.ts';
 import { readContent } from './content.ts';
 import { customerPhoto } from './media.ts';
+import { appInbox, appUnread } from './notifications.ts';
 import { AppOrder, appOrders, placeOrder, respondToRequest } from './orders.ts';
 import { countAttempt, dummyHash, hashPassword, MAX_ATTEMPTS, newToken, only, passwordMatches, sha256, type Env } from './staff.ts';
+import { appStock } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
 
 // The app sends its updates strictly in order and stops at the first one refused, so free text
@@ -43,8 +45,15 @@ const ActivityEvent = z.object({
  * switched off, stay in the admin.
  */
 export async function appContent(sql: Sql) {
-  const [{ products, categories, catalogues, catalogPages }, { cutlist, sections }, { banners, videoSections, moreApps, settings }] = await Promise.all([readCatalogue(sql), readCalculators(sql), readContent(sql)]);
+  const [{ products, categories, catalogues, catalogPages }, { cutlist, sections }, { banners, videoSections, moreApps, settings }, stock] = await Promise.all([
+    readCatalogue(sql),
+    readCalculators(sql),
+    readContent(sql),
+    appStock(sql),
+  ]);
   return {
+    // Out or low, by product and option: the app marks them and won't add an item that's out to the cart.
+    stock,
     products: products.filter((product) => product.visible).map(({ visible: _, ...product }) => product),
     categories: categories.filter((category) => category.visible).map(({ visible: _, ...category }) => category),
     catalogPages,
@@ -122,7 +131,18 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
 
   // The app calls this around every sync: customerId pins the phone to one customer, and
   // mobileEventId tells it which of its orders have arrived, so it never sends one twice.
-  app.get('/orders', async (c) => c.json({ customerId: String(c.get('deviceId')), orders: await appOrders(sql, c.get('deviceId')) }));
+  // `unread` is the number on the app's bell.
+  app.get('/orders', async (c) => {
+    const [orders, unread] = await Promise.all([appOrders(sql, c.get('deviceId')), appUnread(sql, c.get('deviceId'))]);
+    return c.json({ customerId: String(c.get('deviceId')), orders, unread });
+  });
+
+  // The Notifications screen, and its "seen": opening it clears the bell.
+  app.get('/notifications', async (c) => c.json({ notifications: await appInbox(sql, c.get('deviceId')) }));
+  app.post('/notifications/read', async (c) => {
+    await sql`update notification_log set read_at = now() where device_id = ${c.get('deviceId')} and channel = 'push' and read_at is null`;
+    return c.json({ unread: 0 });
+  });
 
   app.post('/orders', jsonBody(OrderEvent), async (c) => {
     const { eventId, order } = c.req.valid('json');

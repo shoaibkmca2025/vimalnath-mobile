@@ -78,21 +78,23 @@ export async function placeOrder(sql: Sql, deviceId: number, eventId: string, or
         coalesce((select json_agg(json_build_object('label', o.label, 'code', o.code, 'mrp', o.mrp)) from product_options o where o.product_id = p.id), '[]') as options
       from products p where id in ${tx(ids)}`;
     const products = new Map(found.map((product) => [product.id as string, product]));
+    // The app stops out-of-stock items, but one sent offline or from an older catalogue still arrives: staff see it flagged.
+    const out = new Set((await tx`select product_id, option_label from stock_items where product_id in ${tx(ids)} and quantity <= 0`).map((row) => `${row.product_id}\u0000${row.option_label}`));
 
     const lines = order.lines.map((line, position) => {
       const product = products.get(line.productId);
       const sent = { position, product_id: line.productId, code: line.code, name: line.name, option: line.option ?? null, option_code: null as string | null, note: line.note || null, qty: line.qty, mrp: null as number | null };
       if (!product) return { ...sent, problem: 'No longer in the catalogue' };
       const matched = { ...sent, code: product.code as string, name: (product.name || product.section) as string };
-      const hidden = product.visible ? null : 'Hidden from the Shop';
+      const flagged = reasons(product.visible ? null : 'Hidden from the Shop', out.has(`${line.productId}\u0000${line.option ?? ''}`) ? 'Out of stock' : null);
       const options = product.options as Option[];
       const option = line.option === undefined ? undefined : options.find((item) => item.label === line.option);
-      if (line.option !== undefined && !option) return { ...matched, problem: reasons(hidden, `“${line.option}” is no longer offered`) };
-      if (line.option === undefined && options.length) return { ...matched, problem: reasons(hidden, 'No option was chosen') };
-      // No options: priced from the catalogue page, so no MRP and nothing to flag.
-      if (!option) return { ...matched, problem: hidden };
+      if (line.option !== undefined && !option) return { ...matched, problem: reasons(flagged, `“${line.option}” is no longer offered`) };
+      if (line.option === undefined && options.length) return { ...matched, problem: reasons(flagged, 'No option was chosen') };
+      // No options: priced from the catalogue page, so no MRP and nothing more to flag.
+      if (!option) return { ...matched, problem: flagged };
       const shown = line.mrp !== undefined && line.mrp !== option.mrp ? `The app showed ${rupees(line.mrp)}` : null;
-      return { ...matched, option_code: option.code, mrp: option.mrp, problem: reasons(hidden, shown) };
+      return { ...matched, option_code: option.code, mrp: option.mrp, problem: reasons(flagged, shown) };
     });
 
     const placed = Date.parse(order.createdAt);

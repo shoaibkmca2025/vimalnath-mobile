@@ -87,7 +87,7 @@ export default function NotificationsPage() {
           <InfoIcon size={16} weight="bold" aria-hidden />
           <span>
             {page.setup.email ? 'Staff emails are on.' : 'Staff emails are off: the server has no email login yet. Add SMTP_URL to its settings (see server/.env.example); until then they show as “Not set up” below.'}{' '}
-            Phones get order updates once the app is built with your Expo (EAS) project and the customer allows notifications.
+            Every order update and message appears on the app’s Notifications screen. Phones also get them as notifications once the app is built with your Expo (EAS) project and the customer allows them.
           </span>
         </p>
 
@@ -127,7 +127,7 @@ export default function NotificationsPage() {
         </Card>
 
         <Card aria-labelledby="broadcast-title">
-          <CardHeader id="broadcast-title" title="Message every app user" description="For news everyone should hear, like a new price list. Goes to every linked phone that takes notifications." />
+          <CardHeader id="broadcast-title" title="Message every app user" description="For news everyone should hear, like a new price list. Every app user sees it on the app’s Notifications screen; phones that take notifications also get it as one." />
           <div className="card__body stack">
             <TextField label="Title" value={broadcast.title} maxLength={100} onChange={(event) => setBroadcast({ ...broadcast, title: event.target.value })} placeholder="e.g. New price list" />
             <TextAreaField label="Message" rows={2} value={broadcast.body} maxLength={400} onChange={(event) => setBroadcast({ ...broadcast, body: event.target.value })} placeholder="e.g. The Feb 2027 Taiton prices are now in the app." error={errorFor('broadcast')} />
@@ -155,7 +155,7 @@ export default function NotificationsPage() {
                       {sent.title}
                     </p>
                     <p className="list-row__meta" style={{ display: 'block' }}>
-                      {[sent.channel === 'email' ? `Email to ${sent.recipient}` : `Push to ${sent.appUser || 'an app user'}`, sent.orderNumber, formatDateTime(sent.createdAt)].filter(Boolean).join(' · ')}
+                      {[sent.channel === 'email' ? `Email to ${sent.recipient}` : `${sent.recipient ? 'Push' : 'App'} to ${sent.appUser || 'an app user'}`, sent.orderNumber, formatDateTime(sent.createdAt)].filter(Boolean).join(' · ')}
                     </p>
                     {sent.error && sent.status !== 'sent' && (
                       <p className="field__error" style={{ display: 'block' }}>
@@ -163,7 +163,8 @@ export default function NotificationsPage() {
                       </p>
                     )}
                   </div>
-                  <Badge tone={STATUS[sent.status].tone}>{STATUS[sent.status].label}</Badge>
+                  {/* No push address (e.g. the web app): nothing to set up, it waits on the app's Notifications screen. */}
+                  {sent.channel === 'push' && !sent.recipient ? <Badge tone="neutral">In app only</Badge> : <Badge tone={STATUS[sent.status].tone}>{STATUS[sent.status].label}</Badge>}
                 </li>
               ))}
             </ul>
@@ -174,15 +175,15 @@ export default function NotificationsPage() {
       <ConfirmDialog
         open={confirming}
         title="Send to every app user?"
-        body={`“${broadcast.title.trim()}” goes to every linked phone that takes notifications. It can’t be called back.`}
+        body={`“${broadcast.title.trim()}” goes to every app user, on their Notifications screen and as a notification where their phone takes them. It can’t be called back.`}
         confirmLabel="Send"
         onCancel={() => setConfirming(false)}
         onConfirm={async () => {
           setConfirming(false);
           setError(null);
           try {
-            const { queued } = await api<{ queued: number }>('/notifications/broadcast', 'POST', { title: broadcast.title.trim(), body: broadcast.body.trim() });
-            toast({ message: queued ? `Sending to ${plural(queued, 'phone')}.` : 'No phones take notifications yet, so nothing was sent.' });
+            const { queued, users } = await api<{ queued: number; users: number }>('/notifications/broadcast', 'POST', { title: broadcast.title.trim(), body: broadcast.body.trim() });
+            toast({ message: users ? `Sent to ${plural(users, 'app user')}${queued ? `, ${plural(queued, 'phone')} as a notification` : ''}.` : 'No app users yet, so nothing was sent.' });
             setBroadcast({ title: '', body: '' });
             await load();
           } catch (problem) {
