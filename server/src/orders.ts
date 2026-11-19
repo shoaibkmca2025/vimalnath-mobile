@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { queueOrderEvent } from './notifications.ts';
 import { only, type Env } from './staff.ts';
+import { moveStockForOrders } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
 
 const STATUSES = ['requested', 'declined', 'placed', 'confirmed', 'packed', 'dispatched', 'delivered', 'cancelled'] as const;
@@ -317,8 +318,13 @@ export function orderAdminRoutes(sql: Sql) {
     if (inventory(role) && !from) throw new HTTPException(403, { message: 'The inventory team can mark orders pending, packed, dispatched, delivered or cancelled.' });
     await sql.begin(async (tx) => {
       const allowed = inventory(role) ? tx`and status in ${tx(from!)}` : tx``;
-      const changed = await tx`update orders set status = ${status} where id in ${tx(ids)} and status <> ${status} ${allowed} returning id`;
+      // Locked in id order, with the status each had, so stock knows which orders were delivered before.
+      const changed = await tx`
+        with picked as (select id, status as was from orders where id in ${tx(ids)} and status <> ${status} ${allowed} order by id for update)
+        update orders o set status = ${status} from picked where o.id = picked.id returning o.id, picked.was`;
       if (changed.length) await tx`insert into order_events ${tx(changed.map((row) => ({ order_id: row.id, status, by })))}`;
+      // Delivered orders take their items from stock; one moved back from delivered puts them back.
+      await moveStockForOrders(tx, changed.map((row) => ({ id: row.id as number, was: row.was as string, now: status })), by);
       // Module 10: the customer hears about it (if their phone takes notifications); sent after this commits.
       for (const row of changed) await queueOrderEvent(tx, row.id, status);
     });

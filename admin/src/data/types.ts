@@ -131,6 +131,53 @@ export type Order = {
   payments?: Payment[];
 };
 
+export type StockUnit = 'pcs' | 'box' | 'kg' | 'meter' | 'feet' | 'set';
+
+/**
+ * One item the shop counts: a product option, or a product without options (option ''). Prices are rupees and paise
+ * before GST; null means not entered. Missing from the list: not tracked yet.
+ */
+export type StockItem = {
+  productId: string;
+  option: string;
+  sku: string;
+  barcode: string;
+  unit: StockUnit;
+  brand: string;
+  manufacturer: string;
+  hsn: string;
+  gstRate: number | null;
+  /** Owners only; null for everyone else. */
+  purchasePrice: number | null;
+  sellingPrice: number | null;
+  wholesalePrice: number | null;
+  /** Below zero when more was delivered than counted. */
+  quantity: number;
+  minStock: number | null;
+  maxStock: number | null;
+  rack: string;
+  location: string;
+  updatedAt: string;
+  /** Its option was renamed or removed in the product editor. */
+  orphan: boolean;
+};
+
+/** One change to an item's quantity, newest first. */
+export type StockMove = {
+  id: string;
+  productId: string;
+  option: string;
+  change: number;
+  balance: number;
+  kind: 'opening' | 'count' | 'adjust' | 'delivered' | 'undelivered';
+  reason: string;
+  note: string;
+  orderId?: string;
+  orderNumber?: string;
+  by: string;
+  at: string;
+};
+
 export type ActivityArea = 'orders' | 'catalogue' | 'calculators' | 'content' | 'settings';
 
 /** One change made in the admin, newest first in the log. */
@@ -150,4 +197,4 @@ export type Seed = {
 };
 
 /** Everything the admin shows and edits. */
-export type Database = Omit<Seed, 'generatedAt'> & { orders: Order[]; moreApps: MoreApp[]; activity: Activity[] };
+export type Database = Omit<Seed, 'generatedAt'> & { orders: Order[]; moreApps: MoreApp[]; activity: Activity[]; stock: StockItem[] };

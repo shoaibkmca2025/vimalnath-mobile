@@ -12,6 +12,7 @@ import { mediaAdminRoutes, mediaRoutes } from './media.ts';
 import { notificationRoutes } from './notifications.ts';
 import { orderAdminRoutes } from './orders.ts';
 import { adminRoutes } from './staff.ts';
+import { stockRoutes } from './stock.ts';
 import { versionRoutes } from './versions.ts';
 
 /** The whole API, the same wherever it runs: a Node server (server.ts) or a Neon Function (function.ts). */
@@ -35,6 +36,7 @@ export function buildApi(sql: Sql, config: ReturnType<typeof loadConfig>) {
   admin.route('/media', mediaAdminRoutes(sql));
   admin.route('/orders', orderAdminRoutes(sql));
   admin.route('/customers', customerRoutes(sql));
+  admin.route('/stock', stockRoutes(sql));
   app.route('/v1/admin', admin);
   app.route('/v1/app', appRoutes(sql, { trustProxy: config.TRUST_PROXY }));
   app.route('/v1/media', mediaRoutes(sql));
