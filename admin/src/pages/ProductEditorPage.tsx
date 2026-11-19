@@ -1,6 +1,6 @@
 import { ArrowSquareOutIcon, PackageIcon, PlusIcon, TrashIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Link, useBlocker, useNavigate, useParams } from 'react-router';
+import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { Button, ButtonLink, IconButton } from '@/components/Button';
 import { Card, CardHeader } from '@/components/Card';
@@ -114,6 +114,10 @@ export default function ProductEditorPage() {
   const toast = useToast();
   const navigate = useNavigate();
   const isNew = !id;
+  // Opened from the Stock page: it goes back there, where a new product's opening stock is entered.
+  const [params] = useSearchParams();
+  const fromStock = params.get('back') === 'stock';
+  const home = fromStock ? '/stock' : '/products';
   const existing = id ? db.products.find((product) => product.id === id) : undefined;
 
   const original = useMemo(() => (existing ? toDraft(existing) : toDraft(blank(db.categories[0]?.id ?? 'glass'))), [existing, db.categories]);
@@ -193,9 +197,14 @@ export default function ProductEditorPage() {
         while (db.products.some((item) => item.id === newId)) newId += '-1';
         product.id = newId;
         if (!(await update('products', (products) => [product, ...products], { area: 'catalogue', summary: `Added ${product.code} to the Shop`, to: `/products/${newId}` }))) return;
-        toast({ message: `${product.code} added to the Shop.` });
         leaving.current = true;
-        navigate(`/products/${newId}`, { replace: true });
+        if (fromStock) {
+          toast({ message: `${product.code} added to the Shop. Enter the stock you have of it.` });
+          navigate(`/stock?item=${encodeURIComponent(newId)}&option=${encodeURIComponent(product.options[0]?.label ?? '')}`, { replace: true });
+        } else {
+          toast({ message: `${product.code} added to the Shop.` });
+          navigate(`/products/${newId}`, { replace: true });
+        }
       } else {
         if (!(await update('products', (products) => products.map((item) => (item.id === product.id ? product : item)), { area: 'catalogue', summary: `Edited ${product.code}`, to: `/products/${product.id}` }))) return;
         toast({ message: `${product.code} saved.` });
@@ -216,18 +225,20 @@ export default function ProductEditorPage() {
       return;
     }
     toast({ message: `${existing.code} deleted.`, action: { label: 'Undo', onAction: () => update('products', () => previous, { area: 'catalogue', summary: `Restored ${existing.code}`, to: `/products/${existing.id}` }) } });
-    navigate('/products', { replace: true });
+    navigate(home, { replace: true });
   };
 
   const errorList = Object.entries(errors);
   const title = isNew ? 'New Product' : productTitle(existing!);
+  // Its options' stock goes with it when it's deleted.
+  const counted = existing ? db.stock.filter((item) => item.productId === existing.id).length : 0;
 
   return (
     <form onSubmit={save} noValidate>
       <PageHeader
         title={title}
-        crumbs={[{ label: 'Products', to: '/products' }]}
-        description={isNew ? 'Add a product to the app’s Shop.' : <span className="mono">{existing!.code}</span>}
+        crumbs={[fromStock ? { label: 'Stock', to: '/stock' } : { label: 'Products', to: '/products' }]}
+        description={isNew ? `Add a product to the app’s Shop.${fromStock ? ' After saving, you enter the stock you have of it.' : ''}` : <span className="mono">{existing!.code}</span>}
       />
 
       {submitted && errorList.length > 0 && (
@@ -466,7 +477,7 @@ export default function ProductEditorPage() {
           <span className="savebar__text">{isNew ? 'New product' : 'Unsaved changes'}</span>
           <Button
             onClick={() => {
-              if (isNew) navigate('/products');
+              if (isNew) navigate(home);
               else {
                 setDraft(original);
                 setSubmitted(false);
@@ -485,7 +496,9 @@ export default function ProductEditorPage() {
       <ConfirmDialog
         open={confirmDelete}
         title={`Delete ${existing?.code ?? 'this product'}?`}
-        body="It will be removed from the app’s Shop. Orders that already include it keep their details."
+        body={`It will be removed from the app’s Shop. Orders that already include it keep their details.${
+          counted ? ` Its stock (${counted === 1 ? '1 item' : `${counted} items`}) and stock history are deleted too; Undo brings back the product, not its stock.` : ''
+        }`}
         confirmLabel="Delete"
         destructive
         onCancel={() => setConfirmDelete(false)}

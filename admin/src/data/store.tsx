@@ -84,8 +84,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
         server.current = { ...saved, [key]: after };
         setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, [key]: after } } : previous));
-        // A delivered order takes its items from stock, and one moved back returns them.
-        if (key === 'orders') await reloadStock();
+        // A delivered order takes its items from stock, and one moved back returns them. A deleted product takes its
+        // stock with it, and a renamed option leaves its stock behind.
+        if (key === 'orders' || key === 'products') await reloadStock();
         // The server adds who and when. The change itself is saved either way, so a failed entry is not an error to show.
         const entry = log && (await api<Activity>('/activity', 'POST', { ...log, ...changed(before, after) }).catch(() => null));
         if (entry) setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, activity: [entry, ...previous.base.activity] } } : previous));
