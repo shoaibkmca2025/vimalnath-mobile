@@ -84,6 +84,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [toast],
   );
 
+  const send = useCallback<DataContextValue['send']>(
+    (path, method, body, log) => {
+      // In the same queue as `update`, so it never lands in the middle of another save or a refresh.
+      const saving = queue.current.then(async () => {
+        let result: { orders?: Order[] } | undefined;
+        try {
+          result = await api<{ orders?: Order[] }>(path, method, body);
+        } catch (error) {
+          toast({ tone: 'error', message: `${error instanceof Error ? error.message : 'Something went wrong.'} Your change wasn’t saved.` });
+          return false;
+        }
+        const fresh = new Map(result?.orders?.map((order) => [order.id, order]));
+        const merge = (orders: Order[]) => orders.map((order) => fresh.get(order.id) ?? order);
+        server.current = { ...server.current!, orders: merge(server.current!.orders) };
+        setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, orders: merge(previous.base.orders) } } : previous));
+        const entry = log && (await api<Activity>('/activity', 'POST', log).catch(() => null));
+        if (entry) setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, activity: [entry, ...previous.base.activity] } } : previous));
+        return true;
+      });
+      queue.current = saving.catch(() => false);
+      return saving;
+    },
+    [toast],
+  );
+
   // Phones keep sending orders while the admin is open, so fetch them again regularly and when the window comes
   // back to the front. Through the save queue, so a refresh never lands in the middle of a save.
   const ready = state.status === 'ready';
@@ -106,7 +131,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     };
   }, [ready]);
 
-  const value = useMemo<DataContextValue | null>(() => (state.status === 'ready' ? { db: state.base, update } : null), [state, update]);
+  const value = useMemo<DataContextValue | null>(() => (state.status === 'ready' ? { db: state.base, update, send } : null), [state, update, send]);
 
   if (state.status === 'loading') return <BootScreen />;
   if (state.status === 'error')

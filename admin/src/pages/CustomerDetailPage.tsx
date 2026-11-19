@@ -1,4 +1,4 @@
-import { ChatCircleTextIcon, ClockIcon, CurrencyInrIcon, DeviceMobileIcon, MapPinIcon, PhoneIcon, ReceiptIcon, ShoppingCartIcon, UsersThreeIcon } from '@phosphor-icons/react';
+import { ChatCircleTextIcon, ClockIcon, CurrencyInrIcon, DeviceMobileIcon, HandCoinsIcon, MapPinIcon, PhoneIcon, ReceiptIcon, ShoppingCartIcon, UsersThreeIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
@@ -9,11 +9,13 @@ import { DataTable, type Column } from '@/components/DataTable';
 import { EmptyState } from '@/components/EmptyState';
 import { TextAreaField, TextField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
+import { PaymentDrawer } from '@/components/PaymentDrawer';
 import { Stat } from '@/components/Stat';
 import { useToast } from '@/components/useToast';
 import { topProducts } from '@/data/analytics';
 import type { CustomerRecord } from '@/data/customers';
 import { ORDER_STATUS, STATUS_ORDER, customerOf, isCounted, itemCount, whatsappLink } from '@/data/orders';
+import { PAYMENT_METHODS, accounts, billOf, billStatus, creditDaysOf, dayLabel, isBilled, remainingOf, stateLabel } from '@/data/payments';
 import { useData } from '@/data/useData';
 import type { Order } from '@/data/types';
 import { api, type ApiError } from '@/lib/api';
@@ -32,6 +34,7 @@ export default function CustomerDetailPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [saving, setSaving] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -85,6 +88,11 @@ export default function CustomerDetailPage() {
     customer.firstOrder && customer.lastOrder && customer.orders > 1 ? (new Date(customer.lastOrder).getTime() - new Date(customer.firstOrder).getTime()) / (customer.orders - 1) / 86_400_000 : null;
   const paid = orders.filter((order) => isCounted(order.status)).length;
   const dirty = JSON.stringify(draft) !== JSON.stringify(draftOf(customer));
+  const creditDays = creditDaysOf(db.settings);
+  const account = accounts(orders, creditDays)[0];
+  const received = orders
+    .flatMap((order) => (order.payments ?? []).map((payment) => ({ payment, order })))
+    .sort((a, b) => b.payment.paidOn.localeCompare(a.payment.paidOn) || b.payment.at.localeCompare(a.payment.at));
 
   const save = async () => {
     setSaving(true);
@@ -129,7 +137,23 @@ export default function CustomerDetailPage() {
         </>
       ),
     },
-    { key: 'total', header: 'Total (MRP)', align: 'num', sortValue: (order) => order.total, cell: (order) => formatINR(order.total) },
+    { key: 'total', header: 'Bill', align: 'num', sortValue: billOf, cell: (order) => formatINR(billOf(order)) },
+    {
+      key: 'payment',
+      header: 'Payment',
+      sortValue: (order) => (isBilled(order) ? remainingOf(order) : -1),
+      cell: (order) => {
+        if (!isBilled(order)) return <span className="muted">Not billed</span>;
+        const status = billStatus(order, creditDays);
+        const { label, tone } = stateLabel(status);
+        return (
+          <>
+            <Badge tone={tone}>{label}</Badge>
+            {status.state !== 'paid' && status.state !== 'noBill' && <div className="cell-sub num">{formatINR(status.remaining)} left</div>}
+          </>
+        );
+      },
+    },
     { key: 'date', header: 'Placed', sortValue: (order) => order.createdAt, cell: (order) => <span className="num">{formatDate(order.createdAt)}</span> },
   ];
 
@@ -168,6 +192,65 @@ export default function CustomerDetailPage() {
 
         <div className="editor">
           <div className="stack">
+            <Card aria-labelledby="payments-title">
+              <CardHeader
+                id="payments-title"
+                title="Payments"
+                description={`Credit orders fall due ${plural(creditDays, 'day')} after delivery; cash orders on delivery.`}
+                action={
+                  <Button size="sm" variant="primary" icon={HandCoinsIcon} disabled={!account?.remaining} onClick={() => setPaying(true)}>
+                    Record Payment
+                  </Button>
+                }
+              />
+              <div className="card__body stack">
+                <dl className="kv kv--compact kv--split">
+                  <dt>Billed</dt>
+                  <dd className="num">{formatINR(account?.billed ?? 0)}</dd>
+                  <dt>Paid</dt>
+                  <dd className="num">{formatINR(account?.paid ?? 0)}</dd>
+                  <dt>Remaining</dt>
+                  <dd className="num" style={{ fontWeight: 600 }}>
+                    {formatINR(account?.remaining ?? 0)}
+                  </dd>
+                  <dt>Overdue</dt>
+                  <dd className={account?.overdue ? 'num money-late' : 'num'}>{formatINR(account?.overdue ?? 0)}</dd>
+                </dl>
+                {account && account.overdueBills > 0 && (
+                  <p className="notice notice--danger">
+                    <WarningCircleIcon size={16} weight="bold" aria-hidden />
+                    <span>
+                      {formatINR(account.overdue)} is overdue on {plural(account.overdueBills, 'bill')}; the oldest is {plural(account.mostLate, 'day')} late.
+                    </span>
+                  </p>
+                )}
+              </div>
+              {received.length > 0 && (
+                <ul className="list" aria-label={`Payments from ${customer.name}`}>
+                  {received.slice(0, 8).map(({ payment, order }) => (
+                    <li key={payment.id}>
+                      <Link to={`/orders/${order.id}`} className="list-row list-row--link">
+                        <span className="list-row__main">
+                          <span className="list-row__title num" style={{ display: 'block' }}>
+                            {formatINR(payment.amount)} · {PAYMENT_METHODS[payment.method]}
+                          </span>
+                          <span className="list-row__meta">
+                            {dayLabel(payment.paidOn)} · {order.number} · {payment.by}
+                            {payment.note && ` · ${payment.note}`}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {received.length > 8 && (
+                <p className="card__body muted" style={{ paddingTop: 0 }}>
+                  {plural(received.length - 8, 'earlier payment')} on their orders.
+                </p>
+              )}
+            </Card>
+
             <Card className="table-card" aria-labelledby="orders-title">
               <CardHeader id="orders-title" title="Orders" description={plural(orders.length, 'order')} />
               {orders.length ? (
@@ -336,6 +419,8 @@ export default function CustomerDetailPage() {
           </div>
         </div>
       </div>
+
+      {account && <PaymentDrawer open={paying} onClose={() => setPaying(false)} customer={customer.name} orders={account.unpaid} logTo={`/customers/${customer.id}`} />}
     </>
   );
 }

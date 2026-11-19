@@ -25,6 +25,7 @@ import { Card, CardHeader } from '@/components/Card';
 import { ConfirmDialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { SelectField, TextAreaField } from '@/components/Field';
+import { OrderPaymentCard } from '@/components/OrderPaymentCard';
 import { PageHeader } from '@/components/PageHeader';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
@@ -390,6 +391,8 @@ export default function OrderDetailPage() {
               ))}
             </ol>
           </Card>
+
+          <OrderPaymentCard order={order} />
 
           <Card aria-labelledby="customer-title">
             <CardHeader

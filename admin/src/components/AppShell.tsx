@@ -23,6 +23,7 @@ import {
   TagIcon,
   UserGearIcon,
   UsersThreeIcon,
+  WalletIcon,
   WarehouseIcon,
   type Icon,
 } from '@phosphor-icons/react';
@@ -34,6 +35,7 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { PageMetaContext, type PageMeta } from '@/components/pageMeta';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ThemeSwitch } from '@/components/ThemeSwitch';
+import { creditDaysOf, isOverdue } from '@/data/payments';
 import { useRequestNotifications } from '@/data/requestNotifications';
 import { inOrders } from '@/data/requests';
 import { endSession, readSession } from '@/data/session';
@@ -63,6 +65,8 @@ export function AppShell() {
   const undelivered = db.orders.filter((order) => inOrders(order) && ['placed', 'confirmed', 'packed', 'dispatched'].includes(order.status)).length;
   // Customers answering or receiving order requests since this person last opened Order Requests.
   const { count: requestUpdates } = useRequestNotifications(db.orders);
+  // Bills still unpaid after their due day: delivery for cash, the credit period after it for credit. Each drops off once paid.
+  const overdue = db.orders.filter((order) => isOverdue(order, creditDaysOf(db.settings))).length;
   // Orders still with the inventory team (pending, packed or dispatched); each drops off once delivered.
   const withInventory = db.orders.filter((order) => order.status === 'confirmed' || order.status === 'packed' || order.status === 'dispatched').length;
   // Every count is a red notification badge, the same everywhere.
@@ -83,6 +87,7 @@ export function AppShell() {
         { to: '/orders', label: 'Orders', icon: ReceiptIcon, count: undelivered, alert: true, alertLabel: 'not delivered yet' },
         ...(session?.role === 'catalogue' ? [] : [{ to: '/order-requests', label: 'Order Requests', icon: PaperPlaneTiltIcon, count: requestUpdates, alert: true }, inventoryItem]),
         { to: '/customers', label: 'Customers', icon: UsersThreeIcon },
+        ...(session?.role === 'catalogue' ? [] : [{ to: '/payments', label: 'Payments', icon: WalletIcon, count: overdue, alert: true, alertLabel: 'overdue' }]),
         ...(session?.role === 'catalogue' ? [] : [{ to: '/app-users', label: 'App Users', icon: DeviceMobileIcon }]),
       ],
     },

@@ -124,6 +124,7 @@ const seed = {
     announcement: '',
     announcementFrom: '',
     announcementTo: '',
+    creditDays: '30',
     logo: media(path.join(ASSETS, 'images', 'logo-mark.png')),
   },
 };

@@ -11,6 +11,7 @@ import { SearchInput, Segmented } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/useToast';
 import { ORDER_STATUS, STATUS_ORDER, isCounted, itemCount } from '@/data/orders';
+import { PAYMENT_TERMS, billOf, isBilled, paidOf, remainingOf, termsOf } from '@/data/payments';
 import { productTitle } from '@/data/products';
 import { inOrders } from '@/data/requests';
 import { readSession } from '@/data/session';
@@ -70,8 +71,22 @@ export default function OrdersPage() {
   const exportRows = () =>
     downloadCsv(
       'vimalnath-orders',
-      ['Order', 'Placed', 'Customer', 'Phone', 'Status', 'Lines', 'Items', 'Total (MRP)', 'Notes'],
-      rows.map((order) => [order.number, order.createdAt.slice(0, 16).replace('T', ' '), order.customer, order.phone, ORDER_STATUS[order.status].label, order.lines.length, itemCount(order), order.total, order.notes]),
+      ['Order', 'Placed', 'Customer', 'Phone', 'Status', 'Lines', 'Items', 'Total (MRP)', 'Terms', 'Bill', 'Paid', 'Remaining', 'Notes'],
+      rows.map((order) => [
+        order.number,
+        order.createdAt.slice(0, 16).replace('T', ' '),
+        order.customer,
+        order.phone,
+        ORDER_STATUS[order.status].label,
+        order.lines.length,
+        itemCount(order),
+        order.total,
+        PAYMENT_TERMS[termsOf(order)],
+        isBilled(order) ? billOf(order) : '',
+        isBilled(order) ? paidOf(order) : '',
+        isBilled(order) ? remainingOf(order) : '',
+        order.notes,
+      ]),
     );
 
   const move = async (ids: string[], from: OrderStatus[], to: OrderStatus) => {

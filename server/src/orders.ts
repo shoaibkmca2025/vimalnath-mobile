@@ -174,6 +174,25 @@ const OrderRequest = z.object({
   lines: z.array(RequestLine).min(1, 'Add at least one product.').max(1000),
 });
 
+/** Orders the customer owes for: from placing (or confirming a request) through delivery. Cancelled and declined ones don't. */
+const BILLED: Status[] = ['placed', 'confirmed', 'packed', 'dispatched', 'delivered'];
+/** ₹100 crore: far above any one order, and inside a Postgres integer. */
+const MAX_RUPEES = 1_000_000_000;
+const isoDay = (date: Date) => date.toISOString().slice(0, 10);
+const Payment = z.object({
+  orderId: z.number().int().positive().max(2147483647),
+  amount: z.number('Enter the amount in rupees.').int('Enter whole rupees.').positive('Enter an amount above ₹0.').max(MAX_RUPEES, 'Enter ₹100 crore or less.'),
+  method: z.enum(['cash', 'upi', 'bank', 'cheque'], 'Choose how they paid.'),
+  // A real calendar day, not after tomorrow in UTC: in India it is already tomorrow for the first 5½ hours of the UTC day.
+  paidOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick the day it was paid.')
+    .refine((day) => !Number.isNaN(Date.parse(day)) && isoDay(new Date(day)) === day, 'Pick the day it was paid.')
+    .refine((day) => day >= '2000-01-01', 'Pick a day from 2000 on.')
+    .refine((day) => day <= isoDay(new Date(Date.now() + DAY)), 'The day can’t be in the future.'),
+  note: z.string().trim().max(300, 'Use 300 characters or fewer.').default(''),
+});
+
 /** /v1/admin/orders, for Owners and Sales; the inventory team sees and moves only the orders it packs and dispatches. */
 export function orderAdminRoutes(sql: Sql) {
   const admin = new Hono<Env>();
@@ -181,11 +200,19 @@ export function orderAdminRoutes(sql: Sql) {
   const office = only('owner', 'sales');
   const inventory = (role: string) => role === 'inventory';
 
-  // In the admin's Order shape (admin/src/data/types.ts); empty fields are left out.
-  const orders = async (where = sql`true`) =>
+  // In the admin's Order shape (admin/src/data/types.ts); empty fields are left out. `money` adds the bill and payments,
+  // which the inventory team doesn't see.
+  const orders = async (where = sql`true`, money = true) =>
     (
       await sql`
         select json_strip_nulls(json_build_object(
+          'terms', ${money ? sql`o.payment_terms` : sql`null`}, 'bill', ${money ? sql`o.bill_amount` : sql`null`},
+          'payments', ${
+            money
+              ? sql`(select json_agg(json_build_object('id', p.id::text, 'amount', p.amount, 'method', p.method, 'paidOn', p.paid_on, 'note', nullif(p.note, ''), 'by', p.by, 'at', p.created_at) order by p.paid_on, p.id)
+                  from order_payments p where p.order_id = o.id)`
+              : sql`null`
+          },
           'id', o.id::text, 'number', o.number, 'createdAt', o.placed_at, 'customer', o.customer,
           'phone', nullif(o.phone, ''), 'notes', nullif(o.notes, ''), 'status', o.status, 'total', o.total,
           'lines', (select json_agg(json_build_object('productId', l.product_id, 'code', l.code, 'name', l.name, 'option', l.option,
@@ -207,7 +234,10 @@ export function orderAdminRoutes(sql: Sql) {
   // shortcut: every order at once, which the admin searches and filters itself; page it on the server past about 20,000 orders.
   // The inventory team also sees delivered orders, so an order doesn't vanish the moment the office marks it delivered.
   const forInventory = () => sql`o.status in ${sql([...INVENTORY_STATUSES, 'delivered'])}`;
-  admin.get('/', async (c) => c.json(await orders(inventory(c.get('staff').role) ? forInventory() : sql`true`)));
+  admin.get('/', async (c) => {
+    const team = inventory(c.get('staff').role);
+    return c.json(await orders(team ? forInventory() : sql`true`, !team));
+  });
 
   // An order staff make for a customer, sent to their app to confirm. It reaches the inventory team once they confirm it.
   admin.post('/', office, jsonBody(OrderRequest), async (c) => {
@@ -292,7 +322,59 @@ export function orderAdminRoutes(sql: Sql) {
       // Module 10: the customer hears about it (if their phone takes notifications); sent after this commits.
       for (const row of changed) await queueOrderEvent(tx, row.id, status);
     });
-    return c.json({ orders: await orders(sql`o.id in ${sql(ids)}`) });
+    return c.json({ orders: await orders(sql`o.id in ${sql(ids)}`, !inventory(role)) });
+  });
+
+  // Payments: money a customer paid towards one or more orders, e.g. one cheque split across their oldest bills. All are
+  // saved or none. An order can't be paid past its bill, and only orders in progress or delivered take payments.
+  admin.post('/payments', office, jsonBody(z.object({ payments: z.array(Payment).min(1, 'Enter a payment.').max(200) })), async (c) => {
+    const { payments } = c.req.valid('json');
+    const by = c.get('staff').name;
+    const ids = [...new Set(payments.map((payment) => payment.orderId))];
+    await sql.begin(async (tx) => {
+      // Locked, in id order, so two people recording payments at once can't both take an order past its bill.
+      const locked = await tx`select id, number, status, coalesce(bill_amount, total) as bill from orders where id in ${tx(ids)} order by id for update`;
+      const sums = await tx`select order_id, sum(amount)::float8 as paid from order_payments where order_id in ${tx(ids)} group by order_id`;
+      const paid = new Map(sums.map((row) => [row.order_id as number, row.paid as number]));
+      const found = new Map(locked.map((row) => [row.id as number, row]));
+      payments.forEach((payment, index) => {
+        const order = found.get(payment.orderId);
+        if (!order) throw new HTTPException(404, { message: 'That order does not exist.', cause: { field: `payments.${index}.orderId` } });
+        if (!BILLED.includes(order.status)) throw new HTTPException(400, { message: `${order.number} is ${order.status}, so it takes no payments.`, cause: { field: `payments.${index}.orderId` } });
+        const before = paid.get(order.id) ?? 0;
+        if (order.bill === 0) throw new HTTPException(400, { message: `Set the bill amount for ${order.number} first.`, cause: { field: `payments.${index}.amount` } });
+        if (before + payment.amount > order.bill) throw new HTTPException(400, { message: `That is more than ${order.number} still owes (${rupees(order.bill - before)}).`, cause: { field: `payments.${index}.amount` } });
+        paid.set(order.id, before + payment.amount);
+      });
+      await tx`insert into order_payments ${tx(payments.map((payment) => ({ order_id: payment.orderId, amount: payment.amount, method: payment.method, paid_on: payment.paidOn, note: payment.note, by })))}`;
+    });
+    return c.json({ orders: await orders(sql`o.id in ${sql(ids)}`) }, 201);
+  });
+
+  // A payment entered by mistake. The activity log keeps who removed it.
+  admin.delete('/payments/:paymentId', office, async (c) => {
+    const id = parse(OrderIds.element, c.req.param('paymentId'));
+    const [row] = await sql`delete from order_payments where id = ${id} returning order_id`;
+    if (!row) throw new HTTPException(404, { message: 'That payment has already been removed.' });
+    return c.json({ orders: await orders(sql`o.id = ${row.order_id}`) });
+  });
+
+  // Cash or credit, and what the customer owes for it. The MRP total given back is stored as "the MRP total".
+  const Billing = z.object({
+    terms: z.enum(['cash', 'credit'], 'Choose cash or credit.'),
+    bill: z.number('Enter the bill in rupees.').int('Enter whole rupees.').min(0, 'Enter ₹0 or more.').max(MAX_RUPEES, 'Enter ₹100 crore or less.').nullable(),
+  });
+  admin.put('/:id/billing', office, jsonBody(Billing), async (c) => {
+    const id = parse(OrderIds.element, c.req.param('id'));
+    const { terms, bill } = c.req.valid('json');
+    await sql.begin(async (tx) => {
+      const [order] = await tx`select total from orders where id = ${id} for update`;
+      if (!order) throw new HTTPException(404, { message: 'That order does not exist.' });
+      const [{ paid }] = (await tx`select coalesce(sum(amount), 0)::float8 as paid from order_payments where order_id = ${id}`) as unknown as [{ paid: number }];
+      if ((bill ?? order.total) < paid) throw new HTTPException(400, { message: `${rupees(paid)} has been paid already, so the bill can’t be less. Remove a payment first.`, cause: { field: 'bill' } });
+      await tx`update orders set payment_terms = ${terms}, bill_amount = ${bill === order.total ? null : bill} where id = ${id}`;
+    });
+    return c.json({ orders: await orders(sql`o.id = ${id}`) });
   });
 
   admin.put('/:id/internal-note', office, jsonBody(z.object({ text: z.string().trim().max(2000, 'Use 2,000 characters or fewer.') })), async (c) => {
@@ -314,7 +396,7 @@ export function orderAdminRoutes(sql: Sql) {
       update orders o set inventory_note = ${text || null}, inventory_note_by = ${text ? name : null}, inventory_note_at = ${text ? sql`now()` : null}
       where o.id = ${id} and ${inventory(role) ? forInventory() : sql`true`} returning o.id`;
     if (!row) throw new HTTPException(404, { message: 'That order does not exist.' });
-    return c.json({ orders: await orders(sql`o.id = ${id}`) });
+    return c.json({ orders: await orders(sql`o.id = ${id}`, !inventory(role)) });
   });
 
   return admin;

@@ -13,6 +13,11 @@ export type DataContextValue = {
    * The change goes to the server and shows once it accepts it; it resolves false, after an error toast, if it doesn't.
    */
   update: <K extends ServerKey>(key: K, change: (current: Database[K]) => Database[K], log?: LogEntry) => Promise<boolean>;
+  /**
+   * An order change the server works out itself (a payment, a bill), sent as is; the orders it answers with replace
+   * the ones shown. Like `update`, it resolves false, after an error toast, if the server refuses it.
+   */
+  send: (path: string, method: 'POST' | 'PUT' | 'DELETE', body: unknown, log?: LogEntry) => Promise<boolean>;
 };
 
 export const DataContext = createContext<DataContextValue | null>(null);

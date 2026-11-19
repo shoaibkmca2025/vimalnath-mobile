@@ -59,6 +59,8 @@ export type Settings = {
   announcement: string;
   announcementFrom: string;
   announcementTo: string;
+  /** Payments: a credit order falls due this many days after delivery, e.g. '30'. */
+  creditDays: string;
   logo: string;
 };
 
@@ -88,6 +90,13 @@ export type OrderEvent = {
   by: string;
 };
 
+/** Cash is due on delivery; credit, the Settings' credit period after it. */
+export type PaymentTerms = 'cash' | 'credit';
+export type PaymentMethod = 'cash' | 'upi' | 'bank' | 'cheque';
+
+/** Money received towards an order, in whole rupees, on the day staff say it came in (YYYY-MM-DD). */
+export type Payment = { id: string; amount: number; method: PaymentMethod; paidOn: string; note?: string; by: string; at: string };
+
 /** The app's order (customer or site name, optional phone and notes) plus what the admin tracks. */
 export type Order = {
   id: string;
@@ -114,6 +123,12 @@ export type Order = {
   appUser?: { id: number; label: string };
   /** The customer that app user belongs to (Module 7); customers group orders by this, not by the typed name. */
   customerRecord?: { id: number; name: string };
+  /** Payments (Owners and Sales only; the inventory team's copy leaves these three out). Missing means credit. */
+  terms?: PaymentTerms;
+  /** What the customer owes for it, when staff changed it; missing means the MRP total. */
+  bill?: number;
+  /** Oldest first. Missing when nothing has been paid. */
+  payments?: Payment[];
 };
 
 export type ActivityArea = 'orders' | 'catalogue' | 'calculators' | 'content' | 'settings';

@@ -12,11 +12,14 @@ import { SearchInput } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/useToast';
 import { duplicatePairs, type CustomerRecord, type DuplicatePair } from '@/data/customers';
+import { accounts, creditDaysOf } from '@/data/payments';
+import { useData } from '@/data/useData';
 import { api } from '@/lib/api';
 import { downloadCsv } from '@/lib/csv';
 import { formatDate, formatINR, formatNumber, formatRelativeDay, initials, plural } from '@/lib/format';
 
 export default function CustomersPage() {
+  const { db } = useData();
   const navigate = useNavigate();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
@@ -30,6 +33,10 @@ export default function CustomersPage() {
   useEffect(() => {
     api<CustomerRecord[]>('/customers').then(setCustomers, (error: Error) => setLoadError(error.message));
   }, []);
+
+  // What each customer owes, from the orders this admin has loaded; keyed like customerOf (the customer's id).
+  const creditDays = creditDaysOf(db.settings);
+  const owed = useMemo(() => new Map(accounts(db.orders, creditDays).map((account) => [account.key, account])), [db.orders, creditDays]);
 
   const tags = useMemo(() => [...new Set((customers ?? []).flatMap((customer) => customer.tags.map((item) => item.toLowerCase())))].sort(), [customers]);
   const duplicates = useMemo(() => duplicatePairs(customers ?? []), [customers]);
@@ -102,6 +109,22 @@ export default function CustomersPage() {
     { key: 'orders', header: 'Orders', align: 'num', sortValue: (customer) => customer.orders, cell: (customer) => formatNumber(customer.orders) },
     { key: 'open', header: 'Open', align: 'num', sortValue: (customer) => customer.open, cell: (customer) => formatNumber(customer.open) },
     { key: 'spent', header: 'Ordered (MRP)', align: 'num', sortValue: (customer) => customer.spent, cell: (customer) => formatINR(customer.spent) },
+    {
+      key: 'remaining',
+      header: 'Remaining',
+      align: 'num',
+      sortValue: (customer) => owed.get(String(customer.id))?.remaining ?? 0,
+      cell: (customer) => {
+        const account = owed.get(String(customer.id));
+        if (!account?.remaining) return <span className="muted">—</span>;
+        return (
+          <>
+            {formatINR(account.remaining)}
+            {account.overdue > 0 && <div className="cell-sub money-late">{formatINR(account.overdue)} overdue</div>}
+          </>
+        );
+      },
+    },
     { key: 'last', header: 'Last order', sortValue: (customer) => customer.lastOrder ?? '', cell: (customer) => (customer.lastOrder ? formatRelativeDay(customer.lastOrder) : <span className="muted">None yet</span>) },
   ];
 
@@ -119,7 +142,7 @@ export default function CustomersPage() {
             onClick={() =>
               downloadCsv(
                 'vimalnath-customers',
-                ['Customer', 'Business', 'Phone', 'Email', 'City', 'Tags', 'Orders', 'Open orders', 'Ordered (MRP)', 'Customer since', 'Last order'],
+                ['Customer', 'Business', 'Phone', 'Email', 'City', 'Tags', 'Orders', 'Open orders', 'Ordered (MRP)', 'Remaining', 'Overdue', 'Customer since', 'Last order'],
                 rows.map((customer) => [
                   customer.name,
                   customer.business,
@@ -130,6 +153,8 @@ export default function CustomersPage() {
                   customer.orders,
                   customer.open,
                   customer.spent,
+                  owed.get(String(customer.id))?.remaining ?? 0,
+                  owed.get(String(customer.id))?.overdue ?? 0,
                   customer.createdAt.slice(0, 10),
                   customer.lastOrder?.slice(0, 10),
                 ]),

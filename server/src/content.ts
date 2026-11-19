@@ -74,6 +74,8 @@ const Settings = z
     announcementFrom: z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/, 'Pick a start date, or leave it empty.'),
     announcementTo: z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/, 'Pick an end date, or leave it empty.'),
     kerfMm: z.string().regex(/^\d{1,2}(\.\d)?$/, 'Enter the cutting loss in mm, e.g. 3 or 2.5.').refine((mm) => Number(mm) <= 20, 'Use 20 mm or less.'),
+    // Payments: a credit order falls due this many days after delivery. Admins from before it don't send it.
+    creditDays: z.string().regex(/^\d{1,3}$/, 'Enter the number of days, e.g. 30.').refine((days) => Number(days) <= 365, 'Use 365 days or fewer.').default('30'),
   })
   .refine((settings) => !settings.minAppVersion || compareVersions(settings.minAppVersion, settings.appVersion) <= 0, {
     error: 'The minimum version can’t be newer than the latest version.',
@@ -97,8 +99,9 @@ export async function readContent(sql: Sql) {
     banners,
     videoSections: sections.map((section) => ({ title: section.title, videos: videos.filter((video) => video.section_id === section.id).map(({ title, detail, url }) => ({ title, detail, url })) })),
     moreApps,
-    // Databases imported before Modules 9, 8.6 and 9.7 have no minimum version (none), cutting loss (0 mm) or notice.
-    settings: { minAppVersion: '', kerfMm: '0', announcement: '', announcementFrom: '', announcementTo: '', ...Object.fromEntries(settings.map((row) => [row.key, row.value])) } as Record<string, string>,
+    // Databases imported before Modules 9, 8.6 and 9.7 have no minimum version (none), cutting loss (0 mm) or notice;
+    // before Payments, no credit period (one month).
+    settings: { minAppVersion: '', kerfMm: '0', announcement: '', announcementFrom: '', announcementTo: '', creditDays: '30', ...Object.fromEntries(settings.map((row) => [row.key, row.value])) } as Record<string, string>,
   };
 }
 

@@ -1260,3 +1260,37 @@
 .inventory-summary .filter-summary {
   margin: 0;
 }
+
+/* ---------- Payments ---------- */
+
+/* Money that's late: red, and bold so it doesn't rely on colour alone next to the "Overdue" badge. */
+.money-late {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.notice--danger {
+  background: var(--danger-soft);
+}
+
+.notice--danger svg {
+  color: var(--danger);
+}
+
+/* How a payment is spread over the customer's oldest bills, in the Record Payment panel. */
+.payment-split {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-2, var(--info-soft));
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.payment-split li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}

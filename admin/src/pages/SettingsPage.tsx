@@ -54,6 +54,7 @@ export default function SettingsPage() {
     minAppVersion: minVersionError(draft.minAppVersion.trim(), draft.appVersion.trim()),
     announcementTo: draft.announcementFrom && draft.announcementTo && draft.announcementTo < draft.announcementFrom ? 'The notice can’t end before it starts.' : null,
     kerfMm: /^\d{1,2}(\.\d)?$/.test(draft.kerfMm.trim()) && Number(draft.kerfMm) <= 20 ? null : 'Enter the cutting loss in mm, from 0 to 20, e.g. 3 or 2.5.',
+    creditDays: /^\d{1,3}$/.test(draft.creditDays.trim()) && Number(draft.creditDays) <= 365 ? null : 'Enter the number of days, from 0 to 365, e.g. 30.',
   };
   const shown = (key: string) => (touched.has(key) ? errors[key] : null);
   const touch = (key: string) => () => setTouched((current) => new Set(current).add(key));
@@ -130,6 +131,23 @@ export default function SettingsPage() {
               hint="The blade width lost at each cut. The optimizer starts with it; people can still change it on their phone."
             />
             <TextField label="Price list edition" value={draft.priceListEdition} onChange={(event) => set('priceListEdition', event.target.value)} hint="The price list the app’s prices come from, e.g. Taiton · Feb 2026." />
+          </div>
+        </Card>
+
+        <Card aria-labelledby="payments-title">
+          <CardHeader id="payments-title" title="Payments" />
+          <div className="card__body stack">
+            <TextField
+              id="setting-creditDays"
+              label="Credit period"
+              inputMode="numeric"
+              suffix="days"
+              value={draft.creditDays}
+              onChange={(event) => set('creditDays', event.target.value)}
+              onBlur={touch('creditDays')}
+              error={shown('creditDays')}
+              hint="A credit order falls due this many days after it’s delivered; a cash order on delivery. Bills unpaid after that show in red under Payments."
+            />
           </div>
         </Card>
 

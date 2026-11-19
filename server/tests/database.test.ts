@@ -41,7 +41,7 @@ test('import: everything lands, prices intact', { skip }, async () => {
   assert.equal(await count('product_options'), 3);
   assert.equal(await count('catalogue_pages'), 2);
   assert.equal(await count('videos'), 1);
-  assert.equal(await count('settings'), 16);
+  assert.equal(await count('settings'), 17);
   const options = await db.sql`select label, code, mrp from product_options where product_id = 'p1' order by sort_order`;
   assert.deepEqual([...options].map((row) => ({ ...row })), [
     { label: 'SSS', code: 'TGH-55-S', mrp: 1500 },
