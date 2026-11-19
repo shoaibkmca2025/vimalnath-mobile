@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
 import { Badge } from '@/components/Badge';
-import { Button } from '@/components/Button';
+import { PencilSimpleIcon } from '@phosphor-icons/react';
+
+import { Button, ButtonLink } from '@/components/Button';
 import { ConfirmDialog } from '@/components/Dialog';
 import { Drawer } from '@/components/Drawer';
 import { Segmented, SelectField, TextField } from '@/components/Field';
@@ -249,15 +251,19 @@ export function StockDrawer({ row, open, onClose }: { row: StockRow | null; open
         {row.state === 'out' && item && item.quantity < 0 && (
           <p className="notice notice--warning">More was delivered than was counted. Count it again and enter what’s really there.</p>
         )}
-        {item?.orphan && (
-          <div className="notice notice--warning stack" style={{ display: 'grid' }}>
-            <span>This option was renamed or removed in the product, so orders no longer take from this stock.</span>
-            {owner && (
-              <span>
-                <Button size="sm" variant="danger-plain" onClick={() => setRemoving(true)}>
-                  Stop Counting It
-                </Button>
-              </span>
+        {item?.orphan && <p className="notice notice--warning">This option was renamed or removed in the product, so orders no longer take from this stock.</p>}
+
+        {owner && (row.product || item) && (
+          <div className="row-wrap">
+            {row.product && (
+              <ButtonLink size="sm" icon={PencilSimpleIcon} to={`/products/${encodeURIComponent(row.productId)}?back=stock`}>
+                Edit Product
+              </ButtonLink>
+            )}
+            {item && (
+              <Button size="sm" variant="danger-plain" onClick={() => setRemoving(true)}>
+                Stop Counting
+              </Button>
             )}
           </div>
         )}
@@ -397,7 +403,11 @@ export function StockDrawer({ row, open, onClose }: { row: StockRow | null; open
       <ConfirmDialog
         open={removing}
         title={`Stop counting ${row.title}?`}
-        body="Its stock figure and history are removed. Orders already don’t take from it, because its option is gone from the product."
+        body={
+          item?.orphan
+            ? 'Its stock figure and history are removed. Orders already don’t take from it, because its option is gone from the product.'
+            : 'Its stock figure and history are removed, and delivered orders stop taking from it until you count it again. The product stays in the Shop.'
+        }
         confirmLabel="Stop Counting"
         destructive
         onCancel={() => setRemoving(false)}

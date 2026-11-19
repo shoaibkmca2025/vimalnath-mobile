@@ -1,11 +1,12 @@
-import { ArchiveIcon, CurrencyInrIcon, DownloadSimpleIcon, PackageIcon, UploadSimpleIcon, WarningIcon, XCircleIcon } from '@phosphor-icons/react';
-import { useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { ArchiveIcon, CurrencyInrIcon, DownloadSimpleIcon, EyeIcon, PackageIcon, PencilSimpleIcon, PlusIcon, TrashIcon, UploadSimpleIcon, WarningIcon, XCircleIcon } from '@phosphor-icons/react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import { Badge } from '@/components/Badge';
-import { Button } from '@/components/Button';
+import { Button, IconButton } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { DataTable, type Column } from '@/components/DataTable';
+import { ConfirmDialog } from '@/components/Dialog';
 import { Drawer } from '@/components/Drawer';
 import { EmptyState } from '@/components/EmptyState';
 import { SearchInput, Segmented } from '@/components/Field';
@@ -15,7 +16,7 @@ import { StockDrawer } from '@/components/StockDrawer';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
 import { readSession } from '@/data/session';
-import { STATE_LABEL, UNITS, decodeCsv, editsStock, exportRows, formatPrice, formatQty, planImport, stockAlerts, stockRows, stockValue, type ImportPlan, type StockRow } from '@/data/stock';
+import { STATE_LABEL, UNITS, decodeCsv, editsStock, exportRows, formatPrice, formatQty, itemKey, planImport, stockAlerts, stockRows, stockValue, type ImportPlan, type StockRow } from '@/data/stock';
 import { useData } from '@/data/useData';
 import { useDrawerItem } from '@/hooks/useDrawerItem';
 import { downloadCsv } from '@/lib/csv';
@@ -26,8 +27,10 @@ type Show = 'attention' | 'over' | 'counted' | 'untracked' | 'all';
 const CHUNK = 250;
 
 export default function StockPage() {
-  const { db, send } = useData();
+  const { db, send, update } = useData();
   const toast = useToast();
+  const navigate = useNavigate();
+  const [deleting, setDeleting] = useState<StockRow | null>(null);
   const role = readSession()?.role;
   const owner = role === 'owner';
   const canEdit = editsStock(role);
@@ -66,6 +69,63 @@ export default function StockPage() {
     );
   });
   const open = drawer.item ? rows.find((row) => row.key === drawer.item) ?? null : null;
+
+  // Back from adding a product (/stock?item=…&option=…): its panel opens, to enter the stock.
+  const linkedItem = params.get('item');
+  const linkedOption = params.get('option') ?? '';
+  const { show: showDrawer } = drawer;
+  useEffect(() => {
+    if (linkedItem === null) return;
+    showDrawer(itemKey(linkedItem, linkedOption));
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('item');
+      next.delete('option');
+      return next;
+    }, { replace: true });
+  }, [linkedItem, linkedOption, showDrawer, setParams]);
+
+  /** What deleting a row removes: stock left by a renamed option, one option of several, or the whole product. */
+  const deletion = (row: StockRow) => {
+    const product = row.product;
+    const name = product ? product.name || product.section : row.title;
+    const stockText = row.stock ? ', with its stock and stock history' : '';
+    if (!product || row.stock?.orphan) return { kind: 'stock' as const, title: `Stop counting ${row.title}?`, body: 'Its stock figure and history are removed. The product itself stays in the Shop.', label: 'Stop Counting' };
+    if (product.options.length > 1)
+      return {
+        kind: 'option' as const,
+        title: `Delete the “${row.option}” option?`,
+        body: `${name} keeps its other ${plural(product.options.length - 1, 'option')}. This one is removed from the app’s Shop${stockText}. Orders that already include it keep their details.`,
+        label: 'Delete Option',
+      };
+    return { kind: 'product' as const, title: `Delete ${name}?`, body: `It’s removed from the app’s Shop${stockText}. Orders that already include it keep their details.`, label: 'Delete Product' };
+  };
+
+  const remove = async (row: StockRow) => {
+    setDeleting(null);
+    const { kind } = deletion(row);
+    const product = row.product;
+    const stockPath = `/stock/item?productId=${encodeURIComponent(row.productId)}&option=${encodeURIComponent(row.option)}`;
+    if (kind === 'stock') {
+      if (await send(stockPath, 'DELETE', undefined, { area: 'catalogue', summary: `Stopped counting ${row.title}`, to: '/stock' })) toast({ message: `${row.title} is no longer counted.` });
+      return;
+    }
+    if (kind === 'option') {
+      const ok = await update('products', (products) => products.map((item) => (item.id === row.productId ? { ...item, options: item.options.filter((option) => option.label !== row.option) } : item)), {
+        area: 'catalogue',
+        summary: `Deleted the ${row.option} option of ${product!.code}`,
+        to: `/products/${row.productId}`,
+      });
+      if (!ok) return;
+      // The product keeps its row, so the option's stock stays behind until it's removed too.
+      if (row.stock) await send(stockPath, 'DELETE', undefined);
+      toast({ message: `${row.title} deleted.` });
+      return;
+    }
+    // The server deletes the product's stock with it.
+    if (await update('products', (products) => products.filter((item) => item.id !== row.productId), { area: 'catalogue', summary: `Deleted ${product!.code}` })) toast({ message: `${product!.code} deleted.` });
+  };
+  const deletingPlan = deleting ? deletion(deleting) : null;
 
   const columns: Column<StockRow>[] = [
     {
@@ -158,6 +218,18 @@ export default function StockPage() {
           },
         ]
       : []),
+    {
+      key: 'actions',
+      header: 'Actions',
+      hideHeader: true,
+      align: 'actions',
+      cell: (row) => (
+        <span className="row" style={{ gap: 0, justifyContent: 'flex-end' }}>
+          <IconButton icon={canEdit ? PencilSimpleIcon : EyeIcon} label={`${canEdit ? 'Edit' : 'View'} ${row.title}`} onClick={() => drawer.show(row.key)} />
+          {owner && <IconButton icon={TrashIcon} tone="danger" label={`Delete ${row.title}`} onClick={() => setDeleting(row)} />}
+        </span>
+      ),
+    },
   ];
 
   const exportCsv = () => {
@@ -212,6 +284,11 @@ export default function StockPage() {
         description="What the shop has of each product option. Delivered orders take their items from stock; an order moved back from delivered returns them. Items not counted yet aren’t touched."
         actions={
           <>
+            {owner && (
+              <Button variant="primary" icon={PlusIcon} onClick={() => navigate('/products/new?back=stock')}>
+                Add Product
+              </Button>
+            )}
             {canEdit && (
               <>
                 <Button icon={UploadSimpleIcon} onClick={() => fileInput.current?.click()}>
@@ -304,6 +381,16 @@ export default function StockPage() {
       </div>
 
       <StockDrawer row={open} open={drawer.open && Boolean(open)} onClose={drawer.close} />
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        title={deletingPlan?.title ?? 'Delete?'}
+        body={deletingPlan?.body ?? ''}
+        confirmLabel={deletingPlan?.label ?? 'Delete'}
+        destructive
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => deleting && remove(deleting)}
+      />
 
       <Drawer
         open={importOpen}
