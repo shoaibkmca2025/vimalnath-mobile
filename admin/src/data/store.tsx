@@ -5,7 +5,8 @@ import { useToast } from '@/components/useToast';
 import { api } from '@/lib/api';
 import { readSession } from './session';
 import { changed, serverRequests, type Calculators, type Catalogue, type Content, type ServerKey } from './server';
-import type { Activity, Database, Order } from './types';
+import { mergeStock, seesStock, type Answer } from './stock';
+import type { Activity, Database, Order, StockItem } from './types';
 import { DataContext, type DataContextValue } from './useData';
 
 /**
@@ -29,18 +30,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     let active = true;
     // Catalogue editors don't work with orders, and the server refuses them.
     const orders = readSession()?.role === 'catalogue' ? Promise.resolve<Order[]>([]) : api<Order[]>('/orders');
+    // Stock is for Owners, Sales and the inventory team; the others' lists stay empty.
+    const stock = seesStock(readSession()?.role) ? api<StockItem[]>('/stock') : Promise.resolve<StockItem[]>([]);
     // Versions before the lists: a save that lands in between then makes this tab ask for a reload, never overwrite it.
     api<Record<string, number>>('/versions')
       .then((loaded) => {
         versions.current = loaded;
-        return Promise.all([api<Catalogue>('/catalogue'), orders, api<Calculators>('/calculators'), api<Content>('/content'), api<Activity[]>('/activity')]);
+        return Promise.all([api<Catalogue>('/catalogue'), orders, api<Calculators>('/calculators'), api<Content>('/content'), api<Activity[]>('/activity'), stock]);
       })
-      .then(([catalogue, orders, { cutlist, sections }, content, activity]) => {
+      .then(([catalogue, orders, { cutlist, sections }, content, activity, stock]) => {
         if (!active) return;
         if (!catalogue.products.length) throw new Error('The catalogue isn’t in the database yet. In the server folder, run npm run import-data, then try again.');
         const { products, categories, catalogues } = catalogue;
         server.current = { products, categories, catalogues, orders, cutlist, sections, ...content };
-        const base: Database = { ...catalogue, sections, cutlist, ...content, orders, activity };
+        const base: Database = { ...catalogue, sections, cutlist, ...content, orders, activity, stock };
         setState({ status: 'ready', base });
       })
       .catch((error: unknown) => {
@@ -50,6 +53,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       active = false;
     };
   }, [attempt]);
+
+  /** Fetches the stock list again, for those who see it. A failure keeps the one shown. */
+  const reloadStock = useCallback(async () => {
+    if (!seesStock(readSession()?.role)) return;
+    const stock = await api<StockItem[]>('/stock').catch(() => null);
+    if (stock) setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, stock } } : previous));
+  }, []);
 
   const update = useCallback<DataContextValue['update']>(
     (key, change, log) => {
@@ -73,6 +83,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
         server.current = { ...saved, [key]: after };
         setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, [key]: after } } : previous));
+        // A delivered order takes its items from stock, and one moved back returns them.
+        if (key === 'orders') await reloadStock();
         // The server adds who and when. The change itself is saved either way, so a failed entry is not an error to show.
         const entry = log && (await api<Activity>('/activity', 'POST', { ...log, ...changed(before, after) }).catch(() => null));
         if (entry) setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, activity: [entry, ...previous.base.activity] } } : previous));
@@ -81,16 +93,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       queue.current = saving.catch(() => false);
       return saving;
     },
-    [toast],
+    [toast, reloadStock],
   );
 
   const send = useCallback<DataContextValue['send']>(
     (path, method, body, log) => {
       // In the same queue as `update`, so it never lands in the middle of another save or a refresh.
       const saving = queue.current.then(async () => {
-        let result: { orders?: Order[] } | undefined;
+        let result: Answer | undefined;
         try {
-          result = await api<{ orders?: Order[] }>(path, method, body);
+          result = await api<Answer>(path, method, body);
         } catch (error) {
           toast({ tone: 'error', message: `${error instanceof Error ? error.message : 'Something went wrong.'} Your change wasn’t saved.` });
           return false;
@@ -98,7 +110,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const fresh = new Map(result?.orders?.map((order) => [order.id, order]));
         const merge = (orders: Order[]) => orders.map((order) => fresh.get(order.id) ?? order);
         server.current = { ...server.current!, orders: merge(server.current!.orders) };
-        setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, orders: merge(previous.base.orders) } } : previous));
+        setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, orders: merge(previous.base.orders), stock: mergeStock(previous.base.stock, result) } } : previous));
         const entry = log && (await api<Activity>('/activity', 'POST', log).catch(() => null));
         if (entry) setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, activity: [entry, ...previous.base.activity] } } : previous));
         return true;
@@ -120,6 +132,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (!orders || !server.current) return;
         server.current = { ...server.current, orders };
         setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, orders } } : previous));
+        await reloadStock();
       });
     };
     // Every 30 seconds, so a customer confirming an order request shows up quickly.
@@ -129,7 +142,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       clearInterval(timer);
       window.removeEventListener('focus', refresh);
     };
-  }, [ready]);
+  }, [ready, reloadStock]);
 
   const value = useMemo<DataContextValue | null>(() => (state.status === 'ready' ? { db: state.base, update, send } : null), [state, update, send]);
 
