@@ -1,11 +1,11 @@
-import { ArrowSquareOutIcon, CheckCircleIcon, ClockIcon, PencilSimpleIcon, UploadSimpleIcon } from '@phosphor-icons/react';
+import { ArrowSquareOutIcon, CheckCircleIcon, ClockIcon, PencilSimpleIcon, PlusIcon, UploadSimpleIcon } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 
 import { Badge } from '@/components/Badge';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Drawer } from '@/components/Drawer';
-import { TextField } from '@/components/Field';
+import { Segmented, TextField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/useToast';
 import { useData } from '@/data/useData';
@@ -20,6 +20,11 @@ const COVER: Record<string, string> = {
   green: 'linear-gradient(160deg, #2c896e, #83c6af)',
   muted: 'linear-gradient(160deg, #8d97aa, #c6ccd6)',
 };
+
+/** The cover colours the app knows; anything else would break its Catalog tab. */
+const TONES: Record<string, string> = { blue: 'Blue', sand: 'Sand', green: 'Green', muted: 'Grey' };
+/** The server keeps up to 20. */
+const MAX_LISTS = 20;
 
 function urlError(url: string) {
   // Empty, or a PDF uploaded below.
@@ -69,14 +74,24 @@ function PdfUpload({ onUploaded }: { onUploaded: (url: string) => void }) {
   );
 }
 
+/** The next free cover number after the highest one: 01, 02, 03 → 04. */
+function nextNumber(lists: PriceList[]) {
+  const highest = lists.reduce((max, list) => Math.max(max, /^\d+$/.test(list.number) ? Number(list.number) : 0), 0);
+  let next = highest + 1;
+  while (lists.some((list) => list.number === String(next).padStart(2, '0'))) next += 1;
+  return String(next).padStart(2, '0');
+}
+
 export default function PriceListsPage() {
   const { db, update } = useData();
   const toast = useToast();
-  const drawer = useDrawerItem<PriceList>();
+  const drawer = useDrawerItem<PriceList | 'new'>();
   const [draft, setDraft] = useState<PriceList | null>(null);
   const [touched, setTouched] = useState<Set<string>>(new Set());
 
   const published = db.catalogues.filter((list) => list.url).length;
+  const isNew = drawer.item === 'new';
+  const full = db.catalogues.length >= MAX_LISTS;
 
   const edit = (list: PriceList) => {
     setDraft(list);
@@ -84,18 +99,26 @@ export default function PriceListsPage() {
     drawer.show(list);
   };
 
+  const add = () => {
+    setDraft({ number: nextNumber(db.catalogues), kicker: '', title: '', meta: '', tone: 'blue', url: '' });
+    setTouched(new Set());
+    drawer.show('new');
+  };
+
   const errors = draft ? { title: draft.title.trim() ? null : 'Enter the price list’s title.', url: urlError(draft.url) } : { title: null, url: null };
-  const dirty = Boolean(draft && drawer.item && JSON.stringify(draft) !== JSON.stringify(drawer.item));
+  const dirty = Boolean(draft && drawer.item && (isNew ? draft.title.trim() || draft.url.trim() || draft.kicker.trim() || draft.meta.trim() : JSON.stringify(draft) !== JSON.stringify(drawer.item)));
 
   const save = async () => {
     setTouched(new Set(['title', 'url']));
     if (!draft || errors.title || errors.url) return;
-    const saved = { ...draft, title: draft.title.trim(), url: draft.url.trim() };
-    const ok = await update('catalogues', (lists) => lists.map((list) => (list.number === saved.number ? saved : list)), {
-      area: 'catalogue',
-      summary: saved.url ? `Published the ${saved.title} price list` : `Edited the ${saved.title} price list`,
-      to: '/price-lists',
-    });
+    const saved = { ...draft, title: draft.title.trim(), kicker: draft.kicker.trim(), meta: draft.meta.trim(), url: draft.url.trim() };
+    const ok = isNew
+      ? await update('catalogues', (lists) => [...lists, saved], { area: 'catalogue', summary: `Added the ${saved.title} price list`, to: '/price-lists' })
+      : await update('catalogues', (lists) => lists.map((list) => (list.number === saved.number ? saved : list)), {
+          area: 'catalogue',
+          summary: saved.url ? `Published the ${saved.title} price list` : `Edited the ${saved.title} price list`,
+          to: '/price-lists',
+        });
     if (!ok) return;
     drawer.close();
     toast({ message: saved.url ? `${saved.title} is published in the app.` : `${saved.title} saved. It shows as coming soon until it has a link.` });
@@ -105,7 +128,12 @@ export default function PriceListsPage() {
     <>
       <PageHeader
         title="Price Lists"
-        description={`The Taiton PDF catalogues in the app’s Catalog tab. ${published ? `${plural(published, 'list')} published.` : 'None are published yet — add a link to publish one.'}`}
+        description={`The PDF catalogues and price lists in the app’s Catalog tab. ${published ? `${plural(published, 'list')} published.` : 'None are published yet — add a link to publish one.'}`}
+        actions={
+          <Button variant="primary" icon={PlusIcon} onClick={add} disabled={full} title={full ? `The app shows up to ${MAX_LISTS} price lists.` : undefined}>
+            Add Price List
+          </Button>
+        }
       />
 
       <div className="stack">
@@ -167,13 +195,13 @@ export default function PriceListsPage() {
         onClose={drawer.close}
         onSubmit={save}
         dirty={dirty}
-        title="Edit price list"
-        description={drawer.item?.title}
+        title={isNew ? 'Add price list' : 'Edit price list'}
+        description={isNew ? `Shown as number ${draft?.number} in the app’s Catalog tab.` : drawer.item !== 'new' ? drawer.item?.title : undefined}
         footer={
           <>
             <Button onClick={drawer.close}>Cancel</Button>
             <Button type="submit" variant="primary">
-              Save
+              {isNew ? 'Add Price List' : 'Save'}
             </Button>
           </>
         }
@@ -202,8 +230,18 @@ export default function PriceListsPage() {
               error={touched.has('title') ? errors.title : null}
             />
             <div className="grid-2">
-              <TextField label="Label above the title" value={draft.kicker} onChange={(event) => setDraft({ ...draft, kicker: event.target.value })} hint="e.g. MASTER CATALOGUE" />
-              <TextField label="Edition" value={draft.meta} onChange={(event) => setDraft({ ...draft, meta: event.target.value })} hint="e.g. Feb 2026 · PDF" />
+              <TextField label="Label above the title" value={draft.kicker} onChange={(event) => setDraft({ ...draft, kicker: event.target.value })} hint="e.g. MASTER CATALOGUE" maxLength={60} />
+              <TextField label="Edition" value={draft.meta} onChange={(event) => setDraft({ ...draft, meta: event.target.value })} hint="e.g. Feb 2026 · PDF" maxLength={200} />
+            </div>
+            <div className="field">
+              <span className="field__label">Cover colour</span>
+              <Segmented<string>
+                label="Cover colour"
+                value={draft.tone in TONES ? draft.tone : 'blue'}
+                onChange={(tone) => setDraft({ ...draft, tone })}
+                options={Object.entries(TONES).map(([value, label]) => ({ value, label }))}
+              />
+              <p className="field__hint">The colour of its cover in the app.</p>
             </div>
           </div>
         )}
