@@ -10,6 +10,10 @@ import {
   ReceiptIcon,
   ShoppingCartIcon,
   TagIcon,
+  WalletIcon,
+  WarningIcon,
+  XCircleIcon,
+  ArchiveIcon,
   type Icon,
 } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
@@ -24,6 +28,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { Stat } from '@/components/Stat';
 import { DAY, averageStepHours, bucket, change, dailySeries, ordersBetween, salesByCategory, topCustomers, topProducts, totals, type Ranked } from '@/data/analytics';
 import { ORDER_STATUS } from '@/data/orders';
+import { accounts, billOf, creditDaysOf, deliveredDay, isBilled, isOverdue, localDay } from '@/data/payments';
+import { seesStock, stockAlerts, stockValue } from '@/data/stock';
 import { isRequest, requestState } from '@/data/requests';
 import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
@@ -31,6 +37,10 @@ import type { OrderStatus } from '@/data/types';
 import { formatDate, formatDay, formatHours, formatINR, formatINRCompact, formatNumber, formatPercent, formatRelativeTime, formatWeekday, plural, relativePhrase } from '@/lib/format';
 import { getSystemRange } from '@/generated/app-lib/glass-calculator';
 import { sampleSections } from '@/generated/app-lib/sample-sections';
+
+const monthFormat = new Intl.DateTimeFormat('en-IN', { month: 'short', year: 'numeric' });
+/** "Nov 2026". */
+const formatMonth = (date: Date) => monthFormat.format(date);
 
 type Range = '7' | '30' | '90';
 type Measure = 'value' | 'orders';
@@ -98,6 +108,45 @@ export default function DashboardPage() {
     };
   }, [db.products]);
 
+  // The business today: sales are orders delivered (when stock goes out), at their bill; payments and stock as now.
+  const business = useMemo(() => {
+    const today = localDay(new Date(now));
+    const deliveredToday = db.orders.filter((order) => isBilled(order) && deliveredDay(order) === today);
+    const owed = accounts(db.orders, creditDaysOf(db.settings), today);
+    // The last 12 months, this one included, by the day each order was delivered.
+    const months = Array.from({ length: 12 }, (_, index) => {
+      const date = new Date(new Date(now).getFullYear(), new Date(now).getMonth() - 11 + index, 1);
+      return { key: localDay(date).slice(0, 7), date, value: 0, orders: 0 };
+    });
+    const byMonth = new Map(months.map((month) => [month.key, month]));
+    for (const order of db.orders) {
+      const day = isBilled(order) ? deliveredDay(order) : null;
+      const month = day && byMonth.get(day.slice(0, 7));
+      if (!month) continue;
+      month.value += billOf(order);
+      month.orders += 1;
+    }
+    return {
+      sales: deliveredToday.reduce((sum, order) => sum + billOf(order), 0),
+      salesOrders: deliveredToday.length,
+      remaining: owed.reduce((sum, account) => sum + account.remaining, 0),
+      overdue: owed.reduce((sum, account) => sum + account.overdue, 0),
+      owing: owed.filter((account) => account.remaining > 0).length,
+      stock: stockValue(db.stock),
+      alerts: stockAlerts(db.stock),
+      months,
+    };
+  }, [db.orders, db.settings, db.stock, now]);
+  const showBusiness = session?.role !== 'catalogue';
+  const monthPoints = business.months.map((month) => ({
+    key: month.key,
+    label: formatMonth(month.date),
+    axisLabel: formatMonth(month.date).replace(/ \d{4}$/, ''),
+    value: month.value,
+    detail: plural(month.orders, 'order'),
+  }));
+  const bestMonth = business.months.reduce((best, month) => (month.value > best.value ? month : best), business.months[0]!);
+
   const configurations = Object.values(db.cutlist.configurations).flat();
   // The app's own calculator says which configurations have a confirmed formula.
   const placeholderFormulas = configurations.filter((configuration) => !getSystemRange(configuration.name)).length;
@@ -117,6 +166,16 @@ export default function DashboardPage() {
       to: '/order-requests?state=waiting',
       count: db.orders.filter((order) => isRequest(order) && requestState(order) === 'waiting').length,
     },
+    ...(seesStock(session?.role)
+      ? [
+          { icon: XCircleIcon, title: 'Items out of stock', detail: 'Nothing left to deliver', to: '/stock?show=attention', count: business.alerts.out },
+          { icon: WarningIcon, title: 'Items low on stock', detail: 'At or below their minimum', to: '/stock?show=attention', count: business.alerts.low },
+          { icon: ArchiveIcon, title: 'Items over their maximum', detail: 'More in stock than you want to hold', to: '/stock?show=over', count: business.alerts.over },
+        ]
+      : []),
+    ...(showBusiness
+      ? [{ icon: WalletIcon, title: 'Bills overdue', detail: 'Unpaid past their due day', to: '/payments', count: db.orders.filter((order) => isOverdue(order, creditDaysOf(db.settings))).length }]
+      : []),
     { icon: CalculatorIcon, title: 'Glass sizes on a placeholder formula', detail: 'Folding: opening − 20 mm until confirmed', to: '/formulas', count: placeholderFormulas },
     { icon: CurrencyInrIcon, title: 'Products without a price', detail: 'Shown as “price in catalogue” in the app', to: '/products?view=missing-price', count: health.total - health.priced },
     { icon: ImageSquareIcon, title: 'Products without a photo', detail: 'Shown with a placeholder in the app', to: '/products?view=missing-photo', count: health.total - health.photo },
@@ -156,6 +215,71 @@ export default function DashboardPage() {
           </ButtonLink>
         }
       />
+
+      {showBusiness && (
+        <section className="stack" aria-labelledby="today-title">
+          <h2 id="today-title" className="nav-group__title" style={{ margin: 0 }}>
+            Today
+          </h2>
+          <div className="stats">
+            <Stat
+              label="Today’s sales"
+              icon={CurrencyInrIcon}
+              value={formatINRCompact(business.sales)}
+              title={formatINR(business.sales)}
+              foot={business.salesOrders ? `${plural(business.salesOrders, 'order')} delivered today, at the bill` : 'No orders delivered yet today'}
+              to="/orders?status=delivered"
+            />
+            <Stat
+              label="Pending customer payments"
+              icon={WalletIcon}
+              value={formatINRCompact(business.remaining)}
+              title={formatINR(business.remaining)}
+              foot={business.overdue ? <span className="money-late">{formatINR(business.overdue)} overdue</span> : `Owed by ${plural(business.owing, 'customer')}, nothing overdue`}
+              to="/payments"
+            />
+            {seesStock(session?.role) && (
+              <>
+                {session?.role === 'owner' ? (
+                  <Stat
+                    label="Stock value"
+                    icon={ArchiveIcon}
+                    value={formatINRCompact(business.stock.value)}
+                    title={formatINR(business.stock.value)}
+                    foot={`${formatNumber(db.products.length)} products · ${formatNumber(db.stock.length)} items counted`}
+                    to="/stock"
+                  />
+                ) : (
+                  <Stat label="Products" icon={ArchiveIcon} value={formatNumber(db.products.length)} foot={`${formatNumber(db.stock.length)} items counted`} to="/stock" />
+                )}
+                <Stat
+                  label="Low or out of stock"
+                  icon={WarningIcon}
+                  value={formatNumber(business.alerts.low + business.alerts.out)}
+                  foot={business.alerts.out ? <span className="money-late">{`${formatNumber(business.alerts.out)} out · ${formatNumber(business.alerts.low)} low`}</span> : `${formatNumber(business.alerts.low)} low, none out`}
+                  to="/stock?show=attention"
+                />
+              </>
+            )}
+          </div>
+          <Card aria-labelledby="months-title">
+            <CardHeader
+              id="months-title"
+              title="Sales by month"
+              description={bestMonth.value > 0 ? `Orders delivered each month, at their bill. Best: ${formatMonth(bestMonth.date)}, ${formatINR(bestMonth.value)}.` : 'Orders delivered each month, at their bill. None delivered in the last 12 months.'}
+            />
+            <div className="card__body">
+              <AreaChart
+                points={monthPoints}
+                label="Sales by month over the last 12 months"
+                format={formatINR}
+                formatAxis={(value) => (value ? formatINRCompact(value).replace('.0', '') : '₹0')}
+                height={200}
+              />
+            </div>
+          </Card>
+        </section>
+      )}
 
       <div className="toolbar">
         <Segmented<Range>

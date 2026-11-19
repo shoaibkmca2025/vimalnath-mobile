@@ -250,7 +250,7 @@ export default function StockPage() {
           ) : (
             <Stat label="Counted" icon={ArchiveIcon} value={formatNumber(db.stock.length)} foot={`of ${plural(rows.length, 'item')}`} />
           )}
-          <Stat label="Products" icon={PackageIcon} value={formatNumber(db.products.length)} foot={`${plural(rows.length, 'item')} with options · ${formatNumber(db.stock.length)} counted`} />
+          <Stat label="Products" icon={PackageIcon} value={formatNumber(db.products.length)} foot={`${plural(rows.length, 'item')}, one per option · ${formatNumber(db.stock.length)} counted`} />
           <Stat label="Low stock" icon={WarningIcon} value={formatNumber(alerts.low)} foot={alerts.low ? 'At or below their minimum' : 'Nothing running low'} />
           <Stat label="Out of stock" icon={XCircleIcon} value={formatNumber(alerts.out)} foot={alerts.out ? <span className="money-late">None left to deliver</span> : 'Everything counted is in stock'} />
         </div>
