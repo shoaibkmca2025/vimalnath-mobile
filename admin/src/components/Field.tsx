@@ -2,6 +2,7 @@ import { EyeIcon, EyeSlashIcon, MagnifyingGlassIcon, WarningCircleIcon } from '@
 import { useId, useState, type InputHTMLAttributes, type ReactNode, type Ref, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 
 import { IconButton } from '@/components/Button';
+import { NO_AUTOFILL } from '@/lib/autofill';
 import { cx } from '@/lib/cx';
 
 type FieldChrome = {
@@ -219,7 +220,7 @@ export function SearchInput({ label, value, onChange, placeholder }: { label: st
         placeholder={placeholder ?? label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        autoComplete="off"
+        autoComplete={NO_AUTOFILL}
         spellCheck={false}
       />
     </div>

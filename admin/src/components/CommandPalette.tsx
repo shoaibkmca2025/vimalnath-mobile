@@ -9,6 +9,7 @@ import { customersFromOrders } from '@/data/orders';
 import { productTitle } from '@/data/products';
 import { useData } from '@/data/useData';
 import type { OrderStatus } from '@/data/types';
+import { NO_AUTOFILL } from '@/lib/autofill';
 import { formatINR, formatRelativeDay } from '@/lib/format';
 
 export type PaletteDestination = { to: string; label: string; icon: Icon; group: string };
@@ -118,7 +119,7 @@ function PaletteBody({ onClose, destinations }: { onClose: () => void; destinati
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={onKeyDown}
-          autoComplete="off"
+          autoComplete={NO_AUTOFILL}
           spellCheck={false}
         />
         <kbd className="kbd">Esc</kbd>
