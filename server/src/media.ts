@@ -120,6 +120,7 @@ const mediaUses = (sql: Sql) => sql<{ id: string | null; label: string; link: st
     union all select icon, 'More Apps: ' || name, '/more-apps' from more_apps
     union all select value, 'Company logo', '/settings' from settings where key = 'logo'
     union all select attachment, 'Purchase bill ' || number, '/purchases/' || id from purchases
+    union all select attachment, 'GST challan ' || coalesce(nullif(challan, ''), period), '/gst/payments' from gst_payments
   ) used where url like '/v1/media/%'`;
 
 /** GET /v1/media/<id>.webp (also -md and -sm) and /v1/media/<id>.pdf: public, because the app shows them. */

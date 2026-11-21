@@ -378,6 +378,9 @@ export function orderAdminRoutes(sql: Sql) {
     await sql.begin(async (tx) => {
       const [order] = await tx`select total from orders where id = ${id} for update`;
       if (!order) throw new HTTPException(404, { message: 'That order does not exist.' });
+      // A posted tax invoice fixes the bill; changing it means cancelling the invoice (or a credit note).
+      const [invoice] = await tx`select number from sales_invoices where order_id = ${id} and status = 'posted'`;
+      if (invoice) throw new HTTPException(409, { message: `Tax invoice ${invoice.number} fixes this bill. Cancel the invoice to change it.`, cause: { field: 'bill' } });
       const [{ paid }] = (await tx`select coalesce(sum(amount), 0)::float8 as paid from order_payments where order_id = ${id}`) as unknown as [{ paid: number }];
       if ((bill ?? order.total) < paid) throw new HTTPException(400, { message: `${rupees(paid)} has been paid already, so the bill can’t be less. Remove a payment first.`, cause: { field: 'bill' } });
       await tx`update orders set payment_terms = ${terms}, bill_amount = ${bill === order.total ? null : bill} where id = ${id}`;

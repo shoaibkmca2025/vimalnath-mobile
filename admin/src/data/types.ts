@@ -241,6 +241,103 @@ export type Purchase = {
   receivedAt?: string;
   cancelledBy?: string;
   cancelledAt?: string;
+  supplierGstin?: string;
+  /** IGST (another state) rather than CGST + SGST, fixed when the bill was saved. */
+  interstate: boolean;
+  /** Input tax credit as the accountant reviewed it; every bill starts pending. */
+  itcStatus: ItcStatus;
+  /** The return month (YYYY-MM) it was claimed or reversed in. */
+  itcPeriod?: string;
+  itcNote?: string;
+  itcBy?: string;
+  itcAt?: string;
+};
+
+export type ItcStatus = 'pending' | 'eligible' | 'ineligible' | 'claimed' | 'reversed';
+
+/** The shop's GST registration and invoice numbering (GST Settings). */
+export type GstSettings = {
+  legalName: string;
+  tradeName: string;
+  gstin: string;
+  address: string;
+  pincode: string;
+  registrationType: 'regular' | 'composition';
+  invoicePrefix: string;
+  terms: string;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+};
+
+/** One line of a tax invoice: what the buyer pays for it (GST included), and the tax worked out of that. */
+export type InvoiceItem = {
+  productId: string;
+  option: string;
+  description: string;
+  hsn: string;
+  qty: number;
+  unit: StockUnit;
+  amount: number;
+  gstRate: number;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+};
+
+/** A GST tax invoice made from an order. Drafts have no number; posted ones are cancelled, never deleted. */
+export type SalesInvoice = {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  number?: string;
+  financialYear?: string;
+  invoiceDate: string;
+  status: 'draft' | 'posted' | 'cancelled';
+  customerId?: number;
+  customerName: string;
+  /** Empty for an unregistered buyer (B2C). */
+  customerGstin?: string;
+  billingAddress?: string;
+  placeOfSupply?: string;
+  posCode?: string;
+  interstate: boolean;
+  sellerGstin?: string;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  roundOff: number;
+  total: number;
+  notes?: string;
+  items: InvoiceItem[];
+  createdBy: string;
+  createdAt: string;
+  postedBy?: string;
+  postedAt?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
+};
+
+/** GST paid to the government, entered from the challan. */
+export type GstPayment = {
+  id: string;
+  period: string;
+  paidOn: string;
+  challan: string;
+  cpin: string;
+  cin: string;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  cess: number;
+  interest: number;
+  penalty: number;
+  note: string;
+  attachment: string | null;
+  by: string;
+  at: string;
 };
 
 /** From the app's menu: a rating, a problem report, a suggestion or other feedback. */

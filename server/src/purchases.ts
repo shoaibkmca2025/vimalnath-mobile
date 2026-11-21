@@ -4,6 +4,7 @@ import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
 import { only, type Env } from './staff.ts';
+import { isInterstate } from './gst.ts';
 import { GST_RATES, UNITS, move, stockItems } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
 
@@ -125,7 +126,8 @@ const purchases = (sql: Sql | TransactionSql, where = sql`true`) =>
       'subtotal', p.subtotal::float8, 'tax', p.tax::float8, 'total', p.total::float8,
       'notes', nullif(p.notes, ''), 'attachment', p.attachment,
       'createdBy', p.created_by, 'createdAt', p.created_at, 'receivedBy', p.received_by, 'receivedAt', p.received_at,
-      'cancelledBy', p.cancelled_by, 'cancelledAt', p.cancelled_at,
+      'cancelledBy', p.cancelled_by, 'cancelledAt', p.cancelled_at, 'supplierGstin', nullif(s.gstin, ''), 'interstate', p.interstate,
+      'itcStatus', p.itc_status, 'itcPeriod', p.itc_period, 'itcNote', nullif(p.itc_note, ''), 'itcBy', p.itc_by, 'itcAt', p.itc_at,
       'items', (select json_agg(json_build_object('productId', i.product_id, 'option', i.option_label, 'name', i.name, 'code', i.code,
           'qty', i.qty::float8, 'unit', i.unit, 'rate', i.rate::float8, 'discountPct', i.discount_pct::float8, 'gstRate', i.gst_rate::float8) order by i.position)
         from purchase_items i where i.purchase_id = p.id),
@@ -191,7 +193,7 @@ async function checkItems(tx: TransactionSql, items: PurchaseInput['items']) {
 
 /** Saves a bill's header, figures and items; a new one gets the next PUR number. */
 async function saveBill(tx: TransactionSql, input: PurchaseInput, by: string, id?: number) {
-  const [supplier] = await tx`select archived from suppliers where id = ${input.supplierId}`;
+  const [supplier] = await tx`select archived, gstin, state from suppliers where id = ${input.supplierId}`;
   if (!supplier) throw new HTTPException(400, { message: 'Choose a supplier.', cause: { field: 'supplierId' } });
   const items = await checkItems(tx, input.items);
   const totals = purchaseTotals(input);
@@ -207,6 +209,8 @@ async function saveBill(tx: TransactionSql, input: PurchaseInput, by: string, id
     ...totals,
     notes: input.notes,
     attachment: input.attachment,
+    // IGST or CGST + SGST, fixed now: a supplier's later move doesn't rewrite the bill.
+    interstate: await isInterstate(tx, supplier.gstin, supplier.state),
   };
   const duplicate = (number?: string) =>
     new HTTPException(409, { message: `Bill ${input.supplierInvoice} from this supplier is already entered${number ? ` as ${number}` : ''}.`, cause: { field: 'supplierInvoice' } });
