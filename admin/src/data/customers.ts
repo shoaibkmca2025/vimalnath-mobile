@@ -18,6 +18,12 @@ export type CustomerRecord = {
   open: number;
   firstOrder: string | null;
   lastOrder: string | null;
+  /** GST details for tax invoices; an empty GSTIN is an unregistered buyer. */
+  gstin: string;
+  legalName: string;
+  billingAddress: string;
+  state: string;
+  pincode: string;
 };
 
 export type DuplicatePair = { keep: CustomerRecord; merge: CustomerRecord; reason: string };

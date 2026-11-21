@@ -1,3 +1,4 @@
+import { localDay } from './payments.ts';
 import { lineAmount, r2 } from './purchases.ts';
 import type { GstPayment, ItcStatus, Purchase, SalesInvoice } from './types';
 
@@ -63,6 +64,11 @@ export function rangeOf(choice: RangeChoice, today: string, custom?: { from: str
 
 export const inRange = (day: string, range: Range) => day >= range.from && day <= range.to;
 
+/** The period picker's state (components/GstRange), and the days it covers. */
+export type RangeState = { choice: RangeChoice; from: string; to: string };
+export const initialRange = (choice: RangeChoice = 'month'): RangeState => ({ choice, from: '', to: '' });
+export const resolveRange = (state: RangeState): Range => rangeOf(state.choice, localDay(), { from: state.from, to: state.to });
+
 /** Posted invoices dated in the range; drafts and cancelled ones aren't supplies. */
 export const postedIn = (invoices: SalesInvoice[], range: Range) => invoices.filter((invoice) => invoice.status === 'posted' && inRange(invoice.invoiceDate, range));
 
@@ -124,7 +130,7 @@ export type Utilisation = { from: keyof Heads; to: keyof Heads; amount: number }
 export function utilise(liability: Heads, credit: Heads) {
   const left = { ...liability };
   const steps: Utilisation[] = [];
-  const use = (from: keyof Heads, to: keyof Heads, amount: number) => {
+  const apply = (from: keyof Heads, to: keyof Heads, amount: number) => {
     const value = r2(Math.max(0, amount));
     if (!value) return 0;
     left[to] = r2(left[to] - value);
@@ -132,19 +138,19 @@ export function utilise(liability: Heads, credit: Heads) {
     return value;
   };
   let igst = credit.igst;
-  igst = r2(igst - use('igst', 'igst', Math.min(igst, left.igst)));
+  igst = r2(igst - apply('igst', 'igst', Math.min(igst, left.igst)));
   // Where CGST or SGST credit can't cover its own head, IGST credit goes there first, so less cash is paid.
-  igst = r2(igst - use('igst', 'cgst', Math.min(igst, Math.max(0, left.cgst - credit.cgst))));
-  igst = r2(igst - use('igst', 'sgst', Math.min(igst, Math.max(0, left.sgst - credit.sgst))));
+  igst = r2(igst - apply('igst', 'cgst', Math.min(igst, Math.max(0, left.cgst - credit.cgst))));
+  igst = r2(igst - apply('igst', 'sgst', Math.min(igst, Math.max(0, left.sgst - credit.sgst))));
   // IGST credit must be used up before CGST or SGST credit is.
-  igst = r2(igst - use('igst', 'cgst', Math.min(igst, left.cgst)));
-  igst = r2(igst - use('igst', 'sgst', Math.min(igst, left.sgst)));
+  igst = r2(igst - apply('igst', 'cgst', Math.min(igst, left.cgst)));
+  igst = r2(igst - apply('igst', 'sgst', Math.min(igst, left.sgst)));
   let cgst = credit.cgst;
-  cgst = r2(cgst - use('cgst', 'cgst', Math.min(cgst, left.cgst)));
-  cgst = r2(cgst - use('cgst', 'igst', Math.min(cgst, left.igst)));
+  cgst = r2(cgst - apply('cgst', 'cgst', Math.min(cgst, left.cgst)));
+  cgst = r2(cgst - apply('cgst', 'igst', Math.min(cgst, left.igst)));
   let sgst = credit.sgst;
-  sgst = r2(sgst - use('sgst', 'sgst', Math.min(sgst, left.sgst)));
-  sgst = r2(sgst - use('sgst', 'igst', Math.min(sgst, left.igst)));
+  sgst = r2(sgst - apply('sgst', 'sgst', Math.min(sgst, left.sgst)));
+  sgst = r2(sgst - apply('sgst', 'igst', Math.min(sgst, left.igst)));
   return { cash: left, steps, carried: { igst, cgst, sgst } };
 }
 

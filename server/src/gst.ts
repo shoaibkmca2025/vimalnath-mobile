@@ -206,7 +206,11 @@ export function gstRoutes(sql: Sql) {
   });
 
   // shortcut: every invoice at once, which the registers filter themselves; page it on the server past a few thousand.
-  routes.get('/invoices', async (c) => c.json(await invoices(sql)));
+  // One order's invoices with ?orderId=, for its page.
+  routes.get('/invoices', async (c) => {
+    const orderId = c.req.query('orderId');
+    return c.json(await invoices(sql, orderId ? sql`i.order_id = ${parse(Id, orderId)}` : sql`true`));
+  });
 
   // A draft from an order: the buyer's GST details, and each line at what the buyer pays (the bill shared over the lines),
   // with its HSN and rate from Stock. Lines priced from the catalogue start at ₹0 for staff to fill in.

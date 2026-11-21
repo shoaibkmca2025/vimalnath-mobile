@@ -1,10 +1,5 @@
 import { Segmented, TextField } from '@/components/Field';
-import { rangeOf, type Range, type RangeChoice } from '@/data/gst';
-import { localDay } from '@/data/payments';
-
-export type RangeState = { choice: RangeChoice; from: string; to: string };
-export const initialRange = (choice: RangeChoice = 'month'): RangeState => ({ choice, from: '', to: '' });
-export const resolveRange = (state: RangeState): Range => rangeOf(state.choice, localDay(), { from: state.from, to: state.to });
+import type { RangeChoice, RangeState } from '@/data/gst';
 
 /** The period a GST page covers: this or last month, this or last financial year, or chosen days. */
 export function GstRange({ value, onChange }: { value: RangeState; onChange: (value: RangeState) => void }) {
