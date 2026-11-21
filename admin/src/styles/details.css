@@ -1315,3 +1315,79 @@ button.cell-title {
   overflow: auto;
   font-size: var(--text-sm);
 }
+
+/* ---------- Purchases ---------- */
+
+/* Item search on a bill: the matches float under the field, over the table. */
+.item-picker {
+  position: relative;
+}
+
+.item-picker__list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 340px;
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.14);
+  list-style: none;
+}
+
+.item-picker__option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Feedback on the press itself, not on release. */
+.item-picker__option:hover,
+.item-picker__option:focus-visible {
+  background: var(--surface-2);
+}
+
+.item-picker__option:active {
+  background: var(--border);
+}
+
+.bill-lines td {
+  vertical-align: top;
+}
+
+.bill-lines .input,
+.bill-lines .select {
+  min-height: 36px;
+}
+
+/* Six tiles in two rows of three, where four would leave two alone. */
+.stats--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .stats--3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .stats--3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

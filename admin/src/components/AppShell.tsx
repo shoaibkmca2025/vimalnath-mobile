@@ -21,7 +21,9 @@ import {
   ScissorsIcon,
   SignOutIcon,
   SquaresFourIcon,
+  StorefrontIcon,
   TagIcon,
+  TruckIcon,
   UserGearIcon,
   UsersThreeIcon,
   WalletIcon,
@@ -101,6 +103,18 @@ export function AppShell() {
         ...(session?.role === 'catalogue' ? [] : [{ to: '/app-users', label: 'App Users', icon: DeviceMobileIcon }]),
       ],
     },
+    // Phase 2 (docs/ERP-ROADMAP.md): Owners only until roles get permissions.
+    ...(session?.role === 'owner'
+      ? [
+          {
+            title: 'Purchases',
+            items: [
+              { to: '/purchases', label: 'Purchases', icon: TruckIcon },
+              { to: '/suppliers', label: 'Suppliers', icon: StorefrontIcon },
+            ],
+          },
+        ]
+      : []),
     {
       title: 'Catalogue',
       items: [

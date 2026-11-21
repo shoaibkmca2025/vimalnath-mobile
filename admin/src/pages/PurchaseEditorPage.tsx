@@ -55,6 +55,9 @@ const draftOf = (bill: Purchase | undefined, supplierId: string): Draft =>
       }
     : { supplierId, supplierInvoice: '', billDate: localDay(), lines: [], freight: '', otherCharges: '', discount: '', roundOff: '', notes: '', attachment: null };
 
+/** A form's content without the lines' own keys, which are new each time a bill is loaded. */
+const comparable = (draft: Draft) => JSON.stringify({ ...draft, lines: draft.lines.map(({ key: _key, ...line }) => line) });
+
 /** The form's lines as numbers; anything unreadable counts as 0 in the preview and is flagged by `errorsOf`. */
 const numbersOf = (draft: Draft) => ({
   items: draft.lines.map((line) => ({
@@ -154,7 +157,7 @@ function BillEditor({ bill, presetSupplier, purchasing, onGone }: { bill?: Purch
   const totals = purchaseTotals(numbersOf(draft));
   const errors = errorsOf(draft, totals.total);
   const shown = (key: string) => (submitted ? errors[key] : undefined);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(original);
+  const dirty = comparable(draft) !== comparable(original);
   const set = <K extends keyof Draft>(field: K, value: Draft[K]) => setDraft((current) => ({ ...current, [field]: value }));
   const setLine = (key: string, patch: Partial<Line>) => setDraft((current) => ({ ...current, lines: current.lines.map((line) => (line.key === key ? { ...line, ...patch } : line)) }));
   const supplierOptions = (suppliers ?? []).filter((supplier) => !supplier.archived || String(supplier.id) === draft.supplierId);

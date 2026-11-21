@@ -377,11 +377,24 @@ export function StockDrawer({ row, open, onClose }: { row: StockRow | null; open
                             </Link>
                           </>
                         )}
+                        {step.purchaseId && (
+                          <>
+                            {' '}
+                            {/* Purchase bills are for Owners; the others see the bill's number. */}
+                            {owner ? (
+                              <Link to={`/purchases/${step.purchaseId}`} className="num">
+                                {step.purchaseNumber}
+                              </Link>
+                            ) : (
+                              <span className="num">{step.purchaseNumber}</span>
+                            )}
+                          </>
+                        )}
                       </span>
                       <span className="list-row__meta">
                         {formatDateTime(step.at)} · {step.by}
                         {step.note && ` · ${step.note}`}
-                        {!(step.reason in ADJUST_REASONS) && step.reason && ` · ${step.reason}`}
+                        {!step.purchaseId && !(step.reason in ADJUST_REASONS) && step.reason && ` · ${step.reason}`}
                       </span>
                     </span>
                     <span className="num" style={{ textAlign: 'right' }}>
