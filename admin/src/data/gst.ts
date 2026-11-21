@@ -134,7 +134,10 @@ export function utilise(liability: Heads, credit: Heads) {
     const value = r2(Math.max(0, amount));
     if (!value) return 0;
     left[to] = r2(left[to] - value);
-    steps.push({ from, to, amount: value });
+    // Two uses of the same credit against the same head read as one.
+    const last = steps.at(-1);
+    if (last && last.from === from && last.to === to) last.amount = r2(last.amount + value);
+    else steps.push({ from, to, amount: value });
     return value;
   };
   let igst = credit.igst;

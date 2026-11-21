@@ -11,12 +11,12 @@ test('set-off: IGST credit first, then CGST and SGST credit, never CGST against 
   assert.deepEqual(first.cash, { igst: 0, cgst: 0, sgst: 0 });
   assert.deepEqual(first.steps, [
     { from: 'igst', to: 'igst', amount: 1000 },
-    { from: 'igst', to: 'cgst', amount: 1000 },
-    { from: 'igst', to: 'sgst', amount: 500 },
-    { from: 'cgst', to: 'cgst', amount: 2000 },
-    { from: 'sgst', to: 'sgst', amount: 2500 },
+    // 1,000 where CGST credit falls short, then the 500 left (IGST credit is used up before the others) on CGST.
+    { from: 'igst', to: 'cgst', amount: 1500 },
+    { from: 'cgst', to: 'cgst', amount: 1500 },
+    { from: 'sgst', to: 'sgst', amount: 3000 },
   ]);
-  assert.deepEqual(first.carried, { igst: 0, cgst: 0, sgst: 500 });
+  assert.deepEqual(first.carried, { igst: 0, cgst: 500, sgst: 0 });
 
   // Spare CGST credit pays IGST, but can't pay SGST: that's cash.
   const second = utilise({ igst: 800, cgst: 500, sgst: 1500 }, { igst: 0, cgst: 2000, sgst: 0 });
