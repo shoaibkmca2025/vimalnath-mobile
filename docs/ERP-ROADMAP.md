@@ -78,6 +78,7 @@ Key relations: a purchase belongs to a supplier and has items pointing at a stoc
 - **Supplier payment**: against one bill, or on account; outstanding = opening balance + received bills − payments.
 - **Stock count**: enter the counted quantity; the difference is recorded as a count.
 - **GST invoice** (Phase 3): draft → posted (numbered per financial year) → cancelled or credit note. CGST + SGST inside the state, IGST outside, from the customer's state.
+  Printed in the shop's own Tally format (their invoice VSC-26-27-412): rate before GST less a discount per line, GST on the total at each rate (CGST and SGST at half the rate each), rounded to the rupee; numbers `VSC-26-27-413` carry on from the last Tally number set in GST Settings; ship-to and bill-to with contacts, the reference boxes, the buyer's previous and current balance, an HSN/SAC tax table, amounts in words ("INR … Only"), bank details, declaration and jurisdiction.
 
 ## 6. Roadmap
 
