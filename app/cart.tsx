@@ -11,7 +11,7 @@ import { PlaceOrderSheet } from '@/components/PlaceOrderSheet';
 import { QtyStepper } from '@/components/QtyStepper';
 import { BarButton, Screen } from '@/components/Screen';
 import { findShopProduct, formatINR, productTitle } from '@/data/shop';
-import { needsUpdate, useAppContent } from '@/lib/content-sync';
+import { needsUpdate, stockOf, useAppContent, type StockStates } from '@/lib/content-sync';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { unitPrice, useCart, type CartLine } from '@/providers/CartProvider';
 import { useOrders, type OrderDetails } from '@/providers/OrdersProvider';
@@ -23,8 +23,10 @@ export default function CartScreen() {
   const { placeOrder } = useOrders();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   // Module 9.6: the shop can stop versions it knows send bad orders. Subscribing also refreshes the lines after a download.
-  const { settings } = useAppContent();
+  const { settings, stock } = useAppContent();
   const outdated = needsUpdate(settings.minAppVersion);
+  // Counted out at the shop since it went in the cart: it has to come out before the order can go.
+  const outOfStock = lines.filter((line) => lineStock(stock, line) === 'out').length;
 
   const priced = lines.filter((line) => unitPrice(line) !== undefined);
   const subtotal = priced.reduce((sum, line) => sum + (unitPrice(line) ?? 0) * line.qty, 0);
@@ -59,7 +61,7 @@ export default function CartScreen() {
         <>
           <InsetGroup separatorInset={92}>
             {lines.map((line) => (
-              <CartLineRow key={`${line.productId}|${line.optionIndex ?? ''}|${line.note ?? ''}`} line={line} onChange={(qty) => setQty(line, qty)} />
+              <CartLineRow key={`${line.productId}|${line.optionIndex ?? ''}|${line.note ?? ''}`} line={line} state={lineStock(stock, line)} onChange={(qty) => setQty(line, qty)} />
             ))}
           </InsetGroup>
 
@@ -75,7 +77,15 @@ export default function CartScreen() {
               <Text style={styles.updateText}>Update the app to place orders. This version is older than {settings.companyName} accepts. Your cart is kept.</Text>
             </View>
           )}
-          <Button label="Place Order" disabled={outdated} onPress={() => setCheckoutOpen(true)} />
+          {outOfStock > 0 && (
+            <View style={styles.update} accessibilityRole="alert">
+              <Ionicons name="close-circle" size={20} color={colors.red} />
+              <Text style={styles.updateText}>
+                {outOfStock === 1 ? 'One item is' : `${outOfStock} items are`} out of stock at the shop. Remove {outOfStock === 1 ? 'it' : 'them'} to place the order.
+              </Text>
+            </View>
+          )}
+          <Button label="Place Order" disabled={outdated || outOfStock > 0} onPress={() => setCheckoutOpen(true)} />
           <Button label="Continue Shopping" variant="plain" size="medium" onPress={() => router.navigate('/')} style={styles.continue} />
         </>
       )}
@@ -90,7 +100,13 @@ export default function CartScreen() {
   );
 }
 
-function CartLineRow({ line, onChange }: { line: CartLine; onChange: (qty: number) => void }) {
+/** The shop's stock word for a cart line's product and option. */
+function lineStock(stock: StockStates, line: CartLine) {
+  const option = line.optionIndex === undefined ? undefined : findShopProduct(line.productId)?.options?.[line.optionIndex];
+  return stockOf(stock, line.productId, option?.label);
+}
+
+function CartLineRow({ line, state, onChange }: { line: CartLine; state: 'out' | 'low' | undefined; onChange: (qty: number) => void }) {
   const product = findShopProduct(line.productId);
   if (!product) return null;
   const option = line.optionIndex === undefined ? undefined : product.options?.[line.optionIndex];
@@ -120,6 +136,7 @@ function CartLineRow({ line, onChange }: { line: CartLine; onChange: (qty: numbe
             {option?.label ?? line.note}
           </Text>
         )}
+        {state && <Text style={[styles.lineStock, state === 'out' && styles.lineStockOut]}>{state === 'out' ? 'Out of stock' : 'Low stock'}</Text>}
         <View style={styles.lineFooter}>
           <Text style={[type.headline, styles.linePrice]}>{price === undefined ? 'From catalogue' : formatINR(price * line.qty)}</Text>
           <QtyStepper value={line.qty} onChange={onChange} label={product.code} removable />
@@ -147,6 +164,8 @@ const styles = StyleSheet.create({
   lineCopy: { flex: 1, gap: 2 },
   lineCode: { ...type.caption1, color: colors.secondaryLabel, fontWeight: '500' },
   lineDetail: { ...type.footnote, color: colors.secondaryLabel },
+  lineStock: { ...type.footnote, fontWeight: '600', color: colors.orange },
+  lineStockOut: { color: colors.red },
   lineFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 },
   linePrice: { flexShrink: 1 },
   continue: { marginTop: 8, alignSelf: 'center' },

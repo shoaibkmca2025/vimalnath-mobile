@@ -45,12 +45,16 @@ export type SyncStatus = {
   lastSyncedAt?: string;
   error?: string;
   centralOrders: CentralOrder[];
+  /** The bell's number: order updates and shop messages not yet seen on the Notifications screen. */
+  unread: number;
 };
+/** One row of the Notifications screen. A tap opens the order it is about, if any. */
+export type AppNotification = { id: string; event: string; title: string; body: string; data: { orderId?: string; shopOrderId?: string }; createdAt: string; read: boolean };
 type Profile = { name: string; business: string; phone: string; email: string; city: string };
 type Activity = { type: 'price_view' | 'catalogue_view'; productId?: string; productName?: string; optionIndex?: number; optionLabel?: string; price?: number };
 type QueueEvent = { eventId: string; path: 'orders' | 'profile' | 'activity'; body: Record<string, unknown> };
 type Outbox = { deviceId: string; customerId?: string; baseUrl?: string; events: QueueEvent[] };
-type RemoteOrders = { customerId: string; orders: CentralOrder[] };
+type RemoteOrders = { customerId: string; orders: CentralOrder[]; unread?: number };
 
 const CONNECTION_KEY = 'vimalnath:admin-connection:v1';
 const OUTBOX_KEY = 'vimalnath:admin-outbox:v1';
@@ -63,7 +67,7 @@ const MAX_QUEUE_CHARACTERS = 750_000;
 const DEFAULT: AdminConnection = { enabled: false, baseUrl: '', deviceToken: '', activitySharing: false, allowLocalHttp: false };
 let connection = { ...DEFAULT };
 let outbox: Outbox = { deviceId: '', events: [] };
-let current: SyncStatus = { connection, connected: false, syncing: false, pending: 0, centralOrders: [] };
+let current: SyncStatus = { connection, connected: false, syncing: false, pending: 0, centralOrders: [], unread: 0 };
 let loaded: Promise<void> | undefined;
 let storageError: string | undefined;
 let serial: Promise<unknown> = Promise.resolve();
@@ -194,7 +198,7 @@ async function connectAdmin(input: Omit<AdminConnection, 'enabled' | 'customerId
     connection = next;
     outbox = { ...outbox, customerId, baseUrl: config.baseUrl };
     await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(outbox));
-    publish({ connected: true, error: undefined, centralOrders: remote.orders });
+    publish({ connected: true, error: undefined, centralOrders: remote.orders, unread: remote.unread ?? 0 });
   });
   await syncAdmin();
 }
@@ -243,11 +247,12 @@ export async function logOut(): Promise<void> {
   await request({ ...connection }, 'logout', {});
   await locked(async () => {
     // Orders go before the account: if the app stops in between, no other account can pick them up.
-    await AsyncStorage.multiRemove([ORDERS_KEY, PROFILE_KEY]);
+    // Also the last delivery address (PlaceOrderSheet), so the next account on this phone doesn't see it.
+    await AsyncStorage.multiRemove([ORDERS_KEY, PROFILE_KEY, 'vimalnath:delivery-address']);
     connection = { ...DEFAULT };
     outbox = { deviceId: outbox.deviceId, events: [] };
     await AsyncStorage.multiSet([[OUTBOX_KEY, JSON.stringify(outbox)], [CONNECTION_KEY, JSON.stringify(connection)]]);
-    publish({ connected: false, centralOrders: [], lastSyncedAt: undefined, error: undefined });
+    publish({ connected: false, centralOrders: [], unread: 0, lastSyncedAt: undefined, error: undefined });
   });
 }
 
@@ -369,7 +374,7 @@ export function syncAdmin(): Promise<void> {
       if (connection.enabled) {
         const fresh = await request<RemoteOrders>(config, 'orders');
         remoteIdentity(fresh);
-        publish({ connected: true, centralOrders: fresh.orders, lastSyncedAt: new Date().toISOString(), error: undefined });
+        publish({ connected: true, centralOrders: fresh.orders, unread: fresh.unread ?? 0, lastSyncedAt: new Date().toISOString(), error: undefined });
       }
     } catch (error) { report(error); }
     finally { publish({ syncing: false }); }
@@ -391,6 +396,25 @@ export async function respondToShopOrder(id: string, decision: 'confirm' | 'decl
   if (!connection.enabled) throw new Error('Log in first.');
   const result = await request<{ orders: CentralOrder[] }>({ ...connection }, `orders/${encodeURIComponent(id)}/respond`, { decision });
   publish({ connected: true, centralOrders: result.orders, error: undefined, lastSyncedAt: new Date().toISOString() });
+}
+
+/** The Notifications screen's list, newest first (up to 100). */
+export async function fetchNotifications(): Promise<AppNotification[]> {
+  await initializeAdminSync();
+  if (!connection.enabled) throw new Error('Log in first.');
+  return (await request<{ notifications: AppNotification[] }>({ ...connection }, 'notifications')).notifications;
+}
+
+/** Seen: clears the bell here and on the shop's side. */
+export async function markNotificationsRead(): Promise<void> {
+  await request({ ...connection }, 'notifications/read', {});
+  publish({ unread: 0 });
+}
+
+export function useUnreadNotifications() {
+  const [unread, setUnread] = useState(() => current.unread);
+  useEffect(() => subscribeAdminSync((status) => setUnread(status.unread)), []);
+  return unread;
 }
 
 export function startAdminSync() {

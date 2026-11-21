@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createDecipheriv, createECDH, createPublicKey, hkdfSync, randomBytes, verify } from 'node:crypto';
 import { test } from 'node:test';
 
 import type postgres from 'postgres';
@@ -7,7 +8,7 @@ import { createApp } from '../src/app.ts';
 import { appRoutes, appUserAdminRoutes } from '../src/app-users.ts';
 import { importSeed } from '../src/import-data.ts';
 import { migrate } from '../src/migrate.ts';
-import { DeviceGone, notificationRoutes, sendQueued, type Message } from '../src/notifications.ts';
+import { DeviceGone, notificationRoutes, realSenders, sendQueued, type Message } from '../src/notifications.ts';
 import { orderAdminRoutes } from '../src/orders.ts';
 import { adminRoutes, issuePasswordLink } from '../src/staff.ts';
 import { seed } from './seed-fixture.ts';
@@ -81,12 +82,108 @@ test('staff moving an order on queues a push for a phone that takes notification
     { channel: push!.channel, recipient: push!.recipient, title: push!.title, body: push!.body, data: push!.data },
     { channel: 'push', recipient: TOKEN, title: `Order ${order.number} confirmed`, body: `Vimalnath has confirmed your order ${order.number}.`, data: { orderId: order.phoneOrderId } },
   );
-  // Packing is the warehouse's step, not news for the customer; a phone without notifications gets nothing.
+  // Packing is the warehouse's step, not news for the customer.
   await send('/v1/admin/orders/status', 'POST', { ids: [order.id], status: 'packed' }, owner);
   assert.equal((await queued(order.id)).length, 1);
+  // A phone without a push address (the web app) keeps it for its Notifications screen, and nothing is sent.
   const quiet = await phoneWithOrder(owner);
   await send('/v1/admin/orders/status', 'POST', { ids: [quiet.id], status: 'dispatched' }, owner);
-  assert.equal((await queued(quiet.id)).length, 0);
+  assert.deepEqual((await queued(quiet.id)).map((row) => [row.channel, row.recipient, row.status]), [['push', '', 'skipped']]);
+});
+
+test('the app’s Notifications screen: this account’s updates and the shop’s messages, newest first; opening it clears the bell', { skip }, async () => {
+  const owner = await staff('owner');
+  const mine = await phoneWithOrder(owner);
+  const theirs = await phoneWithOrder(owner);
+  const bell = async (auth: Record<string, string>) => ((await (await send('/v1/app/orders', 'GET', undefined, auth)).json()) as { unread: number }).unread;
+  type Item = { event: string; title: string; data: Record<string, string>; read: boolean };
+  const inbox = async (auth: Record<string, string>) => ((await (await send('/v1/app/notifications', 'GET', undefined, auth)).json()) as { notifications: Item[] }).notifications;
+  assert.equal(await bell(mine.auth), 0);
+
+  await send('/v1/admin/orders/status', 'POST', { ids: [mine.id], status: 'confirmed' }, owner);
+  await send('/v1/admin/orders/status', 'POST', { ids: [mine.id], status: 'dispatched' }, owner);
+  const broadcast = await send('/v1/admin/notifications/broadcast', 'POST', { title: 'Closed on Sunday', body: 'For Diwali.' }, owner);
+  assert.equal(((await broadcast.json()) as { users: number }).users > 0, true);
+  assert.equal(await bell(mine.auth), 3);
+  const items = await inbox(mine.auth);
+  assert.deepEqual(
+    items.map((item) => [item.event, item.title, item.read]),
+    [['broadcast', 'Closed on Sunday', false], ['dispatched', `Order ${mine.number} dispatched`, false], ['confirmed', `Order ${mine.number} confirmed`, false]],
+  );
+  assert.deepEqual(items[1]!.data, { orderId: mine.phoneOrderId });
+  // Only this account's orders: the other customer sees the shop's message, not this order.
+  assert.deepEqual((await inbox(theirs.auth)).map((item) => item.event), ['broadcast']);
+
+  assert.equal((await send('/v1/app/notifications/read', 'POST', {}, mine.auth)).status, 200);
+  assert.equal(await bell(mine.auth), 0);
+  assert.deepEqual((await inbox(mine.auth)).map((item) => item.read), [true, true, true]);
+  assert.equal(await bell(theirs.auth), 1);
+  assert.equal((await send('/v1/app/notifications', 'GET', undefined, { Authorization: 'Bearer nope' })).status, 401);
+});
+
+test('web push: the web app registers its browser; messages are signed by the shop, readable only by that browser, and carry the icon’s number', { skip }, async () => {
+  const owner = await staff('owner');
+  const order = await phoneWithOrder(owner);
+  const { publicKey } = (await (await send('/v1/app/push-key', 'GET', undefined, order.auth)).json()) as { publicKey: string };
+  assert.equal(Buffer.from(publicKey, 'base64url').length, 65);
+  assert.equal((await (await send('/v1/app/push-key', 'GET', undefined, order.auth)).json()).publicKey, publicKey, 'the same key every time');
+
+  // The phone's browser: its own key pair and secret, as PushManager.subscribe() makes them.
+  const browser = createECDH('prime256v1');
+  const keys = { p256dh: browser.generateKeys().toString('base64url'), auth: randomBytes(16).toString('base64url') };
+  const endpoint = 'https://fcm.googleapis.com/fcm/send/phone-1';
+  for (const fake of ['https://evil.example/fcm.googleapis.com', 'http://fcm.googleapis.com/x', 'https://fcm.googleapis.com.evil.example/x']) {
+    assert.equal((await send('/v1/app/push-token', 'POST', { token: { endpoint: fake, keys } }, order.auth)).status, 400, fake);
+  }
+  assert.equal((await send('/v1/app/push-token', 'POST', { token: { endpoint, keys } }, order.auth)).status, 200);
+
+  await sql`update notification_log set status = 'sent' where status = 'pending'`;
+  await send('/v1/admin/orders/status', 'POST', { ids: [order.id], status: 'confirmed' }, owner);
+  const posted: { url: string; headers: Headers; body: Buffer }[] = [];
+  const answer = { status: 201 };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    posted.push({ url, headers: new Headers(init.headers), body: Buffer.from(init.body as Uint8Array) });
+    return new Response(null, { status: answer.status });
+  }) as typeof fetch;
+  try {
+    await sendQueued(sql, realSenders({ ADMIN_ORIGIN: ORIGIN }, sql));
+    assert.equal(posted.length, 1);
+    const [{ url, headers, body }] = posted as [(typeof posted)[0]];
+    assert.equal(url, endpoint);
+    assert.equal(headers.get('content-encoding'), 'aes128gcm');
+
+    // Signed by the shop: the push service checks this token against the key the browser subscribed with.
+    const [, token, key] = /^vapid t=([^,]+), k=(.+)$/.exec(headers.get('authorization')!)!;
+    assert.equal(key, publicKey);
+    const [head, claims, signature] = token!.split('.') as [string, string, string];
+    const point = Buffer.from(publicKey, 'base64url');
+    const shopKey = createPublicKey({ key: { kty: 'EC', crv: 'P-256', x: point.subarray(1, 33).toString('base64url'), y: point.subarray(33).toString('base64url') }, format: 'jwk' });
+    assert.ok(verify('sha256', Buffer.from(`${head}.${claims}`), { key: shopKey, dsaEncoding: 'ieee-p1363' }, Buffer.from(signature, 'base64url')));
+    const claimed = JSON.parse(Buffer.from(claims, 'base64url').toString());
+    assert.deepEqual([claimed.aud, claimed.sub], ['https://fcm.googleapis.com', ORIGIN]);
+
+    // Readable by that browser alone (RFC 8291): decrypted here with its private key.
+    const salt = body.subarray(0, 16);
+    const ours = body.subarray(21, 21 + body[20]!);
+    const ikm = Buffer.from(hkdfSync('sha256', browser.computeSecret(ours), Buffer.from(keys.auth, 'base64url'), Buffer.concat([Buffer.from('WebPush: info\0'), Buffer.from(keys.p256dh, 'base64url'), ours]), 32));
+    const decipher = createDecipheriv('aes-128-gcm', Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: aes128gcm\0'), 16)), Buffer.from(hkdfSync('sha256', ikm, salt, Buffer.from('Content-Encoding: nonce\0'), 12)));
+    const sealed = body.subarray(21 + body[20]!);
+    decipher.setAuthTag(sealed.subarray(-16));
+    const plain = Buffer.concat([decipher.update(sealed.subarray(0, -16)), decipher.final()]);
+    assert.equal(plain.at(-1), 2);
+    assert.deepEqual(JSON.parse(plain.subarray(0, -1).toString()), { title: `Order ${order.number} confirmed`, body: `Vimalnath has confirmed your order ${order.number}.`, data: { orderId: order.phoneOrderId }, badge: 1 });
+    assert.equal((await sql`select status from notification_log where order_id = ${order.id} and channel = 'push'`)[0]!.status, 'sent');
+
+    // The customer turned notifications off: the push service says the address is gone, and the server forgets it.
+    answer.status = 410;
+    await send('/v1/admin/orders/status', 'POST', { ids: [order.id], status: 'dispatched' }, owner);
+    await sendQueued(sql, realSenders({ ADMIN_ORIGIN: ORIGIN }, sql));
+    assert.equal(posted.length, 2);
+    assert.equal((await sql`select count(*)::int as n from app_devices where push_token like ${`%${endpoint}%`}`)[0]!.n, 0);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 test('sending: delivered once; a failure is tried three times; email without SMTP is skipped; a phone Expo no longer knows is dropped', { skip }, async () => {
@@ -140,7 +237,9 @@ test('the Owner edits wording and recipients and broadcasts; others can’t; bad
   await phoneWithOrder(owner, 'ExponentPushToken[blocked]');
   await sql`update app_devices set blocked = true where push_token = 'ExponentPushToken[blocked]'`;
   const devices = Number((await sql`select count(*) from app_devices where push_token is not null and not blocked`)[0]!.count);
-  const broadcast = (await (await send('/v1/admin/notifications/broadcast', 'POST', { title: 'New price list', body: 'The Feb 2027 prices are in the app.' }, owner)).json()) as { queued: number };
+  const users = Number((await sql`select count(*) from app_devices where not blocked`)[0]!.count);
+  const broadcast = (await (await send('/v1/admin/notifications/broadcast', 'POST', { title: 'New price list', body: 'The Feb 2027 prices are in the app.' }, owner)).json()) as { queued: number; users: number };
   assert.equal(broadcast.queued, devices);
-  assert.ok(devices > 0);
+  assert.equal(broadcast.users, users);
+  assert.ok(devices > 0 && users > devices);
 });

@@ -9,8 +9,10 @@ import { readCalculators } from './calculators.ts';
 import { readCatalogue } from './catalogue.ts';
 import { readContent } from './content.ts';
 import { customerPhoto } from './media.ts';
+import { appInbox, appUnread, isPushService, webPushKeys } from './notifications.ts';
 import { AppOrder, appOrders, placeOrder, respondToRequest } from './orders.ts';
 import { countAttempt, dummyHash, hashPassword, MAX_ATTEMPTS, newToken, only, passwordMatches, sha256, type Env } from './staff.ts';
+import { appStock } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
 
 // The app sends its updates strictly in order and stops at the first one refused, so free text
@@ -43,8 +45,15 @@ const ActivityEvent = z.object({
  * switched off, stay in the admin.
  */
 export async function appContent(sql: Sql) {
-  const [{ products, categories, catalogues, catalogPages }, { cutlist, sections }, { banners, videoSections, moreApps, settings }] = await Promise.all([readCatalogue(sql), readCalculators(sql), readContent(sql)]);
+  const [{ products, categories, catalogues, catalogPages }, { cutlist, sections }, { banners, videoSections, moreApps, settings }, stock] = await Promise.all([
+    readCatalogue(sql),
+    readCalculators(sql),
+    readContent(sql),
+    appStock(sql),
+  ]);
   return {
+    // Out or low, by product and option: the app marks them and won't add an item that's out to the cart.
+    stock,
     products: products.filter((product) => product.visible).map(({ visible: _, ...product }) => product),
     categories: categories.filter((category) => category.visible).map(({ visible: _, ...category }) => category),
     catalogPages,
@@ -57,6 +66,13 @@ export async function appContent(sql: Sql) {
     settings,
   };
 }
+
+const ExpoToken = z.string().regex(/^Expo(nent)?PushToken\[[\w-]+\]$/, 'That is not an Expo push token.');
+/** A browser's push subscription. Only the browsers' own push services: the server will post to this address. */
+const BrowserSubscription = z.object({
+  endpoint: z.string().max(1000).refine(isPushService, 'That is not a browser push service.'),
+  keys: z.object({ p256dh: z.string().regex(/^[\w-]{80,100}$/, 'That is not a browser key.'), auth: z.string().regex(/^[\w-]{16,40}$/, 'That is not a browser key.') }),
+});
 
 /** Everything under /v1/app: the customer's phone, signed in with the token the shop gave them. */
 export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boolean } = {}) {
@@ -122,7 +138,18 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
 
   // The app calls this around every sync: customerId pins the phone to one customer, and
   // mobileEventId tells it which of its orders have arrived, so it never sends one twice.
-  app.get('/orders', async (c) => c.json({ customerId: String(c.get('deviceId')), orders: await appOrders(sql, c.get('deviceId')) }));
+  // `unread` is the number on the app's bell.
+  app.get('/orders', async (c) => {
+    const [orders, unread] = await Promise.all([appOrders(sql, c.get('deviceId')), appUnread(sql, c.get('deviceId'))]);
+    return c.json({ customerId: String(c.get('deviceId')), orders, unread });
+  });
+
+  // The Notifications screen, and its "seen": opening it clears the bell.
+  app.get('/notifications', async (c) => c.json({ notifications: await appInbox(sql, c.get('deviceId')) }));
+  app.post('/notifications/read', async (c) => {
+    await sql`update notification_log set read_at = now() where device_id = ${c.get('deviceId')} and channel = 'push' and read_at is null`;
+    return c.json({ unread: 0 });
+  });
 
   app.post('/orders', jsonBody(OrderEvent), async (c) => {
     const { eventId, order } = c.req.valid('json');
@@ -152,11 +179,17 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
     return c.json(c.req.query('have') === version ? { version } : { version, content });
   });
 
-  // Module 3.5: where Expo should send this phone's notifications; null when the person turns them off.
-  app.post('/push-token', jsonBody(z.object({ token: z.string().regex(/^Expo(nent)?PushToken\[[\w-]+\]$/, 'That is not an Expo push token.').nullable() })), async (c) => {
-    await sql`update app_devices set push_token = ${c.req.valid('json').token} where id = ${c.get('deviceId')}`;
+  // Module 3.5: where this phone's notifications go; null when the person turns them off. The native app sends Expo's
+  // token; the web app on a home screen its browser's push subscription, kept as JSON.
+  app.post('/push-token', jsonBody(z.object({ token: z.union([ExpoToken, BrowserSubscription]).nullable() })), async (c) => {
+    const { token } = c.req.valid('json');
+    const address = token && typeof token === 'object' ? JSON.stringify({ endpoint: token.endpoint, keys: token.keys }) : token;
+    await sql`update app_devices set push_token = ${address} where id = ${c.get('deviceId')}`;
     return c.json({ received: true });
   });
+
+  // The shop's public key, which the web app needs to ask its browser for a push subscription.
+  app.get('/push-key', async (c) => c.json({ publicKey: (await webPushKeys(sql)).publicKey }));
 
   app.post('/profile', jsonBody(ProfileEvent), async (c) => {
     await sql`update app_devices set ${sql(c.req.valid('json').profile)}, profile_updated_at = now() where id = ${c.get('deviceId')}`;

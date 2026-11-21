@@ -10,7 +10,7 @@ import { realSenders, sendQueued } from './notifications.ts';
 const config = loadConfig();
 // Neon injects DATABASE_URL (pooled) and DATABASE_URL_UNPOOLED. Each instance holds a few direct connections.
 const sql = connect(process.env.DATABASE_URL_UNPOOLED ?? config.DATABASE_URL, 5);
-const senders = realSenders(config);
+const senders = realSenders(config, sql);
 const app = buildApi(sql, config);
 
 // Outside /v1, so the Worker's secret isn't needed: Neon strips X-Neon-* headers from callers, so this one proves the

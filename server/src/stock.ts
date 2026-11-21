@@ -75,6 +75,19 @@ export const stockItems = (sql: Sql | TransactionSql, owner: boolean, where = sq
       and not (s.option_label = '' and not exists (select 1 from product_options o where o.product_id = s.product_id))) as orphan
   from stock_items s where ${where} order by s.product_id, s.option_label`;
 
+/**
+ * For the app, by product and option ('' for a product without options): each counted item that is out (none left) or
+ * low (at or below its minimum), the admin's own rules. Only that word goes to phones; counts and prices stay here.
+ */
+export async function appStock(sql: Sql) {
+  const rows = await sql<{ product_id: string; option_label: string; state: 'out' | 'low' }[]>`
+    select product_id, option_label, case when quantity <= 0 then 'out' else 'low' end as state
+    from stock_items where quantity <= 0 or quantity <= min_stock order by product_id, option_label`;
+  const states: Record<string, Record<string, 'out' | 'low'>> = {};
+  for (const row of rows) (states[row.product_id] ??= {})[row.option_label] = row.state;
+  return states;
+}
+
 /** Changes one item's quantity and records why. The update locks the row, so two changes at once both count. */
 export async function move(tx: TransactionSql, item: { productId: string; option: string }, change: number, record: { kind: string; reason?: string; note?: string; orderId?: number; purchaseId?: number; by: string }) {
   const [row] = await tx`

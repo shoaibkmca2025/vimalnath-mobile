@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandLockup } from '@/components/BrandLockup';
 import { CartButton } from '@/components/CartButton';
 import { MenuButton } from '@/components/MenuDrawer';
+import { NotificationsButton } from '@/components/NotificationsButton';
 import { SavedPdfsButton } from '@/components/SavedPdfsButton';
 import { colors, space, type } from '@/theme';
 
@@ -91,6 +92,7 @@ export function Screen({ title, subtitle, back, titleDisplay = 'large', trailing
           <View style={styles.trailing}>
             {trailing === undefined ? (
               <>
+                <NotificationsButton />
                 <SavedPdfsButton />
                 <CartButton />
               </>

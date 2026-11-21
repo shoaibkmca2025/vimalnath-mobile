@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
 import { withTimeout } from '@/lib/pdf-html';
+import { shareHtmlAsPdf } from '@/lib/web-pdf';
 
 const PDF_MIME = 'application/pdf';
 // A4 at 72 PPI.
@@ -55,15 +56,10 @@ export async function savePdfFile(uri: string, fileName: string): Promise<SavePd
   return saveFile(namedCopy(uri, fileName), fileName);
 }
 
-/** On web there is no file to hand over, so open the browser print dialog, where "Save as PDF" is available. */
-async function printOnWeb(html: string) {
-  // printToFileAsync (not printAsync) is used here because on web it prints the given HTML rather than the page.
-  await withTimeout(Print.printToFileAsync({ html, ...A4 }), 20000, 'Opening print dialog');
-}
-
 /** Opens the system share sheet (WhatsApp, Gmail, Drive, Bluetooth, …) with the PDF attached. */
 export async function sharePdf(html: string, fileName: string, dialogTitle: string): Promise<void> {
-  if (Platform.OS === 'web') return printOnWeb(html);
+  // Web (incl. the home-screen app): expo-print can't make a file there, so the PDF is built in the browser.
+  if (Platform.OS === 'web') return shareHtmlAsPdf(html, fileName);
 
   const file = await renderPdf(html, fileName);
   if (!(await withTimeout(Sharing.isAvailableAsync(), 5000, 'Checking sharing availability'))) {
@@ -79,11 +75,11 @@ export type SavePdfOutcome = { saved: true; location: string } | { saved: false 
  * Saves the PDF to the phone's storage.
  * - Android: the person picks a folder (e.g. Download or Documents) and the PDF is written there.
  * - iOS: apps can't write to shared storage directly, so the share sheet opens; "Save to Files" is in it.
- * - Web: the print dialog opens, where "Save as PDF" is available.
+ * - Web: the share sheet opens with the PDF ("Save to Files" on iPhone); a computer downloads it.
  */
 export async function savePdf(html: string, fileName: string): Promise<SavePdfOutcome> {
   if (Platform.OS === 'web') {
-    await printOnWeb(html);
+    await shareHtmlAsPdf(html, fileName);
     return { saved: false };
   }
 

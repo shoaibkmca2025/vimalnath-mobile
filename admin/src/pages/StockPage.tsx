@@ -281,7 +281,7 @@ export default function StockPage() {
     <>
       <PageHeader
         title="Stock"
-        description="What the shop has of each product option. Delivered orders take their items from stock; an order moved back from delivered returns them. Items not counted yet aren’t touched."
+        description="What the shop has of each product option. Delivered orders take their items from stock; an order moved back from delivered returns them. Items not counted yet aren’t touched. In the app, an item at 0 shows Out of stock and can’t be ordered; one at or below its minimum shows Low stock."
         actions={
           <>
             {owner && (

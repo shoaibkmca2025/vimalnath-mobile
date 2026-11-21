@@ -72,7 +72,7 @@ test('connect: the token from the admin opens the app routes, and nothing else d
   const { id, phone } = await customer();
   const res = await phone('/orders');
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { customerId: String(id), orders: [] });
+  assert.deepEqual(await res.json(), { customerId: String(id), orders: [], unread: 0 });
   assert.equal((await phone('/orders', undefined, 'not-the-token')).status, 401);
   assert.equal((await send('/v1/app/orders')).status, 401);
 });
@@ -161,7 +161,7 @@ test('web version: the browser may call the app routes from another address', { 
 
 test('register: one account per mobile number, however it is typed; the token opens the app routes', { skip }, async () => {
   const { id, phone, mobile } = await customer('Meera Interiors');
-  assert.deepEqual(await (await phone('/orders')).json(), { customerId: String(id), orders: [] });
+  assert.deepEqual(await (await phone('/orders')).json(), { customerId: String(id), orders: [], unread: 0 });
   const row = await appUser(id);
   assert.deepEqual([row.name, row.phone], ['Meera Interiors', mobile]);
 
