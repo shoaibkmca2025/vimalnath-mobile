@@ -18,9 +18,10 @@ function integerWords(value: number): string {
   return [crore ? `${integerWords(crore)} Crore` : '', lakh ? `${twoDigits(lakh)} Lakh` : '', thousand ? `${twoDigits(thousand)} Thousand` : '', rest ? threeDigits(rest) : ''].filter(Boolean).join(' ');
 }
 
-/** "Rupees One Thousand Two Hundred and Fifty Paise Only", as printed on a tax invoice. */
+/** As the shop's invoices print it: "INR Four Thousand Three Hundred Sixty Eight and Seventy paise Only". */
 export function rupeesInWords(amount: number) {
-  const rupees = Math.floor(Math.abs(amount));
-  const paise = Math.round((Math.abs(amount) - rupees) * 100);
-  return `Rupees ${integerWords(rupees)}${paise ? ` and ${twoDigits(paise)} Paise` : ''} Only`;
+  const paiseTotal = Math.round(Math.abs(amount) * 100);
+  const rupees = Math.floor(paiseTotal / 100);
+  const paise = paiseTotal % 100;
+  return `INR ${integerWords(rupees)}${paise ? ` and ${twoDigits(paise)} paise` : ''} Only`;
 }

@@ -265,18 +265,37 @@ export type GstSettings = {
   registrationType: 'regular' | 'composition';
   invoicePrefix: string;
   terms: string;
+  /** Printed under the shop's address: phone numbers and email. */
+  phone: string;
+  email: string;
+  bankName: string;
+  bankAccount: string;
+  bankBranchIfsc: string;
+  declaration: string;
+  /** e.g. SUBJECT TO NASHIK JURISDICTION */
+  jurisdiction: string;
   updatedBy?: string | null;
   updatedAt?: string | null;
+  /** This financial year (26-27) and the last invoice number used in it. */
+  financialYear?: string;
+  lastInvoiceNumber?: number;
 };
 
-/** One line of a tax invoice: what the buyer pays for it (GST included), and the tax worked out of that. */
+/** One line of a tax invoice, as the shop bills: qty × rate (before GST) less a discount, with its share of the tax. */
 export type InvoiceItem = {
   productId: string;
   option: string;
+  /** The item's code, as the invoice prints it. */
   description: string;
+  /** The smaller line under it, e.g. its name or profile series. */
+  detail: string;
   hsn: string;
   qty: number;
   unit: StockUnit;
+  /** Per unit, before GST. */
+  rate: number;
+  discountPct: number;
+  /** qty × rate less the discount: the line's value before GST. */
   amount: number;
   gstRate: number;
   taxable: number;
@@ -310,6 +329,9 @@ export type SalesInvoice = {
   roundOff: number;
   total: number;
   notes?: string;
+  details?: InvoiceDetails;
+  /** What the buyer owed just before this invoice, fixed when it was posted. */
+  previousBalance?: number;
   items: InvoiceItem[];
   createdBy: string;
   createdAt: string;
@@ -319,6 +341,34 @@ export type SalesInvoice = {
   cancelledAt?: string;
   cancelReason?: string;
 };
+
+/** What a tax invoice prints besides the buyer's GST details: contacts, ship-to, and delivery and order references. */
+export type InvoiceDetails = Partial<
+  Record<
+    | 'buyerContact'
+    | 'buyerPhone'
+    | 'buyerEmail'
+    | 'shipName'
+    | 'shipAddress'
+    | 'shipGstin'
+    | 'shipState'
+    | 'shipContact'
+    | 'shipPhone'
+    | 'shipEmail'
+    | 'deliveryNote'
+    | 'paymentTerms'
+    | 'reference'
+    | 'otherReferences'
+    | 'buyerOrderNo'
+    | 'buyerOrderDate'
+    | 'dispatchDocNo'
+    | 'deliveryNoteDate'
+    | 'dispatchedThrough'
+    | 'destination'
+    | 'deliveryTerms',
+    string
+  >
+>;
 
 /** GST paid to the government, entered from the challan. */
 export type GstPayment = {

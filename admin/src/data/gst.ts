@@ -1,6 +1,6 @@
 import { localDay } from './payments.ts';
 import { lineAmount, r2 } from './purchases.ts';
-import type { GstPayment, ItcStatus, Purchase, SalesInvoice } from './types';
+import type { GstPayment, InvoiceItem, ItcStatus, Purchase, SalesInvoice, StockUnit } from './types';
 
 /**
  * Phase 3, GST (docs/ERP-ROADMAP.md): registers, HSN summary and the GSTR-3B working summary, worked out from posted
@@ -63,6 +63,94 @@ export function rangeOf(choice: RangeChoice, today: string, custom?: { from: str
 }
 
 export const inRange = (day: string, range: Range) => day >= range.from && day <= range.to;
+
+const sumOf = (values: number[]) => r2(values.reduce((total, value) => total + value, 0));
+
+/**
+ * A tax invoice's figures, as the shop bills (and as server/src/gst.ts computeInvoice posts them): each line is
+ * qty × rate less its discount, before GST; GST is worked out on the total at each rate, CGST and SGST at half the
+ * rate each, and shared over the lines; the invoice is rounded to the rupee. VSC-26-27-412: ₹24,270.50 at 18% →
+ * CGST ₹2,184.35 + SGST ₹2,184.35, less ₹0.20 → ₹28,639.
+ */
+export function computeInvoice<T extends { qty: number; rate: number; discountPct: number; gstRate: number }>(items: T[], interstate: boolean) {
+  const lines = items.map((item) => ({ ...item, amount: r2(item.qty * item.rate * (1 - item.discountPct / 100)), cgst: 0, sgst: 0, igst: 0 }));
+  const heads: Heads = zero();
+  for (const rate of [...new Set(lines.map((line) => line.gstRate))]) {
+    const group = lines.filter((line) => line.gstRate === rate);
+    const taxable = sumOf(group.map((line) => line.amount));
+    const parts: [keyof Heads, number][] = interstate ? [['igst', r2((taxable * rate) / 100)]] : [['cgst', r2((taxable * rate) / 200)], ['sgst', r2((taxable * rate) / 200)]];
+    for (const [head, total] of parts) {
+      heads[head] = r2(heads[head] + total);
+      let left = total;
+      group.forEach((line, index) => {
+        const share = index === group.length - 1 ? left : r2(taxable ? (total * line.amount) / taxable : 0);
+        line[head] = share;
+        left = r2(left - share);
+      });
+    }
+  }
+  const taxable = sumOf(lines.map((line) => line.amount));
+  const exact = r2(taxable + totalOf(heads));
+  const roundOff = r2(Math.round(exact) - exact);
+  return { lines: lines.map((line) => ({ ...line, taxable: line.amount })), taxable, ...heads, roundOff, total: r2(exact + roundOff) };
+}
+
+/** Units as the shop's invoices print them: pieces are NOS. */
+export const PRINT_UNIT: Record<StockUnit, string> = {
+  pcs: 'NOS',
+  box: 'BOX',
+  packet: 'PAC',
+  set: 'SET',
+  feet: 'FT',
+  rft: 'RFT',
+  meter: 'MTR',
+  sqft: 'SQF',
+  sqm: 'SQM',
+  kg: 'KGS',
+  sheet: 'SHEET',
+  length: 'LENGTH',
+};
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** 2026-11-05 → 5-Nov-26, as the invoice prints dates. */
+export const invoiceDay = (day: string) => {
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number];
+  return `${date}-${MONTHS[month - 1]}-${String(year).slice(2)}`;
+};
+
+/** 24270.5 → "24,270.50": the invoice's figures, without the rupee sign. */
+export const invoiceAmount = (value: number) => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value));
+
+/** The tax rows under an invoice's lines, one per head and rate: CGST @9%, SGST @9% (or IGST @18%). */
+export function invoiceTaxRows(items: Pick<InvoiceItem, 'gstRate' | 'cgst' | 'sgst' | 'igst'>[], interstate: boolean) {
+  const rates = [...new Set(items.map((item) => item.gstRate))].filter((rate) => rate > 0).sort((a, b) => a - b);
+  return rates.flatMap((rate) => {
+    const group = items.filter((item) => item.gstRate === rate);
+    const total = (head: keyof Heads) => sumOf(group.map((item) => item[head]));
+    return interstate
+      ? [{ label: `IGST @${rate}%`, rate, amount: total('igst') }]
+      : [
+          { label: `CGST @${rate / 2}%`, rate: rate / 2, amount: total('cgst') },
+          { label: `SGST @${rate / 2}%`, rate: rate / 2, amount: total('sgst') },
+        ];
+  });
+}
+
+export type InvoiceHsnRow = { hsn: string; rate: number; taxable: number; heads: Heads; tax: number };
+
+/** The HSN/SAC table printed under a tax invoice's lines: taxable value and tax for each HSN and rate. */
+export function invoiceHsnTable(items: Pick<InvoiceItem, 'hsn' | 'gstRate' | 'taxable' | 'cgst' | 'sgst' | 'igst'>[]) {
+  const rows = new Map<string, InvoiceHsnRow>();
+  for (const item of items) {
+    const key = `${item.hsn}|${item.gstRate}`;
+    const row = rows.get(key) ?? { hsn: item.hsn, rate: item.gstRate, taxable: 0, heads: zero(), tax: 0 };
+    row.taxable = r2(row.taxable + item.taxable);
+    row.heads = add(row.heads, { igst: item.igst, cgst: item.cgst, sgst: item.sgst });
+    row.tax = totalOf(row.heads);
+    rows.set(key, row);
+  }
+  return [...rows.values()];
+}
 
 /** The period picker's state (components/GstRange), and the days it covers. */
 export type RangeState = { choice: RangeChoice; from: string; to: string };

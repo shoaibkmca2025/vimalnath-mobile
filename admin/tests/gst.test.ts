@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { financialYear, hsnSummary, purchaseHeads, rangeOf, summary3b, utilise } from '../src/data/gst.ts';
+import { computeInvoice, financialYear, hsnSummary, invoiceHsnTable, purchaseHeads, rangeOf, summary3b, utilise } from '../src/data/gst.ts';
 import type { Purchase, SalesInvoice } from '../src/data/types.ts';
 import { rupeesInWords } from '../src/lib/words.ts';
 
@@ -38,7 +38,7 @@ const invoice = (extra: Partial<SalesInvoice>): SalesInvoice => ({
   igst: 0,
   roundOff: 0,
   total: 3000,
-  items: [{ productId: 'p1', option: 'SSS', description: 'Handle', hsn: '8302', qty: 2, unit: 'pcs', amount: 3000, gstRate: 18, taxable: 2542.37, cgst: 228.82, sgst: 228.81, igst: 0 }],
+  items: [{ productId: 'p1', option: 'SSS', description: 'Handle', detail: '', hsn: '8302', qty: 2, unit: 'pcs', rate: 1271.19, discountPct: 0, amount: 2542.37, gstRate: 18, taxable: 2542.37, cgst: 228.82, sgst: 228.81, igst: 0 }],
   createdBy: 'Asha',
   createdAt: '',
   ...extra,
@@ -103,8 +103,33 @@ test('HSN summary: grouped by HSN and rate, with each group’s documents counte
   assert.deepEqual(purchaseHeads(bill({ tax: 180.01 })), { igst: 0, cgst: 90.01, sgst: 90 });
 });
 
-test('amount in words: the Indian way, with paise', () => {
-  assert.equal(rupeesInWords(125430), 'Rupees One Lakh Twenty Five Thousand Four Hundred Thirty Only');
-  assert.equal(rupeesInWords(23500000.5), 'Rupees Two Crore Thirty Five Lakh and Fifty Paise Only');
-  assert.equal(rupeesInWords(0), 'Rupees Zero Only');
+test('amount in words: as the shop’s invoices print it, the Indian way', () => {
+  assert.equal(rupeesInWords(28639), 'INR Twenty Eight Thousand Six Hundred Thirty Nine Only');
+  assert.equal(rupeesInWords(4368.7), 'INR Four Thousand Three Hundred Sixty Eight and Seventy paise Only');
+  assert.equal(rupeesInWords(125430), 'INR One Lakh Twenty Five Thousand Four Hundred Thirty Only');
+  assert.equal(rupeesInWords(23500000.5), 'INR Two Crore Thirty Five Lakh and Fifty paise Only');
+  assert.equal(rupeesInWords(0.29), 'INR Zero and Twenty Nine paise Only');
+  assert.equal(rupeesInWords(0), 'INR Zero Only');
+});
+
+test('invoice: VSC-26-27-412 to the paisa, with its HSN table', () => {
+  const lines = [
+    { hsn: '76042100', qty: 10, rate: 2245, discountPct: 47, gstRate: 18 },
+    { hsn: '76042100', qty: 10, rate: 840, discountPct: 47, gstRate: 18 },
+    { hsn: '76042990', qty: 11, rate: 720, discountPct: 0, gstRate: 18 },
+  ];
+  const figures = computeInvoice(lines, false);
+  assert.deepEqual(
+    figures.lines.map((line) => line.amount),
+    [11898.5, 4452, 7920],
+  );
+  assert.deepEqual([figures.taxable, figures.cgst, figures.sgst, figures.igst, figures.roundOff, figures.total], [24270.5, 2184.35, 2184.35, 0, -0.2, 28639]);
+  assert.deepEqual(
+    invoiceHsnTable(figures.lines).map((row) => [row.hsn, row.taxable, row.heads.cgst, row.heads.sgst, row.tax]),
+    [
+      ['76042100', 16350.5, 1471.55, 1471.55, 2943.1],
+      ['76042990', 7920, 712.8, 712.8, 1425.6],
+    ],
+  );
+  assert.deepEqual([computeInvoice([{ qty: 1, rate: 1000, discountPct: 0, gstRate: 18 }], true).igst, computeInvoice([{ qty: 1, rate: 1000, discountPct: 0, gstRate: 18 }], true).total], [180, 1180]);
 });

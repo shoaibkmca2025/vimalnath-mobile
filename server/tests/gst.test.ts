@@ -6,7 +6,7 @@ import type postgres from 'postgres';
 import type { Purchase, SalesInvoice } from '../../admin/src/data/types.ts';
 import { createApp } from '../src/app.ts';
 import { customerRoutes } from '../src/customers.ts';
-import { financialYear, gstRoutes, stateCode, taxLines } from '../src/gst.ts';
+import { computeInvoice, financialYear, gstRoutes, stateCode } from '../src/gst.ts';
 import { importSeed } from '../src/import-data.ts';
 import { migrate } from '../src/migrate.ts';
 import { orderAdminRoutes } from '../src/orders.ts';
@@ -50,11 +50,16 @@ async function owner() {
   return { Cookie: res.headers.get('set-cookie')!.split(';')[0]! };
 }
 
-/** A confirmed order of 2 × p1 SSS (MRP ₹1,500 each) for a customer with these GST details; its bill can be set. */
-async function order(gst: { gstin?: string; state?: string }, bill?: number) {
+/** A confirmed order of 2 × p1 SSS (MRP ₹1,500 each) for a customer with these GST details (or an existing customer's phone). */
+async function order(gst: { gstin?: string; state?: string; device?: number }, bill?: number) {
   const label = `Buyer ${++next}`;
-  const [customer] = await sql`insert into customers (name, gstin, state, billing_address) values (${label}, ${gst.gstin ?? ''}, ${gst.state ?? ''}, '12 MG Road, Pune') returning id`;
-  const [device] = await sql`insert into app_devices (label, token_hash, customer_id) values (${label}, ${sha256(`t${next}`)}, ${customer!.id}) returning id`;
+  const device = gst.device
+    ? { id: gst.device }
+    : await (async () => {
+        const [customer] = await sql`insert into customers (name, gstin, state, billing_address) values (${label}, ${gst.gstin ?? ''}, ${gst.state ?? ''}, '12 MG Road, Pune') returning id`;
+        const [row] = await sql`insert into app_devices (label, name, phone, token_hash, customer_id) values (${label}, 'Sunil Kadam', '98220 12345', ${sha256(`t${next}`)}, ${customer!.id}) returning id`;
+        return row!;
+      })();
   const [row] = await sql`
     insert into orders (number, device_id, client_event_id, client_order_id, customer, total, bill_amount, placed_at, status)
     values (${`VSC-9${next}`}, ${device!.id}, ${`e${next}`}, ${`o${next}`}, ${label}, 3000, ${bill ?? null}, now(), 'confirmed') returning id`;
@@ -64,9 +69,26 @@ async function order(gst: { gstin?: string; state?: string }, bill?: number) {
 
 const settings = { legalName: 'Vimalnath Sales Corporation', tradeName: 'Vimalnath', gstin: '27AAPFU0939F1ZV', address: 'Shop 4, Pune', pincode: '411001', registrationType: 'regular', invoicePrefix: 'vsc', terms: '' };
 
-test('tax: GST is worked out of the GST-inclusive amount, split CGST + SGST inside the state, IGST outside', () => {
-  assert.deepEqual(taxLines([{ amount: 3000, gstRate: 18 }], false), [{ amount: 3000, gstRate: 18, taxable: 2542.37, cgst: 228.82, sgst: 228.81, igst: 0 }]);
-  assert.deepEqual(taxLines([{ amount: 3000, gstRate: 18 }], true), [{ amount: 3000, gstRate: 18, taxable: 2542.37, cgst: 0, sgst: 0, igst: 457.63 }]);
+test('tax: the shop’s own invoice VSC-26-27-412, worked out the same to the paisa', () => {
+  // Rate before GST, less the line discount; CGST and SGST at 9% each on the total; rounded to the rupee.
+  const invoice = computeInvoice(
+    [
+      { qty: 10, rate: 2245, discountPct: 47, gstRate: 18 },
+      { qty: 10, rate: 840, discountPct: 47, gstRate: 18 },
+      { qty: 11, rate: 720, discountPct: 0, gstRate: 18 },
+    ],
+    false,
+  );
+  assert.deepEqual(
+    invoice.lines.map((line) => line.amount),
+    [11898.5, 4452, 7920],
+  );
+  assert.deepEqual([invoice.taxable, invoice.cgst, invoice.sgst, invoice.igst, invoice.roundOff, invoice.total], [24270.5, 2184.35, 2184.35, 0, -0.2, 28639]);
+  // The lines' shares add up to each head exactly.
+  assert.equal(Math.round(invoice.lines.reduce((total, line) => total + line.cgst, 0) * 100) / 100, 2184.35);
+  // Between states, IGST at the full rate.
+  const igst = computeInvoice([{ qty: 1, rate: 1000, discountPct: 0, gstRate: 18 }], true);
+  assert.deepEqual([igst.igst, igst.cgst, igst.total], [180, 0, 1180]);
   assert.equal(financialYear('2026-11-21'), '26-27');
   assert.equal(financialYear('2027-03-31'), '26-27');
   assert.equal(financialYear('2027-04-01'), '27-28');
@@ -75,38 +97,58 @@ test('tax: GST is worked out of the GST-inclusive amount, split CGST + SGST insi
   assert.equal(stateCode('', 'Atlantis'), '');
 });
 
-test('invoice: from an order, at the bill, with HSN and rate from Stock; posting numbers it per financial year', { skip }, async () => {
+test('invoice: from an order at MRP with Stock’s HSN; posting carries on the series, VSC-26-27-413 after 412', { skip }, async () => {
   const headers = await owner();
-  const local = await order({ gstin: '27AAACR5055K1Z7' }, 2950);
+  const local = await order({ gstin: '27AAACR5055K1Z7' });
   const draft = (await answer(await send('/v1/admin/gst/invoices', 'POST', { orderId: local }, headers))).invoices[0]!;
-  assert.deepEqual([draft.status, draft.number, draft.placeOfSupply, draft.interstate, draft.total], ['draft', undefined, 'Maharashtra', false, 2950]);
-  assert.deepEqual(draft.items.map((item) => [item.hsn, item.gstRate, item.amount, item.taxable, item.cgst, item.sgst, item.igst]), [['8302', 18, 2950, 2500, 225, 225, 0]]);
+  assert.deepEqual([draft.status, draft.number, draft.placeOfSupply, draft.interstate, draft.total], ['draft', undefined, 'Maharashtra', false, 3540]);
+  assert.deepEqual(draft.items.map((item) => [item.description, item.detail, item.hsn, item.gstRate, item.rate, item.discountPct, item.amount, item.cgst, item.sgst]), [
+    ['TGH-55', 'H Type Handle · SSS', '8302', 18, 1500, 0, 3000, 270, 270],
+  ]);
+  assert.deepEqual([draft.details?.buyerContact, draft.details?.buyerPhone, draft.details?.paymentTerms, draft.details?.shipName], ['Sunil Kadam', '98220 12345', 'Credit', draft.customerName]);
+  assert.match(draft.details?.reference ?? '', /^VSC-9\d+ dt\. \d{1,2}-[A-Z][a-z]{2}-\d{2}$/);
+
+  // A 47% dealer discount, and the dispatch details.
+  const edited = await answer(
+    await send(`/v1/admin/gst/invoices/${draft.id}`, 'PUT', { invoiceDate: draft.invoiceDate, customerName: draft.customerName, customerGstin: draft.customerGstin, items: draft.items.map((item) => ({ ...item, discountPct: 47 })), details: { ...draft.details, dispatchedThrough: 'VRL Logistics', dispatchDocNo: '7' } }, headers),
+  );
+  assert.deepEqual([edited.invoices[0]!.taxable, edited.invoices[0]!.cgst, edited.invoices[0]!.total, edited.invoices[0]!.details?.dispatchedThrough], [1590, 143.1, 1876, 'VRL Logistics']);
 
   // Without the shop's GSTIN it can't be posted.
   const unset = await send(`/v1/admin/gst/invoices/${draft.id}/post`, 'POST', undefined, headers);
   assert.deepEqual([unset.status, (await answer(unset)).error.message], [400, 'Fill in the shop’s GSTIN and legal name under GST Settings first.']);
-  assert.equal((await send('/v1/admin/gst/settings', 'PUT', settings, headers)).status, 200);
+  // Carrying on from Tally's last number.
+  const saved = (await (await send('/v1/admin/gst/settings', 'PUT', { ...settings, lastInvoiceNumber: 412 }, headers)).json()) as { lastInvoiceNumber: number };
+  assert.equal(saved.lastInvoiceNumber, 412);
 
   const posted = (await answer(await send(`/v1/admin/gst/invoices/${draft.id}/post`, 'POST', undefined, headers))).invoices[0]!;
   const year = financialYear(new Date().toISOString().slice(0, 10));
-  assert.deepEqual([posted.status, posted.number, posted.sellerGstin], ['posted', `VSC/${year}/0001`, '27AAPFU0939F1ZV']);
+  assert.deepEqual([posted.status, posted.number, posted.sellerGstin, posted.previousBalance], ['posted', `VSC-${year}-413`, '27AAPFU0939F1ZV', 0]);
+  assert.equal((await send('/v1/admin/gst/settings', 'PUT', { ...settings, lastInvoiceNumber: 400 }, headers)).status, 400);
   assert.equal((await send(`/v1/admin/gst/invoices/${draft.id}`, 'PUT', { invoiceDate: posted.invoiceDate, customerName: 'X', items: posted.items }, headers)).status, 409);
   assert.equal((await send('/v1/admin/gst/invoices', 'POST', { orderId: local }, headers)).status, 409);
   // The invoice fixes the order's bill.
   const billing = await send(`/v1/admin/orders/${local}/billing`, 'PUT', { terms: 'credit', bill: 2000 }, headers);
-  assert.deepEqual([billing.status, (await answer(billing)).error.message], [409, `Tax invoice VSC/${year}/0001 fixes this bill. Cancel the invoice to change it.`]);
+  assert.deepEqual([billing.status, (await answer(billing)).error.message], [409, `Tax invoice VSC-${year}-413 fixes this bill. Cancel the invoice to change it.`]);
 
-  // Another state's buyer: IGST, and the next number.
+  // The same buyer's next invoice prints what they owe: the first invoice's ₹1,876.
+  const [placed] = await sql<{ device_id: number }[]>`select device_id from orders where id = ${local}`;
+  const device = placed!.device_id;
+  const next = await order({ device });
+  const second = (await answer(await send('/v1/admin/gst/invoices', 'POST', { orderId: next }, headers))).invoices[0]!;
+  const secondPosted = (await answer(await send(`/v1/admin/gst/invoices/${second.id}/post`, 'POST', undefined, headers))).invoices[0]!;
+  assert.deepEqual([secondPosted.number, secondPosted.previousBalance], [`VSC-${year}-414`, 1876]);
+
+  // Another state's buyer: IGST.
   const other = await order({ gstin: '29AABCU9603R1ZM' });
-  const second = (await answer(await send('/v1/admin/gst/invoices', 'POST', { orderId: other }, headers))).invoices[0]!;
-  assert.deepEqual([second.placeOfSupply, second.interstate, second.igst, second.cgst], ['Karnataka', true, 457.63, 0]);
-  assert.equal((await answer(await send(`/v1/admin/gst/invoices/${second.id}/post`, 'POST', undefined, headers))).invoices[0]!.number, `VSC/${year}/0002`);
+  const third = (await answer(await send('/v1/admin/gst/invoices', 'POST', { orderId: other }, headers))).invoices[0]!;
+  assert.deepEqual([third.placeOfSupply, third.interstate, third.igst, third.cgst], ['Karnataka', true, 540, 0]);
 
   // Cancelling keeps the number; the order can then be invoiced again, with the next number.
   const cancel = await answer(await send(`/v1/admin/gst/invoices/${draft.id}/cancel`, 'POST', { reason: 'Wrong buyer name' }, headers));
-  assert.deepEqual([cancel.invoices[0]!.status, cancel.invoices[0]!.number, cancel.invoices[0]!.cancelReason], ['cancelled', `VSC/${year}/0001`, 'Wrong buyer name']);
+  assert.deepEqual([cancel.invoices[0]!.status, cancel.invoices[0]!.number, cancel.invoices[0]!.cancelReason], ['cancelled', `VSC-${year}-413`, 'Wrong buyer name']);
   const again = (await answer(await send('/v1/admin/gst/invoices', 'POST', { orderId: local }, headers))).invoices[0]!;
-  assert.equal((await answer(await send(`/v1/admin/gst/invoices/${again.id}/post`, 'POST', undefined, headers))).invoices[0]!.number, `VSC/${year}/0003`);
+  assert.equal((await answer(await send(`/v1/admin/gst/invoices/${again.id}/post`, 'POST', undefined, headers))).invoices[0]!.number, `VSC-${year}-415`);
 });
 
 test('invoice: an unregistered buyer without a state can’t be posted; a composition dealer issues none', { skip }, async () => {

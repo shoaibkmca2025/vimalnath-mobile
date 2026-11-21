@@ -9,16 +9,39 @@ import { financialYear } from '@/data/gst';
 import { GSTIN, stateOfGstin } from '@/data/india';
 import { localDay } from '@/data/payments';
 import type { GstSettings } from '@/data/types';
-import { api, type ApiError } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 
-const EMPTY: GstSettings = { legalName: '', tradeName: '', gstin: '', address: '', pincode: '', registrationType: 'regular', invoicePrefix: 'VSC', terms: '' };
+const EMPTY: GstSettings = {
+  legalName: '',
+  tradeName: '',
+  gstin: '',
+  address: '',
+  pincode: '',
+  registrationType: 'regular',
+  invoicePrefix: 'VSC',
+  terms: '',
+  phone: '',
+  email: '',
+  bankName: '',
+  bankAccount: '',
+  bankBranchIfsc: '',
+  declaration: '',
+  jurisdiction: '',
+};
 
-/** The shop's GST registration, printed on every tax invoice, and how invoices are numbered. */
+/** What the form edits: the settings, with the last invoice number as typed. */
+type Draft = Omit<GstSettings, 'lastInvoiceNumber' | 'financialYear' | 'updatedAt' | 'updatedBy'> & { lastInvoiceNumber: string };
+const draftOf = (settings: GstSettings): Draft => {
+  const { lastInvoiceNumber, financialYear: _year, updatedAt: _at, updatedBy: _by, ...rest } = settings;
+  return { ...EMPTY, ...rest, lastInvoiceNumber: String(lastInvoiceNumber ?? 0) };
+};
+
+/** The shop's GST registration, printed on every tax invoice as in Tally, and where the invoice numbers carry on from. */
 export default function GstSettingsPage() {
   const toast = useToast();
   const [saved, setSaved] = useState<GstSettings | null>(null);
-  const [draft, setDraft] = useState<GstSettings>(EMPTY);
+  const [draft, setDraft] = useState<Draft>(() => draftOf(EMPTY));
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -28,7 +51,7 @@ export default function GstSettingsPage() {
       (loaded) => {
         if (!active) return;
         setSaved(loaded);
-        setDraft(loaded);
+        setDraft(draftOf(loaded));
       },
       () => {},
     );
@@ -39,19 +62,26 @@ export default function GstSettingsPage() {
 
   const gstin = draft.gstin.trim().toUpperCase();
   const state = GSTIN.test(gstin) ? stateOfGstin(gstin) : undefined;
-  const dirty = saved !== null && JSON.stringify(draft) !== JSON.stringify(saved);
-  const set = <K extends keyof GstSettings>(key: K, value: GstSettings[K]) => setDraft((current) => ({ ...current, [key]: value }));
+  const dirty = saved !== null && JSON.stringify(draft) !== JSON.stringify(draftOf(saved));
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }));
   const fieldError = (field: string) => (failure?.field === field ? failure.message : null);
-  const year = financialYear(localDay()).label;
+  const year = saved?.financialYear ?? financialYear(localDay()).label;
+  const prefix = draft.invoicePrefix.trim().toUpperCase();
+  const last = /^\d{1,7}$/.test(draft.lastInvoiceNumber.trim()) ? Number(draft.lastInvoiceNumber.trim()) : null;
+  const numberOf = (number: number) => `${prefix ? `${prefix}-` : ''}${year}-${number}`;
 
   const save = async () => {
+    if (last === null) {
+      setFailure(new ApiError('Enter a whole number: 0 if no invoice has been issued this year.', 'lastInvoiceNumber'));
+      return;
+    }
     setSaving(true);
     setFailure(null);
     try {
-      const next = await api<GstSettings>('/gst/settings', 'PUT', { ...draft, gstin, invoicePrefix: draft.invoicePrefix.trim().toUpperCase() });
+      const next = await api<GstSettings>('/gst/settings', 'PUT', { ...draft, gstin, invoicePrefix: prefix, lastInvoiceNumber: last });
       await api('/activity', 'POST', { area: 'settings', summary: 'Updated the GST settings', to: '/gst/settings' }).catch(() => null);
       setSaved(next);
-      setDraft(next);
+      setDraft(draftOf(next));
       toast({ message: 'GST settings saved.' });
     } catch (problem) {
       setFailure(problem as ApiError);
@@ -76,7 +106,7 @@ export default function GstSettingsPage() {
         <Card aria-labelledby="registration-title">
           <CardHeader id="registration-title" title="Registration" description="As on the GST registration certificate." />
           <div className="card__body form-grid">
-            <TextField className="span-2" label="Legal name" required value={draft.legalName} onChange={(event) => set('legalName', event.target.value)} error={fieldError('legalName')} maxLength={150} />
+            <TextField className="span-2" label="Legal name" required value={draft.legalName} onChange={(event) => set('legalName', event.target.value)} error={fieldError('legalName')} maxLength={150} hint="Printed at the top of the invoice and beside the signature." />
             <TextField label="Trade name" value={draft.tradeName} onChange={(event) => set('tradeName', event.target.value)} maxLength={150} />
             <TextField
               label="GSTIN"
@@ -88,7 +118,17 @@ export default function GstSettingsPage() {
               spellCheck={false}
               hint={state ? `State: ${state} (${gstin.slice(0, 2)}) · PAN ${gstin.slice(2, 12)}` : 'Its first two digits are the shop’s state.'}
             />
-            <TextAreaField className="span-2" label="Principal place of business" required value={draft.address} onChange={(event) => set('address', event.target.value)} error={fieldError('address')} rows={2} maxLength={500} />
+            <TextAreaField
+              className="span-2"
+              label="Principal place of business"
+              required
+              value={draft.address}
+              onChange={(event) => set('address', event.target.value)}
+              error={fieldError('address')}
+              rows={2}
+              maxLength={500}
+              hint={state ? `Printed line by line, then “${state} - ${draft.pincode || 'PIN'}, India”.` : 'Printed line by line, as typed.'}
+            />
             <TextField label="PIN code" value={draft.pincode} onChange={(event) => set('pincode', event.target.value)} error={fieldError('pincode')} inputMode="numeric" maxLength={6} />
             <div className="field">
               <span className="field__label">Registration type</span>
@@ -103,11 +143,13 @@ export default function GstSettingsPage() {
               />
               <p className="field__hint">{draft.registrationType === 'composition' ? 'Composition dealers issue bills of supply and claim no input tax credit: tax invoices can’t be posted.' : 'Charges GST on invoices and claims input tax credit. Ask your accountant if unsure.'}</p>
             </div>
+            <TextField label="Contact" value={draft.phone} onChange={(event) => set('phone', event.target.value)} error={fieldError('phone')} maxLength={60} placeholder="e.g. 8698837333, +91-9822632333" />
+            <TextField label="E-mail" type="email" value={draft.email} onChange={(event) => set('email', event.target.value)} error={fieldError('email')} maxLength={120} spellCheck={false} />
           </div>
         </Card>
 
         <Card aria-labelledby="numbering-title">
-          <CardHeader id="numbering-title" title="Invoices" />
+          <CardHeader id="numbering-title" title="Invoice numbers" description="Carry on from the series you use now, so there are no gaps or repeats." />
           <div className="card__body form-grid">
             <TextField
               label="Invoice prefix"
@@ -115,9 +157,42 @@ export default function GstSettingsPage() {
               onChange={(event) => set('invoicePrefix', event.target.value.toUpperCase())}
               error={fieldError('invoicePrefix')}
               maxLength={6}
-              hint={`Numbers look like ${draft.invoicePrefix ? `${draft.invoicePrefix.toUpperCase()}/` : ''}${year}/0001, starting again each financial year (1 April).`}
+              hint={`Numbers look like ${numberOf(412)}, starting again each financial year (1 April).`}
             />
-            <TextAreaField className="span-2" label="Terms printed on invoices" value={draft.terms} onChange={(event) => set('terms', event.target.value)} rows={3} maxLength={1000} placeholder="e.g. Goods once sold will not be taken back. Subject to Pune jurisdiction." />
+            <TextField
+              label={`Last number used in ${year}`}
+              value={draft.lastInvoiceNumber}
+              onChange={(event) => set('lastInvoiceNumber', event.target.value.replace(/[^\d]/g, ''))}
+              error={fieldError('lastInvoiceNumber')}
+              inputMode="numeric"
+              maxLength={7}
+              hint={last === null ? 'Enter 0 if none has been issued this year.' : `The last invoice made in Tally (or here). The next one posted is ${numberOf(last + 1)}.`}
+            />
+          </div>
+        </Card>
+
+        <Card aria-labelledby="bank-title">
+          <CardHeader id="bank-title" title="Company’s bank details" description="Printed under the tax summary, for buyers paying by transfer." />
+          <div className="card__body form-grid">
+            <TextField label="Bank name" value={draft.bankName} onChange={(event) => set('bankName', event.target.value)} maxLength={100} />
+            <TextField label="A/c no." value={draft.bankAccount} onChange={(event) => set('bankAccount', event.target.value)} maxLength={40} inputMode="numeric" spellCheck={false} />
+            <TextField className="span-2" label="Branch & IFS code" value={draft.bankBranchIfsc} onChange={(event) => set('bankBranchIfsc', event.target.value)} maxLength={120} spellCheck={false} />
+          </div>
+        </Card>
+
+        <Card aria-labelledby="print-title">
+          <CardHeader id="print-title" title="Printed at the foot" />
+          <div className="card__body form-grid">
+            <TextAreaField className="span-2" label="Declaration" value={draft.declaration} onChange={(event) => set('declaration', event.target.value)} rows={2} maxLength={500} />
+            <TextField
+              className="span-2"
+              label="Jurisdiction"
+              value={draft.jurisdiction}
+              onChange={(event) => set('jurisdiction', event.target.value)}
+              maxLength={100}
+              placeholder="e.g. SUBJECT TO NASHIK JURISDICTION"
+            />
+            <TextAreaField className="span-2" label="Terms" value={draft.terms} onChange={(event) => set('terms', event.target.value)} rows={2} maxLength={1000} placeholder="e.g. Goods once sold will not be taken back." hint="Optional, printed under the declaration." />
           </div>
         </Card>
 
@@ -127,7 +202,7 @@ export default function GstSettingsPage() {
           </p>
         )}
         <div className="row" style={{ justifyContent: 'flex-end' }}>
-          {dirty && <Button onClick={() => saved && setDraft(saved)}>Discard</Button>}
+          {dirty && <Button onClick={() => saved && setDraft(draftOf(saved))}>Discard</Button>}
           <Button type="submit" variant="primary" disabled={!dirty} loading={saving}>
             Save
           </Button>

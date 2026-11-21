@@ -4,7 +4,7 @@ import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
 import { only, type Env } from './staff.ts';
-import { isInterstate } from './gst.ts';
+import { isInterstate, r2 } from './gst.ts';
 import { GST_RATES, UNITS, move, stockItems } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
 
@@ -38,7 +38,6 @@ const Day = (label: string) =>
     .refine((day) => day >= '2000-01-01', 'Pick a day from 2000 on.')
     // Not after tomorrow in UTC: in India it is already tomorrow for the first 5½ hours of the UTC day.
     .refine((day) => day <= isoDay(new Date(Date.now() + DAY)), 'The day can’t be in the future.');
-const r2 = (value: number) => Math.round(value * 100) / 100;
 const key = (productId: string, option: string) => `${productId}\u0000${option}`;
 const rupees = (amount: number) => `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const UNIT_LABEL: Record<string, string> = { pcs: 'PCS', box: 'BOX', packet: 'PACKET', set: 'SET', feet: 'FEET', rft: 'RFT', meter: 'METER', sqft: 'SQ FT', sqm: 'SQ M', kg: 'KG', sheet: 'SHEET', length: 'LENGTH' };

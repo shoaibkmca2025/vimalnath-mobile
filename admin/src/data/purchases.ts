@@ -11,7 +11,8 @@ export const PURCHASE_STATUS: Record<PurchaseStatus, { label: string; tone: 'war
   cancelled: { label: 'Cancelled', tone: 'neutral', description: 'Kept for the record; any stock it brought in was taken back out' },
 };
 
-export const r2 = (value: number) => Math.round(value * 100) / 100;
+/** To the paisa, half up: 2184.345 → 2184.35 (plain Math.round gives 2184.34, as 2184.345 is stored a hair below). */
+export const r2 = (value: number) => Math.round(value * 100 * (1 + 4 * Number.EPSILON)) / 100;
 
 /** A line's amount before GST, after its discount. */
 export const lineAmount = (item: Pick<PurchaseItem, 'qty' | 'rate' | 'discountPct'>) => r2(item.qty * item.rate * (1 - item.discountPct / 100));
