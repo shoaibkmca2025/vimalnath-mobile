@@ -243,6 +243,23 @@ export type Purchase = {
   cancelledAt?: string;
 };
 
+/** From the app's menu: a rating, a problem report, a suggestion or other feedback. */
+export type AppFeedback = {
+  id: string;
+  rating: number | null;
+  kind: 'feedback' | 'problem' | 'suggestion';
+  message: string;
+  appVersion: string;
+  platform: string;
+  status: 'new' | 'seen' | 'resolved';
+  staffNote: string;
+  handledBy: string | null;
+  handledAt: string | null;
+  createdAt: string;
+  appUser: { id: number; label: string; name: string; business: string; phone: string };
+  customer: { id: number; name: string } | null;
+};
+
 export type ActivityArea = 'orders' | 'purchases' | 'catalogue' | 'calculators' | 'content' | 'settings';
 
 /** One change made in the admin, newest first in the log. */

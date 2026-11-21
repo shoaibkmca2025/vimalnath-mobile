@@ -7,6 +7,7 @@ import { calculatorRoutes } from './calculators.ts';
 import { catalogueRoutes } from './catalogue.ts';
 import type { loadConfig } from './config.ts';
 import { customerRoutes } from './customers.ts';
+import { feedbackAdminRoutes } from './feedback.ts';
 import { contentRoutes } from './content.ts';
 import { mediaAdminRoutes, mediaRoutes } from './media.ts';
 import { notificationRoutes } from './notifications.ts';
@@ -40,6 +41,7 @@ export function buildApi(sql: Sql, config: ReturnType<typeof loadConfig>) {
   admin.route('/stock', stockRoutes(sql));
   admin.route('/purchases', purchaseRoutes(sql));
   admin.route('/suppliers', supplierRoutes(sql));
+  admin.route('/feedback', feedbackAdminRoutes(sql));
   app.route('/v1/admin', admin);
   app.route('/v1/app', appRoutes(sql, { trustProxy: config.TRUST_PROXY }));
   app.route('/v1/media', mediaRoutes(sql));

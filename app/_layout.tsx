@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { NotificationPrompt } from '@/components/NotificationPrompt';
-import { getAdminSyncStatus, initializeAdminSync, startAdminSync, subscribeAdminSync } from '@/lib/admin-sync';
+import { getAdminSyncStatus, initializeAdminSync, startAdminSync, subscribeAdminSync } from '@/lib/admin-sync';
 import { loadSavedContent, startContentSync } from '@/lib/content-sync';
 import { startProfilePhotoSync } from '@/lib/profile-photo';
 import { startPush } from '@/lib/push';
@@ -85,6 +85,7 @@ export default function RootLayout() {
                 <Stack.Screen name="settings" />
                 <Stack.Screen name="more-apps" />
                 <Stack.Screen name="about" />
+                <Stack.Screen name="feedback" />
                 <Stack.Screen name="videos" />
                 <Stack.Screen name="saved-pdfs" />
                 <Stack.Screen name="pdf/[id]" />

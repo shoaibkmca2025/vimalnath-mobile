@@ -1391,3 +1391,41 @@ button.cell-title {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---------- Feedback ---------- */
+
+.stars {
+  display: inline-flex;
+  gap: 1px;
+  color: #e0920f;
+}
+
+.feedback-item {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+}
+
+.feedback-item + .feedback-item {
+  border-top: 1px solid var(--border);
+}
+
+.feedback-item__message {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.rating-bars {
+  display: grid;
+  gap: 6px;
+  max-width: 480px;
+}
+
+.rating-bars__row {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}

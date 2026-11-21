@@ -4,6 +4,7 @@ import {
   BookOpenIcon,
   CalculatorIcon,
   CaretRightIcon,
+  ChatsCircleIcon,
   ClockCounterClockwiseIcon,
   CurrencyInrIcon,
   DeviceMobileIcon,
@@ -39,6 +40,7 @@ import { PageMetaContext, type PageMeta } from '@/components/pageMeta';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ThemeSwitch } from '@/components/ThemeSwitch';
 import { creditDaysOf, isOverdue } from '@/data/payments';
+import { useNewFeedback } from '@/data/feedback';
 import { useRequestNotifications } from '@/data/requestNotifications';
 import { editsStock, seesStock, stockAlerts } from '@/data/stock';
 import { inOrders } from '@/data/requests';
@@ -83,6 +85,9 @@ export function AppShell() {
     icon: ArchiveIcon,
     ...(editsStock(session?.role) ? { count: lowStock.low + lowStock.out, alert: true, alertLabel: 'low or out of stock' } : {}),
   };
+  // What customers send from the app's menu; Owners and Sales read it.
+  const seesFeedback = session?.role === 'owner' || session?.role === 'sales';
+  const newFeedback = useNewFeedback(seesFeedback);
   // The inventory team only works on its own panel, the stock (and its password, under Settings).
   const inventoryOnly = session?.role === 'inventory';
 
@@ -101,6 +106,7 @@ export function AppShell() {
         { to: '/customers', label: 'Customers', icon: UsersThreeIcon },
         ...(session?.role === 'catalogue' ? [] : [{ to: '/payments', label: 'Payments', icon: WalletIcon, count: overdue, alert: true, alertLabel: 'overdue' }]),
         ...(session?.role === 'catalogue' ? [] : [{ to: '/app-users', label: 'App Users', icon: DeviceMobileIcon }]),
+        ...(seesFeedback ? [{ to: '/feedback', label: 'Feedback', icon: ChatsCircleIcon, count: newFeedback, alert: true, alertLabel: 'new' }] : []),
       ],
     },
     // Phase 2 (docs/ERP-ROADMAP.md): Owners only until roles get permissions.
