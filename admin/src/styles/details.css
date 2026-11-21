@@ -1429,3 +1429,82 @@ button.cell-title {
   gap: var(--space-3);
   font-size: var(--text-sm);
 }
+
+/* ---------- GST tax invoice: the same on screen and on paper ---------- */
+
+.tax-invoice {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  font-size: var(--text-sm);
+}
+
+.tax-invoice__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--text);
+}
+
+.tax-invoice__title {
+  text-align: right;
+}
+
+.tax-invoice__title strong {
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+
+.tax-invoice__title dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px var(--space-3);
+  margin: var(--space-2) 0 0;
+  text-align: left;
+}
+
+.tax-invoice__title dt {
+  color: var(--text-2);
+}
+
+.tax-invoice__title dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.tax-invoice__lines th,
+.tax-invoice__lines td {
+  padding: 6px 8px;
+}
+
+.tax-invoice__foot {
+  display: grid;
+  grid-template-columns: 1fr minmax(240px, 320px);
+  gap: var(--space-5);
+}
+
+.tax-invoice__sign {
+  margin-top: var(--space-5);
+  text-align: right;
+}
+
+@media (max-width: 700px) {
+  .tax-invoice__foot {
+    grid-template-columns: 1fr;
+  }
+
+  .tax-invoice__title {
+    text-align: left;
+  }
+}
+
+@media print {
+  .tax-invoice {
+    border: 0;
+    padding: 0;
+    color: #000;
+    font-size: 11px;
+  }
+}
