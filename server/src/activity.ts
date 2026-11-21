@@ -7,7 +7,7 @@ import { jsonBody } from './validate.ts';
 
 // The areas the admin's Activity page groups changes by.
 const Entry = z.object({
-  area: z.enum(['orders', 'catalogue', 'calculators', 'content', 'settings']),
+  area: z.enum(['orders', 'purchases', 'catalogue', 'calculators', 'content', 'settings']),
   summary: z.string().trim().min(1).max(300),
   to: z.string().max(300).regex(/^\/[\w\-/?=&%.]*$/, 'That link is not a page in this admin.').optional(),
   before: z.unknown().optional(),

@@ -131,7 +131,7 @@ export type Order = {
   payments?: Payment[];
 };
 
-export type StockUnit = 'pcs' | 'box' | 'kg' | 'meter' | 'feet' | 'set';
+export type StockUnit = 'pcs' | 'box' | 'packet' | 'set' | 'feet' | 'rft' | 'meter' | 'sqft' | 'sqm' | 'kg' | 'sheet' | 'length';
 
 /**
  * One item the shop counts: a product option, or a product without options (option ''). Prices are rupees and paise
@@ -169,16 +169,81 @@ export type StockMove = {
   option: string;
   change: number;
   balance: number;
-  kind: 'opening' | 'count' | 'adjust' | 'delivered' | 'undelivered';
+  kind: 'opening' | 'count' | 'adjust' | 'delivered' | 'undelivered' | 'purchase' | 'purchase_cancelled';
   reason: string;
   note: string;
-  orderId?: string;
-  orderNumber?: string;
+  orderId?: string | null;
+  orderNumber?: string | null;
+  purchaseId?: string | null;
+  purchaseNumber?: string | null;
   by: string;
   at: string;
 };
 
-export type ActivityArea = 'orders' | 'catalogue' | 'calculators' | 'content' | 'settings';
+/** Phase 2: someone the shop buys from. Money is rupees and paise; outstanding is what the shop still owes them. */
+export type Supplier = {
+  id: number;
+  name: string;
+  company: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  gstin: string;
+  address: string;
+  state: string;
+  openingBalance: number;
+  paymentDays: number | null;
+  bankDetails: string;
+  notes: string;
+  archived: boolean;
+  createdAt: string;
+  /** Received bills. */
+  bills: number;
+  billed: number;
+  paid: number;
+  /** Opening balance + received bills − payments. Below zero: an advance. */
+  outstanding: number;
+  lastPurchase: string | null;
+  drafts: number;
+};
+
+export type PurchaseStatus = 'draft' | 'received' | 'cancelled';
+
+/** One line of a supplier's bill: a copy of the item as bought. Rates are before GST. */
+export type PurchaseItem = { productId: string; option: string; name: string; code: string; qty: number; unit: StockUnit; rate: number; discountPct: number; gstRate: number };
+
+export type SupplierPayment = { id: string; amount: number; method: PaymentMethod; paidOn: string; note?: string; by: string; at: string };
+
+/** A supplier's bill. Its figures are worked out by the server from the items and charges. */
+export type Purchase = {
+  id: string;
+  /** The shop's own number, PUR-0001. */
+  number: string;
+  supplier: { id: number; name: string };
+  /** The number on the supplier's bill. */
+  supplierInvoice?: string;
+  billDate: string;
+  status: PurchaseStatus;
+  items: PurchaseItem[];
+  freight: number;
+  otherCharges: number;
+  discount: number;
+  roundOff: number;
+  subtotal: number;
+  tax: number;
+  total: number;
+  notes?: string;
+  attachment?: string;
+  payments?: SupplierPayment[];
+  createdBy: string;
+  createdAt: string;
+  receivedBy?: string;
+  receivedAt?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
+};
+
+export type ActivityArea = 'orders' | 'purchases' | 'catalogue' | 'calculators' | 'content' | 'settings';
 
 /** One change made in the admin, newest first in the log. */
 export type Activity = { id: string; at: string; by: string; area: ActivityArea; summary: string; to?: string };

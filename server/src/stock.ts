@@ -11,7 +11,7 @@ import { jsonBody } from './validate.ts';
  * change to the quantity. Owners and the inventory team change it; Sales see it without purchase prices.
  */
 
-export const UNITS = ['pcs', 'box', 'kg', 'meter', 'feet', 'set'] as const;
+export const UNITS = ['pcs', 'box', 'packet', 'set', 'feet', 'rft', 'meter', 'sqft', 'sqm', 'kg', 'sheet', 'length'] as const;
 export const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28, 40] as const;
 /** Why staff added or took away stock by hand. */
 export const ADJUST_REASONS = ['damaged', 'lost', 'returned', 'used', 'found', 'correction', 'other'] as const;
@@ -76,12 +76,12 @@ export const stockItems = (sql: Sql | TransactionSql, owner: boolean, where = sq
   from stock_items s where ${where} order by s.product_id, s.option_label`;
 
 /** Changes one item's quantity and records why. The update locks the row, so two changes at once both count. */
-async function move(tx: TransactionSql, item: { productId: string; option: string }, change: number, record: { kind: string; reason?: string; note?: string; orderId?: number; by: string }) {
+export async function move(tx: TransactionSql, item: { productId: string; option: string }, change: number, record: { kind: string; reason?: string; note?: string; orderId?: number; purchaseId?: number; by: string }) {
   const [row] = await tx`
     update stock_items set quantity = quantity + ${change}, updated_at = now()
     where product_id = ${item.productId} and option_label = ${item.option} returning quantity::float8 as balance`;
   if (!row) return;
-  await tx`insert into stock_moves ${tx({ product_id: item.productId, option_label: item.option, change, balance: row.balance, kind: record.kind, reason: record.reason ?? '', note: record.note ?? '', order_id: record.orderId ?? null, by: record.by })}`;
+  await tx`insert into stock_moves ${tx({ product_id: item.productId, option_label: item.option, change, balance: row.balance, kind: record.kind, reason: record.reason ?? '', note: record.note ?? '', order_id: record.orderId ?? null, purchase_id: record.purchaseId ?? null, by: record.by })}`;
 }
 
 /**
@@ -221,8 +221,8 @@ export function stockRoutes(sql: Sql) {
     return c.json(
       await sql`
         select m.id::text as id, m.product_id as "productId", m.option_label as option, m.change::float8 as change, m.balance::float8 as balance,
-          m.kind, m.reason, m.note, m.order_id::text as "orderId", o.number as "orderNumber", m.by, m.at
-        from stock_moves m left join orders o on o.id = m.order_id
+          m.kind, m.reason, m.note, m.order_id::text as "orderId", o.number as "orderNumber", m.purchase_id::text as "purchaseId", pu.number as "purchaseNumber", m.by, m.at
+        from stock_moves m left join orders o on o.id = m.order_id left join purchases pu on pu.id = m.purchase_id
         where ${productId === undefined ? sql`true` : sql`m.product_id = ${productId} and m.option_label = ${option}`}
         order by m.id desc limit 300`,
     );
