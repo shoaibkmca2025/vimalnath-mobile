@@ -44,8 +44,11 @@ The existing stack stays. New modules follow the patterns already in place:
 | Overview | Dashboard | ✅ (purchase cards 🔨) |
 | Sales | Orders, Order Requests, Inventory (packing) | ✅ |
 | Sales | Customers, Payments | ✅ |
-| Sales | Sales invoices, quotations, returns | ⬜ Phase 3 |
-| Purchases | **Purchases**, **Suppliers** | 🔨 |
+| GST | GST Dashboard (with GSTR-3B working), Sales Register, tax invoices, Purchase Register (input tax credit), HSN Summary, GST Payments, GST Settings | ✅ |
+| GST | GSTR-1 sections and export, GSTR-2B matching, credit and debit notes | ⬜ Phase 3 |
+| Sales | Quotations, returns | ⬜ Phase 3 |
+| Sales | Feedback from the app | ✅ |
+| Purchases | Purchases, Suppliers | ✅ |
 | Purchases | Expenses | ⬜ Phase 4 |
 | Catalogue | Products, Stock, Prices, Categories, Price Lists | ✅ |
 | Reports | Sales, purchases, stock, GST, profit and loss | ⬜ Phase 4 |
@@ -60,8 +63,8 @@ New tables, by phase:
 
 | Phase | Tables |
 | --- | --- |
-| 2 (🔨) | `suppliers`, `purchases`, `purchase_items`, `supplier_payments`; `stock_moves` gains purchase moves |
-| 3 | `sales_invoices`, `invoice_items`, `quotations`, `quotation_items`, `credit_notes`, `returns`, `return_items`, `invoice_numbers` (per type, per financial year); `customers` gains GSTIN, addresses, state, credit limit, opening balance |
+| 2 (✅) | `suppliers`, `purchases`, `purchase_items`, `supplier_payments`; `stock_moves` gains purchase moves |
+| 3 (part ✅) | `gst_settings`, `sales_invoices`, `sales_invoice_items`, `invoice_counters`, `gst_payments`, purchases' `itc_*` columns, customers' GST columns; next: `credit_notes`,, `invoice_items`, `quotations`, `quotation_items`, `credit_notes`, `returns`, `return_items`, `invoice_numbers` (per type, per financial year); `customers` gains GSTIN, addresses, state, credit limit, opening balance |
 | 4 | `expenses`, `expense_categories`, `documents`; reports read existing tables |
 | 5 | `permissions` (per role), `notifications` for staff, barcode labels |
 
@@ -81,13 +84,13 @@ Key relations: a purchase belongs to a supplier and has items pointing at a stoc
 | Phase | Contents | Status |
 | --- | --- | --- |
 | 1. Core | Sign-in, dashboard, products and categories, stock and stock ledger, customers, customer payments | ✅ |
-| 2. Purchases | Suppliers (profile, ledger, outstanding), purchase bills with items, freight, discount and GST, receive goods → stock in, supplier payments, bill attachment, dashboard purchase cards | 🔨 |
-| 3. Billing | Sales invoices and quotations, GST (CGST/SGST/IGST), invoice numbering per financial year, PDF and WhatsApp sharing, returns and credit notes, customer GST profile and credit limits | ⬜ |
+| 2. Purchases | Suppliers (profile, ledger, outstanding), purchase bills with items, freight, discount and GST, receive goods → stock in, supplier payments, bill attachment, dashboard purchase cards | ✅ |
+| 3. Billing and GST | Done: GST settings, customer GST details, tax invoices from orders (CGST/SGST or IGST by place of supply, numbered per financial year, print, cancel), purchase tax split and input tax credit review, registers, HSN summary, GSTR-3B working with the legal set-off order, GST payments. Next: GSTR-1 sections and JSON/Excel export, GSTR-2B upload and matching, credit and debit notes with returns, quotations, WhatsApp sharing, credit limits | 🔨 |
 | 4. Accounts and reports | Expenses, cash and bank book, sales, purchase, stock and GST reports, profit and loss, Excel and PDF export | ⬜ |
 | 5. Advanced | Barcodes and QR labels, barcode billing, Accountant and Manager roles with permissions, staff notifications, stock ageing, customer-specific prices | ⬜ |
 
 ## 7. Decisions needed
 
-1. **Official GST invoices.** Earlier the answer was to keep Tally for GST billing. Phase 3 builds invoices here; confirm whether they become the official tax invoices (own number series, filing summaries) or stay as estimates while Tally remains the books.
+1. **Official GST invoices.** Decided 21 Nov 2026: the admin issues the GST tax invoices. The registration type is a setting (Regular by default) for the accountant to confirm.
 2. **When stock goes out.** Now: when an order is marked delivered. It can be made a setting (confirmed, dispatched or delivered).
 3. **New roles.** Accountant and Manager arrive with permissions in Phase 5; until then purchases and suppliers are Owner-only.
