@@ -138,7 +138,7 @@ export async function appOrders(sql: Sql, deviceId: number) {
 
 const phoneOrders = (sql: Sql, deviceId: number) => sql`
   select o.id::text as id, o.number, initcap(o.status) as status, o.client_order_id as "mobileOrderId", o.client_event_id as "mobileEventId", o.source,
-    (select json_agg(json_build_object('status', initcap(e.status), 'at', e.at) order by e.at) from order_events e where e.order_id = o.id) as history,
+    coalesce((select json_agg(json_build_object('status', initcap(e.status), 'at', e.at) order by e.at) from order_events e where e.order_id = o.id), '[]') as history,
     case when o.source = 'admin' then json_strip_nulls(json_build_object(
       'createdAt', o.placed_at, 'customer', o.customer, 'phone', nullif(o.phone, ''), 'notes', nullif(o.notes, ''), 'total', o.total,
       'lines', (select json_agg(json_build_object('productId', l.product_id, 'code', l.code, 'name', l.name, 'option', l.option,
@@ -221,7 +221,8 @@ export function orderAdminRoutes(sql: Sql) {
           'lines', (select json_agg(json_build_object('productId', l.product_id, 'code', l.code, 'name', l.name, 'option', l.option,
               'optionCode', l.option_code, 'note', l.note, 'qty', l.qty, 'mrp', l.mrp, 'problem', l.problem) order by l.position)
             from order_lines l where l.order_id = o.id),
-          'history', (select json_agg(json_build_object('status', e.status, 'at', e.at, 'by', e.by) order by e.at) from order_events e where e.order_id = o.id),
+          -- An empty list, not null, for an order without events (an import, say): the admin reads it as a list.
+          'history', coalesce((select json_agg(json_build_object('status', e.status, 'at', e.at, 'by', e.by) order by e.at) from order_events e where e.order_id = o.id), '[]'),
           'source', o.source,
           'customerSeenAt', o.customer_seen_at,
           'internalNote', case when o.internal_note is not null then json_build_object('text', o.internal_note, 'at', o.internal_note_at, 'by', o.internal_note_by) end,

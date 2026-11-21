@@ -1430,81 +1430,324 @@ button.cell-title {
   font-size: var(--text-sm);
 }
 
-/* ---------- GST tax invoice: the same on screen and on paper ---------- */
+/* ---------- GST tax invoice: the shop's Tally layout, the same on screen and on paper ---------- */
 
-.tax-invoice {
-  display: grid;
-  gap: var(--space-4);
+/* On a phone the A4 page scrolls sideways inside its frame; the admin around it doesn't. */
+.tally-scroll {
+  overflow-x: auto;
+}
+
+.tally {
+  --rule: var(--text);
+  min-width: 760px;
+  max-width: 980px;
+  margin: 0 auto;
   padding: var(--space-5);
-  font-size: var(--text-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.35;
 }
 
-.tax-invoice__head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding-bottom: var(--space-3);
-  border-bottom: 2px solid var(--text);
+.tally__title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
 }
 
-.tax-invoice__title {
-  text-align: right;
+.tally__box {
+  overflow: hidden;
+  border: 1px solid var(--rule);
 }
 
-.tax-invoice__title strong {
-  font-size: 18px;
-  letter-spacing: 0.04em;
-}
-
-.tax-invoice__title dl {
+.tally__top {
   display: grid;
-  grid-template-columns: auto auto;
-  gap: 2px var(--space-3);
-  margin: var(--space-2) 0 0;
-  text-align: left;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--rule);
 }
 
-.tax-invoice__title dt {
+.tally__parties > * + * {
+  border-top: 1px solid var(--rule);
+}
+
+.tally__cell {
+  padding: 4px 6px;
+}
+
+.tally__party {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+}
+
+.tally__name {
+  font-weight: 700;
+}
+
+.tally__label,
+.tally__ref dt {
   color: var(--text-2);
 }
 
-.tax-invoice__title dd {
-  margin: 0;
-  font-weight: 600;
+.tally__label--rule {
+  text-decoration: underline;
 }
 
-.tax-invoice__lines th,
-.tax-invoice__lines td {
-  padding: 6px 8px;
+.tally__address {
+  white-space: pre-line;
 }
 
-.tax-invoice__foot {
+.tally__facts {
   display: grid;
-  grid-template-columns: 1fr minmax(240px, 320px);
-  gap: var(--space-5);
+  grid-template-columns: max-content 1fr;
+  gap: 0 6px;
+  margin: 2px 0 0;
 }
 
-.tax-invoice__sign {
-  margin-top: var(--space-5);
+.tally__facts dd {
+  margin: 0;
+}
+
+.tally__facts dd::before {
+  content: ': ';
+}
+
+.tally__refs {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--rule);
+}
+
+.tally__ref-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 0;
+}
+
+.tally__ref {
+  min-height: 38px;
+  margin: 0;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tally__ref-grid .tally__ref:nth-child(odd) {
+  border-right: 1px solid var(--rule);
+}
+
+.tally__ref dt {
+  font-size: 11.5px;
+}
+
+.tally__ref dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.tally__ref--wide {
+  flex: 1;
+  border-bottom: 0;
+}
+
+/* The tables overlap the box's border by a pixel, so their outer lines and the box's are one line. */
+.tally__lines,
+.tally__hsn {
+  width: calc(100% + 2px);
+  margin: -1px -1px 0;
+  border-collapse: collapse;
+}
+
+.tally__lines th,
+.tally__hsn th,
+.tally__hsn td {
+  padding: 3px 5px;
+  border: 1px solid var(--rule);
+  font-weight: 400;
+}
+
+.tally__lines th,
+.tally__hsn thead th {
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* Lines have column rules only, as on the shop's invoices. */
+.tally__lines td {
+  padding: 2px 5px;
+  border-right: 1px solid var(--rule);
+  border-left: 1px solid var(--rule);
+  vertical-align: top;
+}
+
+.tally__lines tfoot td {
+  padding: 3px 5px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.tally__n {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tally__c {
+  text-align: center;
+}
+
+.tally__detail {
+  padding-left: 12px;
+  font-size: 11.5px;
+  font-style: italic;
+}
+
+.tally__subtotal {
+  border-top: 1px solid var(--rule);
+}
+
+.tally__ledger {
+  font-style: italic;
   text-align: right;
 }
 
-@media (max-width: 700px) {
-  .tax-invoice__foot {
-    grid-template-columns: 1fr;
-  }
+.tally__less {
+  float: left;
+}
 
-  .tax-invoice__title {
-    text-align: left;
-  }
+.tally__fill td {
+  height: 40px;
+}
+
+.tally__grand {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.tally__words {
+  display: grid;
+  gap: 2px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tally__split {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.tally__balance {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  justify-content: end;
+  gap: 0 8px;
+  margin: 4px 0 0;
+}
+
+.tally__balance dd {
+  margin: 0;
+}
+
+.tally__end {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.tally__end-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+.tally__end-left p {
+  margin: 0;
+}
+
+.tally__declaration {
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+
+.tally__end-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.tally__bank {
+  padding: 4px 6px;
+}
+
+.tally__sign {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  min-height: 72px;
+  padding: 4px 6px;
+  border-top: 1px solid var(--rule);
+  border-left: 1px solid var(--rule);
+}
+
+.tally__after {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  text-align: center;
+}
+
+/* The draft editor's second, smaller line under a description. */
+.bill-lines .input--sub {
+  display: block;
+  width: 100%;
+  min-height: 30px;
+  margin-top: 4px;
+  font-size: var(--text-sm);
+  font-style: italic;
 }
 
 @media print {
-  .tax-invoice {
-    border: 0;
+  .main:has(.tally) .page-header {
+    display: none !important;
+  }
+
+  .tally-scroll {
+    overflow: visible;
+  }
+
+  .tally {
+    --rule: #000;
+    min-width: 0;
+    max-width: none;
     padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
     color: #000;
-    font-size: 11px;
+    font-size: 10px;
+    line-height: 1.25;
+  }
+
+  .tally__label,
+  .tally__ref dt {
+    color: #000;
+  }
+
+  .tally__ref {
+    min-height: 32px;
+  }
+
+  /* Some room under the lines, as on the shop's invoices, while a usual invoice still fits one A4 page. */
+  .tally__fill td {
+    height: 48px;
+  }
+
+  /* A long invoice runs on to a second page, but never splits a line or the signature box. */
+  .tally__lines tr,
+  .tally__hsn tr,
+  .tally__end {
+    break-inside: avoid;
   }
 }

@@ -14,7 +14,7 @@ import { useToast } from '@/components/useToast';
 import { initialRange, inRange, INVOICE_STATUS, resolveRange } from '@/data/gst';
 import { customerOf } from '@/data/orders';
 import { billOf, dayLabel } from '@/data/payments';
-import { formatMoney } from '@/data/purchases';
+import { formatMoney, r2 } from '@/data/purchases';
 import type { Order, SalesInvoice } from '@/data/types';
 import { useData } from '@/data/useData';
 import { useGst } from '@/hooks/useGst';
@@ -134,8 +134,8 @@ export default function SalesRegisterPage() {
   const exportLines = () =>
     downloadCsv(
       'vimalnath-sales-register-lines',
-      ['Invoice', 'Date', 'Buyer', 'Buyer GSTIN', 'Place of supply', 'Description', 'HSN', 'Qty', 'Unit', 'GST %', 'Taxable', 'CGST', 'SGST', 'IGST', 'Line total', 'Status'],
-      rows.flatMap((invoice) => invoice.items.map((item) => [invoice.number, invoice.invoiceDate, invoice.customerName, invoice.customerGstin, invoice.placeOfSupply, item.description, item.hsn, item.qty, item.unit, item.gstRate, item.taxable, item.cgst, item.sgst, item.igst, item.amount, INVOICE_STATUS[invoice.status].label])),
+      ['Invoice', 'Date', 'Buyer', 'Buyer GSTIN', 'Place of supply', 'Description', 'Detail', 'HSN', 'Qty', 'Unit', 'Rate', 'Disc. %', 'GST %', 'Taxable', 'CGST', 'SGST', 'IGST', 'Line total', 'Status'],
+      rows.flatMap((invoice) => invoice.items.map((item) => [invoice.number, invoice.invoiceDate, invoice.customerName, invoice.customerGstin, invoice.placeOfSupply, item.description, item.detail, item.hsn, item.qty, item.unit, item.rate, item.discountPct, item.gstRate, item.taxable, item.cgst, item.sgst, item.igst, r2(item.taxable + item.cgst + item.sgst + item.igst), INVOICE_STATUS[invoice.status].label])),
     );
 
   return (
