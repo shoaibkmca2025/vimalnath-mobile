@@ -209,7 +209,7 @@ const InvoiceDraft = z.object({
   /** Left out: the saved details stay. */
   details: Details.optional(),
 });
-type InvoiceDraft = z.output<typeof InvoiceDraft>;
+export type InvoiceDraft = z.output<typeof InvoiceDraft>;
 
 /** Invoices in the admin's shape (admin/src/data/types.ts SalesInvoice). */
 export const invoices = (sql: Sql | TransactionSql, where = sql`true`) =>
@@ -221,6 +221,7 @@ export const invoices = (sql: Sql | TransactionSql, where = sql`true`) =>
       'sellerGstin', i.seller_gstin, 'taxable', i.taxable::float8, 'cgst', i.cgst::float8, 'sgst', i.sgst::float8, 'igst', i.igst::float8,
       'roundOff', i.round_off::float8, 'total', i.total::float8, 'notes', nullif(i.notes, ''), 'details', i.details,
       'previousBalance', i.previous_balance::float8,
+      'returnId', i.return_id::text, 'returnNumber', (select r.number from sales_returns r where r.id = i.return_id),
       'createdBy', i.created_by, 'createdAt', i.created_at, 'postedBy', i.posted_by, 'postedAt', i.posted_at,
       'cancelledBy', i.cancelled_by, 'cancelledAt', i.cancelled_at, 'cancelReason', nullif(i.cancel_reason, ''),
       'customerId', (select d.customer_id from app_devices d where d.id = o.device_id),
@@ -235,7 +236,7 @@ export const invoices = (sql: Sql | TransactionSql, where = sql`true`) =>
     order by i.invoice_date desc, i.id desc`.then((rows) => rows.map((row) => row.invoice));
 
 /** Saves a draft's header, lines and figures, worked out here from the lines. */
-async function saveDraft(tx: TransactionSql, id: number, draft: InvoiceDraft) {
+export async function saveDraft(tx: TransactionSql, id: number, draft: InvoiceDraft) {
   const own = stateCode((await gstSettings(tx)).gstin);
   const pos = stateCode(draft.customerGstin, draft.placeOfSupply);
   const interstate = Boolean(own && pos && own !== pos);
@@ -333,7 +334,7 @@ export function gstRoutes(sql: Sql) {
         where o.id = ${orderId} for update of o`;
       if (!order) throw new HTTPException(404, { message: 'That order does not exist.' });
       if (!['confirmed', 'packed', 'dispatched', 'delivered'].includes(order.status)) throw new HTTPException(400, { message: 'Only a confirmed order can be invoiced.' });
-      const [existing] = await tx`select number, status from sales_invoices where order_id = ${orderId} and status <> 'cancelled'`;
+      const [existing] = await tx`select number, status from sales_invoices where order_id = ${orderId} and status <> 'cancelled' and return_id is null`;
       if (existing) throw new HTTPException(409, { message: existing.number ? `This order already has invoice ${existing.number}.` : 'This order already has a draft invoice.' });
       const lines = await tx`
         select l.product_id, coalesce(l.option, '') as option, l.code, l.option_code, l.name, l.option as option_label, l.qty, l.mrp,
@@ -419,13 +420,15 @@ export function gstRoutes(sql: Sql) {
       const settings = await gstSettings(tx);
       if (!GSTIN.test(settings.gstin) || !settings.legalName) throw new HTTPException(400, { message: 'Fill in the shop’s GSTIN and legal name under GST Settings first.' });
       if (settings.registrationType === 'composition') throw new HTTPException(400, { message: 'A composition dealer issues a bill of supply, not a tax invoice. Change the registration type under GST Settings if that’s wrong.' });
-      const [invoice] = await tx`select order_id, invoice_date, total::float8 as total, pos_code from sales_invoices where id = ${id}`;
+      const [invoice] = await tx`select order_id, invoice_date, total::float8 as total, pos_code, return_id from sales_invoices where id = ${id}`;
       const lines = await tx`select description, amount::float8 as amount from sales_invoice_items where invoice_id = ${id}`;
       const unpriced = lines.find((line) => line.amount <= 0);
       if (unpriced) throw new HTTPException(400, { message: `Enter the rate for ${unpriced.description}.` });
       if (!invoice!.pos_code) throw new HTTPException(400, { message: 'Choose the place of supply: the buyer’s state.' });
+      // A replacement's invoice is settled through its return, not the order's payments.
+      const replacement = invoice!.return_id !== null;
       const [{ paid }] = (await tx`select coalesce(sum(amount), 0)::float8 as paid from order_payments where order_id = ${invoice!.order_id}`) as unknown as [{ paid: number }];
-      if (paid > invoice!.total) throw new HTTPException(400, { message: `₹${paid} has been paid on this order, more than the invoice. Remove a payment or change the invoice.` });
+      if (!replacement && paid > invoice!.total) throw new HTTPException(400, { message: `₹${paid} has been paid on this order, more than the invoice. Remove a payment or change the invoice.` });
       // What the buyer owed on their other orders just before this invoice, as the invoice prints it.
       const [{ owed }] = (await tx`
         select coalesce(sum(greatest(0, coalesce(o.bill_amount, o.total) - coalesce((select sum(p.amount) from order_payments p where p.order_id = o.id), 0))), 0)::float8 as owed
@@ -443,7 +446,7 @@ export function gstRoutes(sql: Sql) {
         update sales_invoices set status = 'posted', number = ${number}, financial_year = ${year}, seller_gstin = ${settings.gstin},
           previous_balance = ${r2(owed)}, posted_by = ${by}, posted_at = now()
         where id = ${id}`;
-      await tx`update orders set bill_amount = ${Math.round(invoice!.total)} where id = ${invoice!.order_id}`;
+      if (!replacement) await tx`update orders set bill_amount = ${Math.round(invoice!.total)} where id = ${invoice!.order_id}`;
     });
     return c.json({ invoices: await invoices(sql, sql`i.id = ${id}`) });
   });
@@ -451,6 +454,8 @@ export function gstRoutes(sql: Sql) {
   // A posted invoice is cancelled with a reason and keeps its number, so the series has no gaps.
   routes.post('/invoices/:id/cancel', jsonBody(z.object({ reason: Text(300).min(1, 'Give the reason for cancelling.') })), async (c) => {
     const id = parse(Id, c.req.param('id'));
+    const [note] = await sql`select number from sales_credit_notes where invoice_id = ${id} and status = 'posted' limit 1`;
+    if (note) throw new HTTPException(409, { message: `Credit note ${note.number} is issued against this invoice. Cancel the credit note first.` });
     const [row] = await sql`
       update sales_invoices set status = 'cancelled', cancelled_by = ${c.get('staff').name}, cancelled_at = now(), cancel_reason = ${c.req.valid('json').reason}
       where id = ${id} and status = 'posted' returning id`;

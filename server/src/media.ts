@@ -36,7 +36,8 @@ export async function customerPhoto(type: string, body: Buffer) {
 export function mediaAdminRoutes(sql: Sql) {
   const media = new Hono<Env>();
 
-  media.post('/', only('owner', 'catalogue'), async (c) => {
+  // Sales and the inventory team upload too: photos and documents for returns.
+  media.post('/', only('owner', 'catalogue', 'sales', 'inventory'), async (c) => {
     const type = c.req.header('content-type')?.split(';')[0]?.trim() ?? '';
     const kind = IMAGE_TYPES.includes(type) ? 'image' : type === 'application/pdf' ? 'pdf' : null;
     if (!kind) throw new HTTPException(400, { message: 'Choose a JPG, PNG or WebP photo, or a PDF.' });
@@ -121,6 +122,8 @@ const mediaUses = (sql: Sql) => sql<{ id: string | null; label: string; link: st
     union all select value, 'Company logo', '/settings' from settings where key = 'logo'
     union all select attachment, 'Purchase bill ' || number, '/purchases/' || id from purchases
     union all select attachment, 'GST challan ' || coalesce(nullif(challan, ''), period), '/gst/payments' from gst_payments
+    union all select unnest(attachments), 'Return ' || number, '/returns/' || id from sales_returns
+    union all select unnest(attachments), 'Supplier return ' || number, '/supplier-returns/' || id from supplier_returns
   ) used where url like '/v1/media/%'`;
 
 /** GET /v1/media/<id>.webp (also -md and -sm) and /v1/media/<id>.pdf: public, because the app shows them. */

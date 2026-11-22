@@ -144,12 +144,18 @@ const suppliers = (sql: Sql | TransactionSql, where = sql`true`) => sql`
     s.opening_balance::float8 as "openingBalance", s.payment_days as "paymentDays", s.bank_details as "bankDetails", s.notes,
     s.archived, s.created_at as "createdAt",
     coalesce(b.bills, 0)::int as bills, coalesce(b.billed, 0)::float8 as billed, coalesce(pay.paid, 0)::float8 as paid,
-    (s.opening_balance + coalesce(b.billed, 0) - coalesce(pay.paid, 0))::float8 as outstanding,
+    coalesce(ret.credited, 0)::float8 as credited, coalesce(ret.refunded, 0)::float8 as refunded,
+    -- Goods sent back lower what the shop owes once the supplier's credit note is in; money they refund puts it back.
+    (s.opening_balance + coalesce(b.billed, 0) - coalesce(pay.paid, 0) - coalesce(ret.credited, 0) + coalesce(ret.refunded, 0))::float8 as outstanding,
     to_char(b.last, 'YYYY-MM-DD') as "lastPurchase", coalesce(d.drafts, 0)::int as drafts
   from suppliers s
   left join lateral (select count(*) as bills, sum(total) as billed, max(bill_date) as last from purchases where supplier_id = s.id and status = 'received') b on true
   left join lateral (select sum(amount) as paid from supplier_payments where supplier_id = s.id) pay on true
   left join lateral (select count(*) as drafts from purchases where supplier_id = s.id and status = 'draft') d on true
+  left join lateral (
+    select sum(credit_note_amount) filter (where status in ('credited', 'settled', 'closed')) as credited,
+      sum(refund_amount) filter (where settlement = 'refund' and status in ('settled', 'closed')) as refunded
+    from supplier_returns where supplier_id = s.id) ret on true
   where ${where}
   order by s.archived, s.name`;
 
