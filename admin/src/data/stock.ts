@@ -1,5 +1,5 @@
 import type { Role } from './session';
-import type { Order, Product, Purchase, StockItem, StockMove, StockUnit, Supplier } from './types';
+import type { Order, Product, Purchase, StockBucket, StockItem, StockMove, StockUnit, Supplier } from './types';
 
 /**
  * Stock, stage 1 of inventory. Each product option is an item the shop counts (a product without options is one item,
@@ -35,7 +35,18 @@ export const MOVE_LABEL: Record<StockMove['kind'], string> = {
   undelivered: 'Delivery undone',
   purchase: 'Purchased',
   purchase_cancelled: 'Purchase cancelled',
+  return_received: 'Returned by customer',
+  return_inspected: 'Return checked',
+  return_reversed: 'Return cancelled',
+  replacement: 'Replacement given',
+  replacement_reversed: 'Replacement undone',
+  written_off: 'Written off',
+  supplier_return: 'Sent back to supplier',
+  supplier_return_reversed: 'Supplier return cancelled',
 };
+
+/** The stock a move changed, when it isn't what can be sold. */
+export const BUCKET_LABEL: Record<StockBucket, string> = { available: 'For sale', held: 'Awaiting check', damaged: 'Damaged', defective: 'Defective' };
 
 export const itemKey = (productId: string, option: string) => `${productId}\u0000${option}`;
 

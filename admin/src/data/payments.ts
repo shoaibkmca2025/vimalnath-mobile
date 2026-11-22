@@ -8,7 +8,11 @@ import type { Order, PaymentMethod, PaymentTerms, Settings } from './types';
  * credit. A bill still unpaid after that day is overdue, and shows in red.
  */
 
-export const PAYMENT_METHODS: Record<PaymentMethod, string> = { cash: 'Cash', upi: 'UPI', bank: 'Bank transfer', cheque: 'Cheque' };
+export const PAYMENT_METHODS: Record<PaymentMethod, string> = { cash: 'Cash', upi: 'UPI', bank: 'Bank transfer', cheque: 'Cheque', return: 'Return refund', store_credit: 'Store credit' };
+/** What staff choose when recording a customer's payment; a return's refund is recorded from the return. */
+export const CUSTOMER_METHODS: PaymentMethod[] = ['cash', 'upi', 'bank', 'cheque', 'store_credit'];
+/** Money methods only: what suppliers are paid with. */
+export const MONEY_METHODS: PaymentMethod[] = ['cash', 'upi', 'bank', 'cheque'];
 export const PAYMENT_TERMS: Record<PaymentTerms, string> = { cash: 'Cash', credit: 'Credit' };
 
 const BILLED = new Set<Order['status']>(['placed', 'confirmed', 'packed', 'dispatched', 'delivered']);

@@ -482,7 +482,9 @@ export const creditNotes = (sql: Sql | TransactionSql, where = sql`true`) =>
     order by n.note_date desc, n.id desc`.then((rows) => rows.map((row) => row.note));
 
 /** Store credit a customer holds: refunds given as store credit, less what they have spent of it on orders. */
-export async function storeCredit(tx: Sql | TransactionSql, customerId: number) {
+export async function storeCredit(tx: Sql | TransactionSql, given: number) {
+  // A customer merged into another holds their credit there.
+  const [{ id: customerId }] = (await tx`select coalesce((select merged_into from customers where id = ${given}), ${given})::int as id`) as unknown as [{ id: number }];
   const [row] = await tx`
     select (
       coalesce((select sum(t.amount) from refund_transactions t join sales_returns r on r.id = t.return_id

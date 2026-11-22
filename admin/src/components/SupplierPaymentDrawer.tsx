@@ -4,7 +4,7 @@ import { Button } from '@/components/Button';
 import { Drawer } from '@/components/Drawer';
 import { Segmented, SelectField, TextField } from '@/components/Field';
 import { useToast } from '@/components/useToast';
-import { PAYMENT_METHODS, localDay } from '@/data/payments';
+import { MONEY_METHODS, PAYMENT_METHODS, localDay } from '@/data/payments';
 import { balanceOf, formatMoney, parseMoney } from '@/data/purchases';
 import type { Answer } from '@/data/stock';
 import type { PaymentMethod, Purchase, Supplier } from '@/data/types';
@@ -104,7 +104,7 @@ export function SupplierPaymentDrawer({ open, onClose, supplier, bills, billId, 
             label="Paid by"
             value={draft.method}
             onChange={(method) => setDraft({ ...draft, method })}
-            options={(Object.keys(PAYMENT_METHODS) as PaymentMethod[]).map((method) => ({ value: method, label: PAYMENT_METHODS[method] }))}
+            options={MONEY_METHODS.map((method) => ({ value: method, label: PAYMENT_METHODS[method] }))}
           />
         </div>
         <TextField label="Paid on" type="date" max={today} value={draft.paidOn} onChange={(event) => setDraft({ ...draft, paidOn: event.target.value })} error={touched ? errors.paidOn : null} required />

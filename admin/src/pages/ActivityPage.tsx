@@ -1,4 +1,4 @@
-import { BookOpenIcon, CalculatorIcon, ClockCounterClockwiseIcon, GearSixIcon, ImagesIcon, ReceiptIcon, TruckIcon, type Icon } from '@phosphor-icons/react';
+import { ArrowUUpLeftIcon, BookOpenIcon, CalculatorIcon, ClockCounterClockwiseIcon, GearSixIcon, ImagesIcon, ReceiptIcon, TruckIcon, type Icon } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
@@ -16,6 +16,7 @@ type Filter = 'all' | ActivityArea;
 
 const AREAS: Record<ActivityArea, { label: string; icon: Icon }> = {
   orders: { label: 'Orders', icon: ReceiptIcon },
+  returns: { label: 'Returns', icon: ArrowUUpLeftIcon },
   purchases: { label: 'Purchases', icon: TruckIcon },
   catalogue: { label: 'Catalogue', icon: BookOpenIcon },
   calculators: { label: 'Calculators', icon: CalculatorIcon },
