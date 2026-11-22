@@ -1,5 +1,5 @@
 import type { Role } from './session';
-import type { Order, Product, Purchase, StockBucket, StockItem, StockMove, StockUnit, Supplier } from './types';
+import type { Order, Product, Purchase, SalesReturn, StockBucket, StockItem, StockMove, StockUnit, Supplier, SupplierReturn } from './types';
 
 /**
  * Stock, stage 1 of inventory. Each product option is an item the shop counts (a product without options is one item,
@@ -58,6 +58,9 @@ export type Answer = {
   purchases?: Purchase[];
   removedPurchases?: string[];
   supplier?: Supplier;
+  returns?: SalesReturn[];
+  supplierReturns?: SupplierReturn[];
+  removedSupplierReturns?: string[];
 };
 
 /** The stock list with the server's answer applied: changed items replaced, new ones added, removed ones gone. */

@@ -100,10 +100,11 @@ test('refused: wrong types, fakes and oversized files, each with a reason', { sk
   assert.equal(big.status, 413);
 });
 
-test('access: only Owners and Catalogue editors upload; anyone can view', { skip }, async () => {
+test('access: signed-in staff upload (Sales and the inventory team attach return photos); anyone can view', { skip }, async () => {
   const png = await photo(10, 10).png().toBuffer();
   assert.equal((await upload(png, 'image/png')).status, 401);
-  assert.equal((await upload(png, 'image/png', await staff('sales'))).status, 403);
+  assert.equal((await upload(png, 'image/png', await staff('sales'))).status, 201);
+  assert.equal((await upload(png, 'image/png', await staff('inventory'))).status, 201);
   const { url } = (await (await upload(png, 'image/png', await staff('owner'))).json()) as { url: string };
   assert.equal((await get(url)).status, 200);
   assert.equal((await get('/v1/media/0123456789abcdef01234567.webp')).status, 404);

@@ -709,6 +709,20 @@ export function returnRoutes(sql: Sql) {
     ),
   );
 
+  // For the sidebar's red counts: returns waiting for a decision, for their goods, for the quality check, and refunds open.
+  routes.get('/count', async (c) =>
+    c.json(
+      (
+        await sql`
+          select count(*) filter (where status in ('pending', 'under_review'))::int as decide,
+            count(*) filter (where status = 'approved')::int as receive,
+            count(*) filter (where status in ('received', 'replaced', 'refunded') and exists (select 1 from sales_return_items i where i.return_id = r.id and i.outcome is null))::int as inspect,
+            (select count(*) from refund_transactions where status in ('pending', 'approved', 'processing'))::int as refunds
+          from sales_returns r`
+      )[0],
+    ),
+  );
+
   // What a customer holds in store credit.
   routes.get('/store-credit/:customerId', async (c) => c.json({ available: await storeCredit(sql, parse(Id, c.req.param('customerId'))) }));
 

@@ -142,3 +142,30 @@ export function Sparkline({ values, width = 96, height = 28 }: { values: number[
     </svg>
   );
 }
+
+export type BarRow = { key: string; label: string; value: number; detail?: string };
+
+/**
+ * One measure across named things, largest first: a thin bar in one colour per row, its value at the end in text
+ * colour, and the row's full figures on hover and for screen readers. The numbers are the table view.
+ */
+export function BarList({ rows, format, label, limit = 8 }: { rows: BarRow[]; format: (value: number) => string; label: string; limit?: number }) {
+  const shown = rows.slice(0, limit);
+  const max = Math.max(1, ...shown.map((row) => row.value));
+  return (
+    <ul className="bar-list" aria-label={label}>
+      {shown.map((row) => (
+        <li key={row.key} className="bar-list__row" title={`${row.label}: ${format(row.value)}${row.detail ? ` · ${row.detail}` : ''}`}>
+          <span className="bar-list__label">
+            {row.label}
+            {row.detail && <span className="bar-list__detail">{row.detail}</span>}
+          </span>
+          <span className="bar-list__value num">{format(row.value)}</span>
+          <span className="bar-list__track" aria-hidden>
+            <span className="bar-list__bar" style={{ width: `${Math.max(2, (row.value / max) * 100)}%` }} />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}

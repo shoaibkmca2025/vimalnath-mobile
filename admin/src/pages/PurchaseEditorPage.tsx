@@ -1,5 +1,5 @@
-import { CheckCircleIcon, FileArrowUpIcon, MagnifyingGlassIcon, PlusIcon, PrinterIcon, TrashIcon, TruckIcon, WalletIcon, WarningCircleIcon, XCircleIcon } from '@phosphor-icons/react';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { CheckCircleIcon, FileArrowUpIcon, PlusIcon, PrinterIcon, TrashIcon, TruckIcon, WalletIcon, WarningCircleIcon, XCircleIcon } from '@phosphor-icons/react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { Badge } from '@/components/Badge';
@@ -8,6 +8,7 @@ import { Card, CardHeader } from '@/components/Card';
 import { ConfirmDialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { SelectField, TextAreaField, TextField } from '@/components/Field';
+import { ItemPicker } from '@/components/ItemPicker';
 import { PageHeader } from '@/components/PageHeader';
 import { SupplierDrawer } from '@/components/SupplierDrawer';
 import { SupplierPaymentDrawer } from '@/components/SupplierPaymentDrawer';
@@ -337,7 +338,7 @@ function BillEditor({ bill, presetSupplier, purchasing, onGone }: { bill?: Purch
           <Card aria-labelledby="items-title" className="table-card">
             <CardHeader id="items-title" title="Items" description="Rates are before GST. An item not counted yet starts being counted when its goods are received." />
             <div className="card__body" style={{ paddingBottom: 0 }}>
-              <ItemPicker rows={rows} onPick={addItem} />
+              <ItemPicker id="bill-items" rows={rows} onPick={addItem} />
               {shown('items') && (
                 <p className="field__error" role="alert" style={{ marginTop: 'var(--space-2)' }}>
                   <WarningCircleIcon size={14} weight="fill" aria-hidden />
@@ -516,71 +517,6 @@ function BillEditor({ bill, presetSupplier, purchasing, onGone }: { bill?: Purch
 }
 
 /** Search the catalogue by name, code, SKU or barcode. A scanner types the barcode and Enter, which adds an exact match. */
-function ItemPicker({ rows, onPick }: { rows: StockRow[]; onPick: (row: StockRow) => void }) {
-  const [query, setQuery] = useState('');
-  const needle = query.trim().toLowerCase();
-  const exact = needle ? rows.find((row) => [row.stock?.barcode, row.stock?.sku, row.code].some((text) => text && text.toLowerCase() === needle)) : undefined;
-  const matches =
-    needle.length >= 2
-      ? rows.filter((row) => [row.title, row.code, row.stock?.sku, row.stock?.barcode, row.stock?.brand].some((text) => text?.toLowerCase().includes(needle))).slice(0, 8)
-      : [];
-  const pick = (row: StockRow) => {
-    onPick(row);
-    setQuery('');
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    const choice = exact ?? (matches.length === 1 ? matches[0] : undefined);
-    if (choice) pick(choice);
-  };
-
-  return (
-    <div className="item-picker">
-      <div className="search" role="search">
-        <MagnifyingGlassIcon size={16} aria-hidden />
-        <input
-          id="bill-items"
-          type="search"
-          className="input"
-          aria-label="Add an item"
-          placeholder="Add an item: name, code, SKU, or scan a barcode"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={onKeyDown}
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </div>
-      {needle.length >= 2 && (
-        <ul className="item-picker__list" aria-label="Matching items">
-          {matches.length ? (
-            matches.map((row) => (
-              <li key={row.key}>
-                <button type="button" className="item-picker__option" onClick={() => pick(row)}>
-                  <span style={{ minWidth: 0 }}>
-                    <span className="cell-title" style={{ display: 'block', whiteSpace: 'normal' }}>
-                      {row.title}
-                    </span>
-                    <span className="cell-sub mono">{[row.code, row.stock?.sku].filter(Boolean).join(' · ')}</span>
-                  </span>
-                  <span className="cell-sub num" style={{ flexShrink: 0 }}>
-                    {row.stock ? `${formatQty(row.stock.quantity)} ${UNITS[row.stock.unit]} in stock` : 'Not counted yet'}
-                  </span>
-                </button>
-              </li>
-            ))
-          ) : (
-            <li className="muted" style={{ padding: 'var(--space-3)' }}>
-              No item matches “{query.trim()}”.
-            </li>
-          )}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 function Totals(props: { subtotal: number; tax: number; freight: number; otherCharges: number; discount: number; roundOff: number; total: number }) {
   return (
     <dl className="kv kv--compact kv--split" style={{ margin: 0 }}>
