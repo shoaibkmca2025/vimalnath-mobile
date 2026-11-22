@@ -430,6 +430,7 @@ export const salesReturns = (sql: Sql | TransactionSql, where = sql`true`) =>
     select json_strip_nulls(json_build_object(
       'id', r.id::text, 'number', r.number, 'kind', r.kind, 'orderId', r.order_id::text, 'orderNumber', o.number,
       'invoiceId', r.invoice_id::text, 'invoiceNumber', inv.number, 'invoiceDate', inv.invoice_date, 'interstate', inv.interstate,
+      'customerGstin', nullif(inv.customer_gstin, ''), 'billingAddress', nullif(inv.billing_address, ''), 'placeOfSupply', nullif(inv.place_of_supply, ''), 'posCode', nullif(inv.pos_code, ''),
       'customerId', r.customer_id, 'customerName', r.customer_name, 'customerPhone', nullif(r.customer_phone, ''),
       'returnDate', r.return_date, 'reason', r.reason, 'reasonNote', nullif(r.reason_note, ''), 'status', r.status,
       'returnValue', r.return_value, 'replacementValue', r.replacement_value, 'charges', r.charges, 'chargesNote', nullif(r.charges_note, ''),
@@ -632,6 +633,12 @@ export function returnRoutes(sql: Sql) {
   const stockKeysOf = (rows: { product_id: string; option_label: string }[]) => rows.map((row) => ({ productId: row.product_id, option: row.option_label }));
 
   routes.get('/settings', async (c) => c.json(await returnSettings(sql)));
+
+  // The shop as printed on a return receipt or credit note: anyone who handles returns prints them.
+  routes.get('/shop', async (c) => {
+    const gst = await gstSettings(sql);
+    return c.json({ legalName: gst.legalName, tradeName: gst.tradeName, gstin: gst.gstin, address: gst.address, pincode: gst.pincode, phone: gst.phone, email: gst.email, jurisdiction: gst.jurisdiction });
+  });
   routes.put('/settings', owners, jsonBody(SettingsInput), async (c) => {
     const input = c.req.valid('json');
     await sql`

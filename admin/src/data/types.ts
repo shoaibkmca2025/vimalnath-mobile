@@ -553,6 +553,11 @@ export type SalesReturn = {
   invoiceNumber?: string;
   invoiceDate?: string;
   interstate?: boolean;
+  /** The buyer as the original invoice has them. */
+  customerGstin?: string;
+  billingAddress?: string;
+  placeOfSupply?: string;
+  posCode?: string;
   customerId?: number;
   customerName: string;
   customerPhone?: string;
@@ -731,3 +736,6 @@ export type SupplierReturnSource = {
   purchase: { id: string; number: string; status: PurchaseStatus; interstate: boolean };
   lines: { position: number; productId: string; option: string; name: string; code: string; qty: number; unit: StockUnit; rate: number; gstRate: number; returned: number; returnable: number }[];
 };
+
+/** The shop as a return receipt prints it (GET /returns/shop). */
+export type ShopDetails = { legalName: string; tradeName: string; gstin: string; address: string; pincode: string; phone: string; email: string; jurisdiction: string };
