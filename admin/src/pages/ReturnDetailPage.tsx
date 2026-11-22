@@ -208,8 +208,7 @@ function ReturnView({ detail, settings, onChanged }: { detail: Detail; settings:
                     <th scope="col" className="is-num">
                       Qty
                     </th>
-                    <th scope="col">Condition</th>
-                    <th scope="col">Quality check</th>
+                    <th scope="col">Condition → check</th>
                     <th scope="col" className="is-num">
                       Value
                     </th>
@@ -230,8 +229,8 @@ function ReturnView({ detail, settings, onChanged }: { detail: Detail; settings:
                       <td className="is-num" style={{ whiteSpace: 'nowrap' }}>
                         {formatNumber(item.qty)} {UNITS[item.unit]}
                       </td>
-                      <td>{CONDITIONS[item.condition]}</td>
                       <td>
+                        <div>{CONDITIONS[item.condition]}</div>
                         {item.outcome ? (
                           <>
                             <Badge tone={item.outcome === 'restock' ? 'success' : 'neutral'}>{OUTCOMES[item.outcome].label}</Badge>
@@ -241,12 +240,12 @@ function ReturnView({ detail, settings, onChanged }: { detail: Detail; settings:
                             </div>
                           </>
                         ) : (
-                          <span className="muted">{ret.status === 'approved' || ret.status === 'pending' || ret.status === 'under_review' ? 'When it comes in' : 'Not checked yet'}</span>
+                          <div className="cell-sub">{ret.status === 'approved' || ret.status === 'pending' || ret.status === 'under_review' ? 'Checked when it comes in' : 'Not checked yet'}</div>
                         )}
                       </td>
                       <td className="is-num">
                         <strong>{formatINR(item.amount)}</strong>
-                        <div className="cell-sub">{item.gstRate && ret.invoiceId ? `${formatINR(item.taxable)} + ${formatINR(item.cgst + item.sgst + item.igst)} GST` : `${formatINR(item.rate)} each`}</div>
+                        <div className="cell-sub">{ret.invoiceId && item.cgst + item.sgst + item.igst > 0 ? `incl. ${formatINR(item.cgst + item.sgst + item.igst)} GST` : `${formatINR(item.rate)} each`}</div>
                       </td>
                     </tr>
                   ))}

@@ -1,0 +1,257 @@
+/* ---------- Returns & Replacements ---------- */
+
+/* Ranked bars: one colour, thin, the value at the end in text colour. */
+.bar-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bar-list__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px var(--space-3);
+  padding: 4px 6px;
+  margin: -4px -6px;
+  border-radius: var(--radius-sm);
+}
+
+.bar-list__row:hover {
+  background: var(--surface-2);
+}
+
+.bar-list__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bar-list__detail {
+  display: block;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.bar-list__value {
+  align-self: start;
+  font-weight: 600;
+}
+
+.bar-list__track {
+  grid-column: 1 / -1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.bar-list__bar {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--tint);
+}
+
+/* Where a return is on its way. */
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.steps__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-3);
+  font-size: var(--text-sm);
+}
+
+.steps__item + .steps__item::before {
+  content: '';
+  width: 20px;
+  height: 1px;
+  margin-right: var(--space-2);
+  background: var(--border-strong);
+}
+
+.steps__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.steps__item[data-state='done'] {
+  color: var(--text);
+}
+
+.steps__item[data-state='done'] .steps__mark {
+  border-color: var(--tint);
+  background: var(--tint);
+  color: #fff;
+}
+
+.steps__item[data-state='current'] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.steps__item[data-state='current'] .steps__mark {
+  border: 2px solid var(--tint);
+  color: var(--tint);
+}
+
+.steps__item[data-state='stopped'] {
+  color: var(--text);
+}
+
+.steps__item[data-state='stopped'] .steps__mark {
+  border-color: var(--text-3);
+  background: var(--text-3);
+  color: var(--surface);
+}
+
+/* Photos and PDFs attached to a return. */
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attachments__item {
+  position: relative;
+}
+
+.attachments__item a {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.attachments__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachments__pdf {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  color: var(--text-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.attachments__remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+/* Refunds on a return, and short lists of the same shape. */
+.refund-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.refund-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+/* Ticks laid out in columns: categories, refund methods. */
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--tint);
+}
+
+/* Return Reports: a card per register. */
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--space-5);
+}
+
+.report-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.report-figures dt {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.report-figures dd {
+  margin: 2px 0 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+@media (max-width: 520px) {
+  .report-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .steps__item + .steps__item::before {
+    display: none;
+  }
+}

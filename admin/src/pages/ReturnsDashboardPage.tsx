@@ -133,7 +133,7 @@ export default function ReturnsDashboardPage() {
                 label="Returns each month"
                 points={months.map((month) => ({ key: month.period, label: monthName.format(month.date), axisLabel: monthShort.format(month.date), value: month.count, detail: `${formatINR(month.value)} of goods` }))}
                 format={(value) => plural(value, 'return')}
-                formatAxis={(value) => formatNumber(value)}
+                formatAxis={(value) => (Number.isInteger(value) ? formatNumber(value) : '')}
               />
             </div>
           </Card>

@@ -1,6 +1,6 @@
 import { localDay } from './payments.ts';
 import { lineAmount, r2 } from './purchases.ts';
-import type { GstPayment, InvoiceItem, ItcStatus, Purchase, SalesInvoice, StockUnit } from './types';
+import type { CreditNote, GstPayment, InvoiceItem, ItcStatus, Purchase, SalesInvoice, StockUnit, SupplierReturn } from './types';
 
 /**
  * Phase 3, GST (docs/ERP-ROADMAP.md): registers, HSN summary and the GSTR-3B working summary, worked out from posted
@@ -197,6 +197,20 @@ export function hsnSummary(lines: { hsn: string; description: string; unit: stri
   return [...groups.values()].map(({ docs: _docs, ...row }) => row).sort((a, b) => a.hsn.localeCompare(b.hsn) || a.rate - b.rate);
 }
 
+/** Credit notes for goods returned, posted and dated in a range: they take their tax off the period's outward supplies. */
+export const creditNotesIn = (notes: CreditNote[], range: Range) => notes.filter((note) => note.status === 'posted' && inRange(note.noteDate, range));
+
+/** Suppliers' credit notes for goods sent back, dated in a range: their GST comes off the input tax credit. */
+export const supplierCreditsIn = (returns: SupplierReturn[], range: Range) =>
+  returns.filter((one) => ['credited', 'settled', 'closed'].includes(one.status) && one.creditNoteDate && inRange(one.creditNoteDate, range));
+export const supplierCreditHeads = (one: SupplierReturn): Heads => split(one.creditNoteTax ?? 0, one.interstate);
+
+/** Credit note lines for the HSN summary: the goods back, taken off the HSN's sales. */
+export const creditNoteHsnLines = (notes: CreditNote[]) =>
+  notes.flatMap((note) =>
+    note.items.map((item) => ({ hsn: item.hsn, description: item.description, unit: item.unit, qty: -item.qty, taxable: -item.taxable, rate: item.gstRate, heads: { igst: -item.igst, cgst: -item.cgst, sgst: -item.sgst }, document: `cn-${note.id}` })),
+  );
+
 export const salesHsnLines = (invoices: SalesInvoice[]) =>
   invoices.flatMap((invoice) => invoice.items.map((item) => ({ hsn: item.hsn, description: item.description, unit: item.unit, qty: item.qty, taxable: item.taxable, rate: item.gstRate, heads: { igst: item.igst, cgst: item.cgst, sgst: item.sgst }, document: invoice.id })));
 
@@ -247,6 +261,10 @@ export function utilise(liability: Heads, credit: Heads) {
 
 export type Summary3b = {
   outward: { taxable: number; heads: Heads; invoices: number };
+  /** Credit notes in the period, already taken off `outward`. */
+  creditNotes: { taxable: number; heads: Heads; notes: number };
+  /** Suppliers' credit notes in the period, already taken off `itc`. */
+  supplierCredits: Heads;
   nil: { taxable: number; invoices: number };
   interstateUnregistered: { taxable: number; igst: number };
   itc: Heads;
@@ -263,13 +281,22 @@ export type Summary3b = {
  * The GSTR-3B working for a range of months: 3.1 outward supplies from posted invoices; 4 ITC from received bills the
  * accountant marked claimed in the period (or eligible, dated in it); reversals in the period; then the set-off.
  */
-export function summary3b(invoices: SalesInvoice[], bills: Purchase[], payments: GstPayment[], range: Range): Summary3b {
+export function summary3b(invoices: SalesInvoice[], bills: Purchase[], payments: GstPayment[], range: Range, credits: { notes?: CreditNote[]; supplierReturns?: SupplierReturn[] } = {}): Summary3b {
   const posted = postedIn(invoices, range);
   const taxed = posted.flatMap((invoice) => invoice.items.filter((item) => item.gstRate > 0));
   const nilItems = posted.flatMap((invoice) => invoice.items.filter((item) => item.gstRate === 0));
+  // Goods returned against invoices: their credit notes come off this period's outward supplies, never below nothing.
+  const notes = creditNotesIn(credits.notes ?? [], range);
+  const credited = notes.flatMap((note) => note.items.filter((item) => item.gstRate > 0));
+  const creditNotes = {
+    taxable: r2(credited.reduce((total, item) => total + item.taxable, 0)),
+    heads: credited.reduce<Heads>((heads, item) => add(heads, { igst: item.igst, cgst: item.cgst, sgst: item.sgst }), zero()),
+    notes: notes.length,
+  };
+  const gross = taxed.reduce<Heads>((heads, item) => add(heads, { igst: item.igst, cgst: item.cgst, sgst: item.sgst }), zero());
   const outward = {
-    taxable: r2(taxed.reduce((total, item) => total + item.taxable, 0)),
-    heads: taxed.reduce<Heads>((heads, item) => add(heads, { igst: item.igst, cgst: item.cgst, sgst: item.sgst }), zero()),
+    taxable: r2(Math.max(0, taxed.reduce((total, item) => total + item.taxable, 0) - creditNotes.taxable)),
+    heads: { igst: r2(Math.max(0, gross.igst - creditNotes.heads.igst)), cgst: r2(Math.max(0, gross.cgst - creditNotes.heads.cgst)), sgst: r2(Math.max(0, gross.sgst - creditNotes.heads.sgst)) },
     invoices: posted.length,
   };
   const unregisteredOut = posted.filter((invoice) => invoice.interstate && !invoice.customerGstin);
@@ -281,10 +308,18 @@ export function summary3b(invoices: SalesInvoice[], bills: Purchase[], payments:
   const itc = claimed.reduce<Heads>((heads, bill) => add(heads, purchaseHeads(bill)), zero());
   const reversed = received.filter((bill) => bill.itcStatus === 'reversed' && inMonths(bill.itcPeriod)).reduce<Heads>((heads, bill) => add(heads, purchaseHeads(bill)), zero());
   const ineligible = received.filter((bill) => bill.itcStatus === 'ineligible' && inRange(bill.billDate, range)).reduce<Heads>((heads, bill) => add(heads, purchaseHeads(bill)), zero());
-  const net = { igst: r2(Math.max(0, itc.igst - reversed.igst)), cgst: r2(Math.max(0, itc.cgst - reversed.cgst)), sgst: r2(Math.max(0, itc.sgst - reversed.sgst)) };
+  // Goods sent back to suppliers: their credit notes lower the credit.
+  const supplierCredits = supplierCreditsIn(credits.supplierReturns ?? [], range).reduce<Heads>((heads, one) => add(heads, supplierCreditHeads(one)), zero());
+  const net = {
+    igst: r2(Math.max(0, itc.igst - reversed.igst - supplierCredits.igst)),
+    cgst: r2(Math.max(0, itc.cgst - reversed.cgst - supplierCredits.cgst)),
+    sgst: r2(Math.max(0, itc.sgst - reversed.sgst - supplierCredits.sgst)),
+  };
   const paidIn = payments.filter((payment) => inMonths(payment.period));
   return {
     outward,
+    creditNotes,
+    supplierCredits,
     nil: { taxable: r2(nilItems.reduce((total, item) => total + item.taxable, 0)), invoices: new Set(posted.filter((invoice) => invoice.items.some((item) => item.gstRate === 0)).map((invoice) => invoice.id)).size },
     interstateUnregistered: { taxable: r2(unregisteredOut.reduce((total, invoice) => total + invoice.taxable, 0)), igst: r2(unregisteredOut.reduce((total, invoice) => total + invoice.igst, 0)) },
     itc: net,
@@ -302,16 +337,18 @@ export function summary3b(invoices: SalesInvoice[], bills: Purchase[], payments:
 }
 
 /** The last 12 months' output tax and input tax credit, for the dashboard's chart. */
-export function monthlyTax(invoices: SalesInvoice[], bills: Purchase[], today: string) {
+export function monthlyTax(invoices: SalesInvoice[], bills: Purchase[], today: string, credits: { notes?: CreditNote[]; supplierReturns?: SupplierReturn[] } = {}) {
   const [year, month] = today.split('-').map(Number) as [number, number];
   return Array.from({ length: 12 }, (_, index) => {
     const date = new Date(year, month - 12 + index, 1);
     const period = `${date.getFullYear()}-${pad(date.getMonth() + 1)}`;
     const range = { from: `${period}-01`, to: `${period}-31`, label: period };
-    const output = postedIn(invoices, range).reduce((total, invoice) => total + invoice.cgst + invoice.sgst + invoice.igst, 0);
+    const output =
+      postedIn(invoices, range).reduce((total, invoice) => total + invoice.cgst + invoice.sgst + invoice.igst, 0) -
+      creditNotesIn(credits.notes ?? [], range).reduce((total, note) => total + note.cgst + note.sgst + note.igst, 0);
     const itc = bills
       .filter((bill) => bill.status === 'received' && ((bill.itcStatus === 'claimed' && bill.itcPeriod === period) || (bill.itcStatus === 'eligible' && bill.billDate.startsWith(period))))
-      .reduce((total, bill) => total + bill.tax, 0);
-    return { period, date, output: r2(output), itc: r2(itc) };
+      .reduce((total, bill) => total + bill.tax, 0) - supplierCreditsIn(credits.supplierReturns ?? [], range).reduce((total, one) => total + (one.creditNoteTax ?? 0), 0);
+    return { period, date, output: r2(Math.max(0, output)), itc: r2(Math.max(0, itc)) };
   });
 }

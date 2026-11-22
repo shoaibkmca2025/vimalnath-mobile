@@ -15,16 +15,18 @@ import { initialRange, inRange, INVOICE_STATUS, resolveRange } from '@/data/gst'
 import { customerOf } from '@/data/orders';
 import { billOf, dayLabel } from '@/data/payments';
 import { formatMoney, r2 } from '@/data/purchases';
-import type { Order, SalesInvoice } from '@/data/types';
+import type { CreditNote, Order, SalesInvoice } from '@/data/types';
 import { useData } from '@/data/useData';
 import { useGst } from '@/hooks/useGst';
 import { api } from '@/lib/api';
 import { downloadCsv } from '@/lib/csv';
 import { formatDate, plural } from '@/lib/format';
 
-type Show = 'posted' | 'draft' | 'cancelled' | 'toInvoice';
+type Show = 'posted' | 'draft' | 'cancelled' | 'credit' | 'toInvoice';
 
 /** GST sales register: every tax invoice, and the confirmed orders not invoiced yet. */
+const needleOf = (query: string) => query.trim().toLowerCase();
+
 export default function SalesRegisterPage() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -36,10 +38,12 @@ export default function SalesRegisterPage() {
   const [creating, setCreating] = useState<string | null>(null);
   const period = resolveRange(range);
   const asked = params.get('status') as Show | null;
-  const show: Show = asked && ['posted', 'draft', 'cancelled', 'toInvoice'].includes(asked) ? asked : 'posted';
+  const show: Show = asked && ['posted', 'draft', 'cancelled', 'credit', 'toInvoice'].includes(asked) ? asked : 'posted';
 
   const invoices = data?.invoices ?? [];
   const invoiced = new Set(invoices.filter((invoice) => invoice.status !== 'cancelled').map((invoice) => invoice.orderId));
+  // Credit notes for goods returned, dated in the period (cancelled ones too, marked).
+  const notes = (data?.creditNotes ?? []).filter((note) => inRange(note.noteDate, period) && (!needleOf(query) || [note.number, note.customerName, note.customerGstin ?? '', note.invoiceNumber, note.returnNumber].some((text) => text.toLowerCase().includes(needleOf(query)))));
   const toInvoice = db.orders.filter((order) => ['confirmed', 'packed', 'dispatched', 'delivered'].includes(order.status) && !invoiced.has(order.id));
   const needle = query.trim().toLowerCase();
   const matches = (invoice: SalesInvoice) => !needle || [invoice.number ?? '', invoice.customerName, invoice.customerGstin ?? '', invoice.orderNumber, invoice.placeOfSupply ?? ''].some((text) => text.toLowerCase().includes(needle));
@@ -48,8 +52,54 @@ export default function SalesRegisterPage() {
     posted: invoices.filter((invoice) => invoice.status === 'posted' && inRange(invoice.invoiceDate, period)).length,
     draft: invoices.filter((invoice) => invoice.status === 'draft').length,
     cancelled: invoices.filter((invoice) => invoice.status === 'cancelled' && inRange(invoice.invoiceDate, period)).length,
+    credit: (data?.creditNotes ?? []).filter((note) => note.status === 'posted' && inRange(note.noteDate, period)).length,
     toInvoice: toInvoice.length,
   };
+
+  const noteColumns: Column<CreditNote>[] = [
+    {
+      key: 'number',
+      header: 'Credit note',
+      sortValue: (note) => note.number,
+      cell: (note) => (
+        <>
+          <Link to={`/returns/${note.returnId}`} className="cell-title num">
+            {note.number}
+          </Link>
+          <div className="cell-sub">Return {note.returnNumber}</div>
+        </>
+      ),
+    },
+    { key: 'date', header: 'Date', sortValue: (note) => note.noteDate, cell: (note) => <span className="num">{dayLabel(note.noteDate)}</span> },
+    {
+      key: 'invoice',
+      header: 'Against invoice',
+      sortValue: (note) => note.invoiceNumber,
+      cell: (note) => (
+        <>
+          <Link to={`/gst/invoices/${note.invoiceId}`} className="num">
+            {note.invoiceNumber}
+          </Link>
+          <div className="cell-sub">{dayLabel(note.invoiceDate)}</div>
+        </>
+      ),
+    },
+    {
+      key: 'buyer',
+      header: 'Buyer',
+      sortValue: (note) => note.customerName,
+      cell: (note) => (
+        <>
+          {note.customerName}
+          <div className="cell-sub mono">{note.customerGstin || 'Unregistered (B2C)'}</div>
+        </>
+      ),
+    },
+    { key: 'taxable', header: 'Taxable', align: 'num', sortValue: (note) => note.taxable, cell: (note) => formatMoney(note.taxable) },
+    { key: 'tax', header: 'GST', align: 'num', sortValue: (note) => note.cgst + note.sgst + note.igst, cell: (note) => formatMoney(note.cgst + note.sgst + note.igst) },
+    { key: 'total', header: 'Total', align: 'num', sortValue: (note) => note.total, cell: (note) => <span style={{ fontWeight: 600 }}>{formatMoney(note.total)}</span> },
+    { key: 'status', header: 'Status', cell: (note) => <Badge tone={note.status === 'posted' ? 'success' : 'neutral'}>{note.status === 'posted' ? 'Posted' : 'Cancelled'}</Badge> },
+  ];
 
   const create = async (order: Order) => {
     setCreating(order.id);
@@ -73,7 +123,7 @@ export default function SalesRegisterPage() {
           <Link to={`/gst/invoices/${invoice.id}`} className="cell-title num">
             {invoice.number ?? 'Draft'}
           </Link>
-          <div className="cell-sub">Order {invoice.orderNumber}</div>
+          <div className="cell-sub">{invoice.returnNumber ? `Replacement · ${invoice.returnNumber}` : `Order ${invoice.orderNumber}`}</div>
         </>
       ),
     },
@@ -168,6 +218,7 @@ export default function SalesRegisterPage() {
                 { value: 'posted', label: 'Posted', count: counts.posted },
                 { value: 'draft', label: 'Drafts', count: counts.draft },
                 { value: 'cancelled', label: 'Cancelled', count: counts.cancelled },
+                { value: 'credit', label: 'Credit notes', count: counts.credit },
                 { value: 'toInvoice', label: 'To invoice', count: counts.toInvoice },
               ]}
             />
@@ -180,7 +231,17 @@ export default function SalesRegisterPage() {
             </p>
           )}
           <Card className="table-card">
-            {show === 'toInvoice' ? (
+            {show === 'credit' ? (
+              <DataTable
+                caption="Credit notes"
+                rows={notes}
+                columns={noteColumns}
+                getRowId={(note) => note.id}
+                onRowClick={(note) => navigate(`/returns/${note.returnId}`)}
+                initialSort={{ key: 'date', direction: 'desc' }}
+                empty={<EmptyState icon={ReceiptIcon} title={`No credit notes in ${period.label}`}>They’re issued from returns against posted invoices.</EmptyState>}
+              />
+            ) : show === 'toInvoice' ? (
               <DataTable
                 caption="Orders to invoice"
                 rows={toInvoice}

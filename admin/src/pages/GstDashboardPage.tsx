@@ -35,8 +35,8 @@ export default function GstDashboardPage() {
       purchases: bills.reduce((total, bill) => total + bill.total, 0),
       purchaseTax: bills.reduce((total, bill) => total + totalOf(purchaseHeads(bill)), 0),
       drafts: data.invoices.filter((invoice) => invoice.status === 'draft').length,
-      summary: summary3b(data.invoices, data.purchases, data.payments, period),
-      months: monthlyTax(data.invoices, data.purchases, today),
+      summary: summary3b(data.invoices, data.purchases, data.payments, period, { notes: data.creditNotes, supplierReturns: data.supplierReturns }),
+      months: monthlyTax(data.invoices, data.purchases, today, { notes: data.creditNotes, supplierReturns: data.supplierReturns }),
     };
   }, [data, period, today]);
 
@@ -183,6 +183,14 @@ export default function GstDashboardPage() {
             <dl className="kv kv--compact">
               <dt>3.1(a) Outward taxable supplies</dt>
               <dd className="num">{formatMoney(summary.outward.taxable)} taxable</dd>
+              {summary.creditNotes.notes > 0 && (
+                <>
+                  <dt>Credit notes (already taken off)</dt>
+                  <dd className="num">
+                    {plural(summary.creditNotes.notes, 'note')} · {formatMoney(summary.creditNotes.taxable)} taxable · tax {formatMoney(totalOf(summary.creditNotes.heads))}
+                  </dd>
+                </>
+              )}
               <dt>3.1(c) Nil-rated (0%) supplies</dt>
               <dd className="num">{formatMoney(summary.nil.taxable)}</dd>
               <dt>3.2 Inter-state to unregistered</dt>
@@ -193,6 +201,12 @@ export default function GstDashboardPage() {
               <dd className="num">{formatMoney(totalOf(summary.itc))}</dd>
               <dt>4(B) Reversed</dt>
               <dd className="num">{formatMoney(totalOf(summary.reversed))}</dd>
+              {totalOf(summary.supplierCredits) > 0 && (
+                <>
+                  <dt>Suppliers’ credit notes (taken off 4(A))</dt>
+                  <dd className="num">{formatMoney(totalOf(summary.supplierCredits))}</dd>
+                </>
+              )}
               <dt>4(D) Ineligible</dt>
               <dd className="num">{formatMoney(totalOf(summary.ineligible))}</dd>
               {(summary.paid.interest > 0 || summary.paid.penalty > 0) && (

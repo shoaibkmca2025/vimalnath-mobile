@@ -259,8 +259,9 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
           </EmptyState>
         </Card>
       ) : (
-        <div className="editor">
-          <div className="stack">
+        <>
+          {/* The lines get the page's full width: codes are long, and the condition and value must fit beside them. */}
+          <div className="stack" style={{ marginBottom: 'var(--space-5)' }}>
             <Card aria-labelledby="order-title">
               <CardHeader
                 id="order-title"
@@ -499,6 +500,9 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
               </Card>
             )}
 
+          </div>
+          <div className="editor">
+          <div className="stack">
             <Card aria-labelledby="why-title">
               <CardHeader id="why-title" title="Why it’s coming back" />
               <div className="card__body form-grid">
@@ -585,6 +589,7 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
             </Card>
           </div>
         </div>
+        </>
       )}
     </>
   );

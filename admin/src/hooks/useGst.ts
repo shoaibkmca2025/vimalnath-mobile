@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import type { GstPayment, GstSettings, Purchase, SalesInvoice } from '@/data/types';
+import type { CreditNote, GstPayment, GstSettings, Purchase, SalesInvoice, SupplierReturn } from '@/data/types';
 import { api } from '@/lib/api';
 
-type Loaded = { settings: GstSettings; invoices: SalesInvoice[]; purchases: Purchase[]; payments: GstPayment[] };
+type Loaded = { settings: GstSettings; invoices: SalesInvoice[]; purchases: Purchase[]; payments: GstPayment[]; creditNotes: CreditNote[]; supplierReturns: SupplierReturn[] };
 
-/** Everything the GST pages work from: settings, invoices, purchase bills and GST paid. Owners only. */
+/** Everything the GST pages work from: settings, invoices, credit notes, purchase bills, supplier returns and GST paid. Owners only. */
 export function useGst() {
   const [data, setData] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -14,8 +14,15 @@ export function useGst() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([api<GstSettings>('/gst/settings'), api<SalesInvoice[]>('/gst/invoices'), api<Purchase[]>('/purchases'), api<GstPayment[]>('/gst/payments')]).then(
-      ([settings, invoices, purchases, payments]) => active && setData({ settings, invoices, purchases, payments }),
+    Promise.all([
+      api<GstSettings>('/gst/settings'),
+      api<SalesInvoice[]>('/gst/invoices'),
+      api<Purchase[]>('/purchases'),
+      api<GstPayment[]>('/gst/payments'),
+      api<CreditNote[]>('/returns/credit-notes'),
+      api<SupplierReturn[]>('/supplier-returns'),
+    ]).then(
+      ([settings, invoices, purchases, payments, creditNotes, supplierReturns]) => active && setData({ settings, invoices, purchases, payments, creditNotes, supplierReturns }),
       (problem: unknown) => active && setError(problem instanceof Error ? problem.message : 'Couldn’t load GST records.'),
     );
     return () => {

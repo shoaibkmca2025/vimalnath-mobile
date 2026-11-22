@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
-import { GSTIN, computeInvoice, financialYear, gstSettings, invoiceNumber, r2, saveDraft } from './gst.ts';
+import { GSTIN, computeInvoice, financialYear, gstSettings, indiaDay, invoiceNumber, r2, saveDraft } from './gst.ts';
 import { adminOrders } from './orders.ts';
 import { only, type Env, type Role } from './staff.ts';
 import { GST_RATES, move, stockItems, type Bucket } from './stock.ts';
@@ -25,6 +25,7 @@ const MONEY_METHODS = ['cash', 'upi', 'bank', 'cheque'] as const;
 const ACTIONS = ['create', 'approve', 'receive', 'inspect', 'refund'] as const;
 type Action = (typeof ACTIONS)[number];
 const STAFF_ROLES = ['sales', 'catalogue', 'inventory'] as const;
+const METHOD_LABEL: Record<string, string> = { cash: 'cash', upi: 'UPI', bank: 'bank transfer', cheque: 'cheque', original: 'original payment method', store_credit: 'store credit', adjustment: 'against another order' };
 /** From received on, the goods are back with the shop. */
 const GOODS_BACK = ['received', 'inspected', 'refunded', 'replaced', 'closed'];
 const OPEN_REFUND = ['pending', 'approved', 'processing'];
@@ -556,7 +557,7 @@ async function issueCreditNote(tx: TransactionSql, id: number, by: string) {
     from sales_return_items where return_id = ${id}`;
   const exact = r2(sums!.taxable + sums!.cgst + sums!.sgst + sums!.igst);
   const total = Math.round(exact);
-  const today = isoDay(new Date());
+  const today = indiaDay();
   const year = financialYear(today);
   const [counter] = await tx`
     insert into invoice_counters (series, financial_year, last_number) values ('credit_note', ${year}, 1)
@@ -947,7 +948,7 @@ export function returnRoutes(sql: Sql) {
         const lines = await tx`
           select product_id, option_label, description, name, hsn, qty::float8 as qty, unit, rate::float8 as rate, discount_pct::float8 as discount, gst_rate::float8 as gst
           from replacement_items where return_id = ${id} order by position`;
-        const today = isoDay(new Date());
+        const today = indiaDay();
         const [draft] = await tx`insert into sales_invoices ${tx({ order_id: ret.order_id, invoice_date: today, customer_name: original!.customer_name, created_by: staff.name, return_id: id })} returning id`;
         await saveDraft(tx, draft!.id as number, {
           invoiceDate: today,
@@ -1073,9 +1074,9 @@ export function returnRoutes(sql: Sql) {
           created_by: staff.name,
           ...(complete && settings.refundApproval && input.direction === 'out' ? { approved_by: staff.name, approved_at: new Date() } : {}),
         })} returning id, return_id, amount, method, order_id`;
-      if (complete) await completeRefund(tx, refund as never, ret as never, staff.name, input.paidOn ?? isoDay(new Date()));
+      if (complete) await completeRefund(tx, refund as never, ret as never, staff.name, input.paidOn ?? indiaDay());
       await event(tx, id, 'refund', staff.name, {
-        note: `${input.direction === 'out' ? 'Refund' : 'Collected'} ${rupees(input.amount)} · ${input.method.replace('_', ' ')}${input.reference ? ` · ${input.reference}` : ''} · ${complete ? 'completed' : 'pending'}`,
+        note: `${input.direction === 'out' ? 'Refund' : 'Collected'} ${rupees(input.amount)} · ${METHOD_LABEL[input.method]}${input.reference ? ` · ${input.reference}` : ''} · ${complete ? 'completed' : 'pending'}`,
       });
       await bump(tx, id);
       await advance(tx, id, staff.name);
@@ -1112,7 +1113,7 @@ export function returnRoutes(sql: Sql) {
         const needsApproval = settings.refundApproval && refund!.direction === 'out';
         if (needsApproval && from === 'pending' && (to === 'processing' || to === 'completed') && !can(settings, staff.role, 'approve'))
           throw new HTTPException(403, { message: 'This refund needs approving first.' });
-        if (to === 'completed') await completeRefund(tx, refund as never, ret as never, staff.name, paidOn ?? isoDay(new Date()));
+        if (to === 'completed') await completeRefund(tx, refund as never, ret as never, staff.name, paidOn ?? indiaDay());
         else
           await tx`
             update refund_transactions set status = ${to}, updated_at = now(),

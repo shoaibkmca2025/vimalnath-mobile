@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Segmented } from '@/components/Field';
 import { GstRange } from '@/components/GstRange';
 import { PageHeader } from '@/components/PageHeader';
-import { hsnSummary, initialRange, postedIn, purchaseHsnLines, receivedIn, resolveRange, salesHsnLines, totalOf } from '@/data/gst';
+import { creditNoteHsnLines, creditNotesIn, hsnSummary, initialRange, postedIn, purchaseHsnLines, receivedIn, resolveRange, salesHsnLines, totalOf } from '@/data/gst';
 import { formatMoney } from '@/data/purchases';
 import { UNITS, itemKey } from '@/data/stock';
 import type { StockUnit } from '@/data/types';
@@ -28,7 +28,8 @@ export default function HsnSummaryPage() {
 
   const rows = useMemo(() => {
     if (!data) return [];
-    return side === 'sales' ? hsnSummary(salesHsnLines(postedIn(data.invoices, period))) : hsnSummary(purchaseHsnLines(receivedIn(data.purchases, period), (productId, option) => hsn.get(itemKey(productId, option)) ?? ''));
+    // Sales net of credit notes for goods returned in the period.
+    return side === 'sales' ? hsnSummary([...salesHsnLines(postedIn(data.invoices, period)), ...creditNoteHsnLines(creditNotesIn(data.creditNotes, period))]) : hsnSummary(purchaseHsnLines(receivedIn(data.purchases, period), (productId, option) => hsn.get(itemKey(productId, option)) ?? ''));
   }, [data, side, period, hsn]);
   const missing = rows.filter((row) => !row.hsn).length;
   const total = (pick: (row: (typeof rows)[number]) => number) => rows.reduce((sum, row) => sum + pick(row), 0);

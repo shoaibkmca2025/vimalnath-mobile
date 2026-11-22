@@ -122,6 +122,8 @@ const Gstin = Text(15)
   .refine((gstin) => !gstin || GSTIN.test(gstin), 'Enter the 15-character GSTIN, e.g. 27AAPFU0939F1ZV.');
 const Id = z.coerce.number().int().positive().max(2147483647);
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
+/** Today in India, where the shop is: the UTC date is still yesterday until 5:30 am there. */
+export const indiaDay = () => isoDay(new Date(Date.now() + 330 * 60_000));
 /** "5-Nov-26", as the shop's invoices write a date, in India's time. */
 const shortDate = (date: Date) => date.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: '2-digit' }).replace(/ /g, '-');
 const Day = z
@@ -289,13 +291,13 @@ export function gstRoutes(sql: Sql) {
   routes.use(only('owner'));
 
   const settingsWithNumber = async () => {
-    const year = financialYear(isoDay(new Date()));
+    const year = financialYear(indiaDay());
     return { ...(await gstSettings(sql)), financialYear: year, lastInvoiceNumber: await lastNumber(sql, year) };
   };
   routes.get('/settings', async (c) => c.json(await settingsWithNumber()));
   routes.put('/settings', jsonBody(Settings), async (c) => {
     const input = c.req.valid('json');
-    const year = financialYear(isoDay(new Date()));
+    const year = financialYear(indiaDay());
     await sql.begin(async (tx) => {
       await tx`
         update gst_settings set ${tx({ legal_name: input.legalName, trade_name: input.tradeName, gstin: input.gstin, address: input.address, pincode: input.pincode, registration_type: input.registrationType, invoice_prefix: input.invoicePrefix, terms: input.terms, phone: input.phone, email: input.email, bank_name: input.bankName, bank_account: input.bankAccount, bank_branch_ifsc: input.bankBranchIfsc, declaration: input.declaration, jurisdiction: input.jurisdiction, updated_by: c.get('staff').name })},
@@ -343,7 +345,7 @@ export function gstRoutes(sql: Sql) {
         where l.order_id = ${orderId} order by l.position`;
       const buyer = order.legal_name || order.customer_name || order.customer;
       const address = [order.billing_address, order.pincode].filter(Boolean).join(' ');
-      const today = isoDay(new Date());
+      const today = indiaDay();
       const [row] = await tx`insert into sales_invoices ${tx({ order_id: orderId, invoice_date: today, customer_name: buyer, created_by: by })} returning id`;
       await saveDraft(tx, row!.id, {
         invoiceDate: today,

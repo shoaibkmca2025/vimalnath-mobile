@@ -474,7 +474,12 @@ function DraftEditor({ invoice, settings, onSaved }: { invoice: SalesInvoice; se
                   {formatMoney(figures.total)}
                 </dd>
               </dl>
-              {order && figures.total !== (order.bill ?? order.total) && (
+              {invoice.returnId && (
+                <p className="field__hint" style={{ margin: 0 }}>
+                  The goods given for return <Link to={`/returns/${invoice.returnId}`}>{invoice.returnNumber}</Link>. Its money is settled on the return, so the order’s bill doesn’t change.
+                </p>
+              )}
+              {!invoice.returnId && order && figures.total !== (order.bill ?? order.total) && (
                 <p className="field__hint" style={{ margin: 0 }}>
                   Posting makes this the order’s bill (now {formatMoney(order.bill ?? order.total)}), so payments follow the invoice.
                 </p>

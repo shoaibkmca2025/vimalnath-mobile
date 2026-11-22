@@ -10,7 +10,7 @@ import { Segmented, SelectField, TextField } from '@/components/Field';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
 import { readSession } from '@/data/session';
-import { ADJUST_REASONS, GST_RATES, MOVE_LABEL, STATE_LABEL, UNITS, editsStock, formatPrice, formatQty, type AdjustReason, type ItemSave, type StockRow } from '@/data/stock';
+import { ADJUST_REASONS, BUCKET_LABEL, GST_RATES, MOVE_LABEL, STATE_LABEL, UNITS, editsStock, formatPrice, formatQty, type AdjustReason, type ItemSave, type StockRow } from '@/data/stock';
 import type { StockItem, StockMove, StockUnit } from '@/data/types';
 import { useData } from '@/data/useData';
 import { api } from '@/lib/api';
@@ -390,11 +390,32 @@ export function StockDrawer({ row, open, onClose }: { row: StockRow | null; open
                             )}
                           </>
                         )}
+                        {step.returnId && (
+                          <>
+                            {' '}
+                            <Link to={`/returns/${step.returnId}`} className="num">
+                              {step.returnNumber}
+                            </Link>
+                          </>
+                        )}
+                        {step.supplierReturnId && (
+                          <>
+                            {' '}
+                            {owner ? (
+                              <Link to={`/supplier-returns/${step.supplierReturnId}`} className="num">
+                                {step.supplierReturnNumber}
+                              </Link>
+                            ) : (
+                              <span className="num">{step.supplierReturnNumber}</span>
+                            )}
+                          </>
+                        )}
+                        {step.bucket && step.bucket !== 'available' && <span className="cell-sub"> · {BUCKET_LABEL[step.bucket]} stock</span>}
                       </span>
                       <span className="list-row__meta">
                         {formatDateTime(step.at)} · {step.by}
                         {step.note && ` · ${step.note}`}
-                        {!step.purchaseId && !(step.reason in ADJUST_REASONS) && step.reason && ` · ${step.reason}`}
+                        {!step.purchaseId && !step.returnId && !step.supplierReturnId && !(step.reason in ADJUST_REASONS) && step.reason && ` · ${step.reason}`}
                       </span>
                     </span>
                     <span className="num" style={{ textAlign: 'right' }}>

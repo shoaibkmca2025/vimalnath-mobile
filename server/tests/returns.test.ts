@@ -382,3 +382,39 @@ test('supplier return: against a received bill, out of stock on dispatch, the cr
   await move('closed');
   assert.equal(ret.status, 'closed');
 });
+
+test('replacement on an invoiced order: a credit note for the goods back, and a tax invoice drafted for the goods given', { skip }, async () => {
+  const owner = await staff('owner');
+  await send('/v1/admin/gst/settings', 'PUT', { legalName: 'Vimalnath Sales Corporation', gstin: '27AAPFU0939F1ZV', address: 'Nashik', registrationType: 'regular', invoicePrefix: 'VSC', terms: '' }, owner);
+  const buyer = await customer('Swap Buyer', { gstin: '27BANPK3582R1ZR', state: 'Maharashtra' });
+  const id = await order(buyer.device, [{ ...SSS, qty: 4, mrp: 1500 }]);
+  await setStock(BM, 10);
+  const draft = (await (await send('/v1/admin/gst/invoices', 'POST', { orderId: id }, owner)).json()).invoices[0];
+  const invoice = (await (await send(`/v1/admin/gst/invoices/${draft.id}/post`, 'POST', undefined, owner)).json()).invoices[0];
+  assert.equal(invoice.total, 7080);
+
+  let ret = (
+    await step(owner, '', {
+      kind: 'replacement',
+      orderId: id,
+      returnDate: today,
+      reason: 'wrong_product',
+      items: [{ source: 'invoice', sourcePosition: 0, qty: 2, condition: 'unopened' }],
+      replacementItems: [{ ...BM, qty: 2, rate: 1700, gstRate: 18 }],
+    })
+  ).returns[0]!;
+  // 2 × ₹1,500 + 18% back; 2 × ₹1,700 + 18% given: the customer pays ₹472.
+  assert.deepEqual([ret.returnValue, ret.replacementValue, ret.settleAmount], [3540, 4012, -472]);
+  ret = (await step(owner, `/${ret.id}/status`, { to: 'approved', version: ret.version })).returns[0]!;
+  ret = (await step(owner, `/${ret.id}/receive`, { version: ret.version })).returns[0]!;
+  assert.equal(ret.creditNote?.total, 3540);
+  ret = (await step(owner, `/${ret.id}/replace`, { version: ret.version })).returns[0]!;
+  assert.deepEqual([ret.replacementInvoice?.status, ret.replacementInvoice?.total], ['draft', 4012]);
+
+  // Posted, it takes the next number, and the order's bill stays the original invoice's.
+  const posted = (await (await send(`/v1/admin/gst/invoices/${ret.replacementInvoice!.id}/post`, 'POST', undefined, owner)).json()).invoices[0];
+  assert.equal(posted.returnNumber, ret.number);
+  assert.match(posted.number, /^VSC-\d{2}-\d{2}-\d+$/);
+  const [bill] = await sql`select bill_amount from orders where id = ${id}`;
+  assert.equal(bill!.bill_amount, 7080);
+});
