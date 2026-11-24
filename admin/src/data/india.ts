@@ -45,3 +45,6 @@ export const GSTIN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
 /** The state a GSTIN was issued in, from its first two digits. */
 export const stateOfGstin = (gstin: string) => GST_STATES[gstin.slice(0, 2)];
+
+/** A state's GST code, e.g. Maharashtra → 27; '' if it isn't one. */
+export const codeOfState = (state: string) => Object.entries(GST_STATES).find(([, name]) => name.toLowerCase() === state.trim().toLowerCase())?.[0] ?? '';

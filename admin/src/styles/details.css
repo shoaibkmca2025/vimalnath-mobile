@@ -802,15 +802,6 @@
   display: none;
 }
 
-.print-header {
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid #000;
-  font-size: 12px;
-}
-
 @media print {
   .sidebar,
   .topbar,
@@ -1519,6 +1510,20 @@ button.cell-title {
   display: grid;
   align-content: start;
   gap: 1px;
+}
+
+/* The logo left of the shop's name and address, as on its Tally invoices. */
+.tally__seller {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.tally__logo {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
 }
 
 .tally__name {

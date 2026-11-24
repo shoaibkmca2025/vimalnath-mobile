@@ -16,7 +16,7 @@ import {
   WarningCircleIcon,
   XCircleIcon,
 } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { Badge, OrderStatusBadge } from '@/components/Badge';
@@ -24,6 +24,7 @@ import { Button, ButtonLink, IconButton } from '@/components/Button';
 import { Card, CardHeader } from '@/components/Card';
 import { ConfirmDialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
+import { InvoiceDocument, estimateOf } from '@/components/InvoiceDocument';
 import { SelectField, TextAreaField } from '@/components/Field';
 import { OrderPaymentCard } from '@/components/OrderPaymentCard';
 import { TaxInvoiceCard } from '@/components/TaxInvoiceCard';
@@ -34,7 +35,8 @@ import { NEXT_ACTION_LABEL, ORDER_STATUS, STATUS_ORDER, customerOf, customersFro
 import { inOrders } from '@/data/requests';
 import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
-import type { Order, OrderStatus } from '@/data/types';
+import type { GstSettings, Order, OrderStatus, SalesInvoice } from '@/data/types';
+import { api } from '@/lib/api';
 import { formatDate, formatDateTime, formatINR, formatNumber, initials, plural } from '@/lib/format';
 
 const SOURCE_NAME = { master: 'Master', office: 'Office', tavic: 'Tavic' } as const;
@@ -176,7 +178,8 @@ export default function OrderDetailPage() {
         }
       />
 
-      <PrintHeader order={order} company={db.settings} />
+      <OrderBill order={order} />
+      <div className="no-print">
 
       <Card aria-label="Progress" className="no-print" style={{ marginBottom: 'var(--space-4)' }}>
         {order.status === 'cancelled' || order.status === 'declined' ? (
@@ -471,27 +474,36 @@ export default function OrderDetailPage() {
           setStatus('cancelled');
         }}
       />
+      </div>
     </>
   );
 }
 
-/** Only printed: who the order sheet is from and for, like the order PDF the app shares. */
-function PrintHeader({ order, company }: { order: Order; company: { companyName: string; address: string; phone: string; email: string; logo: string } }) {
+/**
+ * What Print gives, laid out as the shop's Tally bills: the order's posted tax invoice, else its estimate (the draft
+ * invoice's figures when there is one, as the Owner left them). Only Owners read GST invoices and settings; for others
+ * the estimate comes from the order and Stock, with the shop's general details.
+ */
+function OrderBill({ order }: { order: Order }) {
+  const { db } = useData();
+  const owner = readSession()?.role === 'owner';
+  const [gst, setGst] = useState<{ settings: GstSettings; invoices: SalesInvoice[] } | null>(null);
+  useEffect(() => {
+    if (!owner) return;
+    let active = true;
+    Promise.all([api<GstSettings>('/gst/settings'), api<SalesInvoice[]>(`/gst/invoices?orderId=${encodeURIComponent(order.id)}`)]).then(
+      ([settings, invoices]) => active && setGst({ settings, invoices }),
+      // Without them it still prints, as an estimate.
+      () => {},
+    );
+    return () => {
+      active = false;
+    };
+  }, [owner, order.id]);
+  const current = gst?.invoices.find((invoice) => invoice.status !== 'cancelled');
   return (
-    <div className="print-only print-header">
-      <div className="row" style={{ gap: 12 }}>
-        <img src={company.logo} alt="" width={40} height={40} />
-        <div>
-          <strong>{company.companyName}</strong>
-          <div>{[company.address, company.phone, company.email].filter(Boolean).join(' · ')}</div>
-        </div>
-      </div>
-      <div style={{ textAlign: 'right' }}>
-        <strong>Order {order.number}</strong>
-        <div>
-          {formatDateTime(order.createdAt)} · {ORDER_STATUS[order.status].label}
-        </div>
-      </div>
+    <div className="print-only-block">
+      <InvoiceDocument invoice={current ?? estimateOf(order, db.stock)} settings={gst?.settings ?? null} company={db.settings} estimate={current?.status !== 'posted'} />
     </div>
   );
 }

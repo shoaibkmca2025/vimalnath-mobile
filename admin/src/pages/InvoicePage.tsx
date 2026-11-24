@@ -1,5 +1,5 @@
 import { CheckCircleIcon, CopyIcon, PercentIcon, PrinterIcon, ReceiptIcon, TrashIcon, WarningCircleIcon, XCircleIcon } from '@phosphor-icons/react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { Badge } from '@/components/Badge';
@@ -8,11 +8,12 @@ import { Card, CardHeader } from '@/components/Card';
 import { ConfirmDialog } from '@/components/Dialog';
 import { Drawer } from '@/components/Drawer';
 import { EmptyState } from '@/components/EmptyState';
+import { InvoiceDocument, Pair } from '@/components/InvoiceDocument';
 import { SelectField, TextAreaField, TextField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/useToast';
-import { INVOICE_STATUS, PRINT_UNIT, computeInvoice, invoiceAmount, invoiceDay, invoiceHsnTable, invoiceTaxRows } from '@/data/gst';
-import { GSTIN, GST_STATES, STATES, stateOfGstin } from '@/data/india';
+import { INVOICE_STATUS, computeInvoice, invoiceAmount, invoiceTaxRows } from '@/data/gst';
+import { GSTIN, GST_STATES, STATES, codeOfState, stateOfGstin } from '@/data/india';
 import { localDay } from '@/data/payments';
 import { formatMoney, parseMoney, r2 } from '@/data/purchases';
 import { GST_RATES, UNITS } from '@/data/stock';
@@ -21,7 +22,6 @@ import { useData } from '@/data/useData';
 import { useGst } from '@/hooks/useGst';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
-import { rupeesInWords } from '@/lib/words';
 
 const DETAIL_KEYS = [
   'buyerContact',
@@ -75,7 +75,6 @@ const draftOf = (invoice: SalesInvoice): Draft => ({
   })),
 });
 
-const codeOfState = (state: string) => Object.entries(GST_STATES).find(([, name]) => name.toLowerCase() === state.trim().toLowerCase())?.[0] ?? '';
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** A typed rate or discount, or NaN; empty is 0. */
 const numberIn = (text: string) => parseMoney(text);
@@ -511,35 +510,6 @@ function DraftEditor({ invoice, settings, onSaved }: { invoice: SalesInvoice; se
   );
 }
 
-const Pair = ({ label, value }: { label: string; value: ReactNode }) => (
-  <>
-    <dt>{label}</dt>
-    <dd className="num">{value}</dd>
-  </>
-);
-
-/** A day typed as a date prints as 5-Nov-26; anything else as typed. */
-const printedDay = (value: string | undefined) => (value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? invoiceDay(value) : (value ?? ''));
-const balance = (value: number) => `${invoiceAmount(value)} ${value < 0 ? 'Cr' : 'Dr'}`;
-
-/** The seller, consignee or buyer, as the invoice prints them. */
-function Party({ title, name, address, gstin, state, code, contact, phone, email }: { title?: string; name: string; address?: string; gstin?: string; state?: string; code?: string; contact?: string; phone?: string; email?: string }) {
-  return (
-    <section className="tally__cell tally__party">
-      {title && <div className="tally__label">{title}</div>}
-      <strong className="tally__name">{name}</strong>
-      {address && <div className="tally__address">{address}</div>}
-      <dl className="tally__facts">
-        {gstin && <Pair label="GSTIN/UIN" value={gstin} />}
-        {state && <Pair label="State Name" value={`${state}${code ? `, Code : ${code}` : ''}`} />}
-        {contact && <Pair label="Contact person" value={contact} />}
-        {phone && <Pair label="Contact" value={phone} />}
-        {email && <Pair label="E-Mail" value={email} />}
-      </dl>
-    </section>
-  );
-}
-
 /** A posted invoice, laid out as the shop's Tally invoices are, for printing. */
 function PostedInvoice({ invoice, settings, onSaved }: { invoice: SalesInvoice; settings: GstSettings; onSaved: (fresh?: SalesInvoice[]) => void }) {
   const toast = useToast();
@@ -548,19 +518,6 @@ function PostedInvoice({ invoice, settings, onSaved }: { invoice: SalesInvoice; 
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const cancelled = invoice.status === 'cancelled';
-  const details = invoice.details ?? {};
-  const tax = r2(invoice.cgst + invoice.sgst + invoice.igst);
-  const legalName = settings.legalName || db.settings.companyName;
-  const sellerGstin = invoice.sellerGstin ?? settings.gstin;
-  const sellerState = stateOfGstin(sellerGstin);
-  const taxRows = invoiceTaxRows(invoice.items, invoice.interstate);
-  const hsnRows = invoiceHsnTable(invoice.items);
-  const units = [...new Set(invoice.items.map((item) => item.unit))];
-  const totalQty = units.length === 1 ? `${Math.round(invoice.items.reduce((sum, item) => sum + item.qty, 0) * 1000) / 1000} ${PRINT_UNIT[units[0]!]}` : '';
-  const shipGstin = details.shipGstin || '';
-  const shipState = details.shipState || invoice.placeOfSupply || '';
-  const shipCode = GSTIN.test(shipGstin) ? shipGstin.slice(0, 2) : codeOfState(shipState);
-  const previous = invoice.previousBalance;
 
   const cancel = async () => {
     if (!reason.trim()) return;
@@ -577,21 +534,6 @@ function PostedInvoice({ invoice, settings, onSaved }: { invoice: SalesInvoice; 
       setBusy(false);
     }
   };
-
-  const refs: [string, string | undefined][] = [
-    ['Invoice No.', invoice.number ?? ''],
-    ['Dated', invoiceDay(invoice.invoiceDate)],
-    ['Delivery Note', details.deliveryNote],
-    ['Mode/Terms of Payment', details.paymentTerms],
-    ['Reference No. & Date.', details.reference],
-    ['Other References', details.otherReferences],
-    ['Buyer’s Order No.', details.buyerOrderNo],
-    ['Dated', printedDay(details.buyerOrderDate)],
-    ['Dispatch Doc No.', details.dispatchDocNo],
-    ['Delivery Note Date', printedDay(details.deliveryNoteDate)],
-    ['Dispatched through', details.dispatchedThrough],
-    ['Destination', details.destination],
-  ];
 
   return (
     <>
@@ -626,306 +568,7 @@ function PostedInvoice({ invoice, settings, onSaved }: { invoice: SalesInvoice; 
         </p>
       )}
 
-      <div className="tally-scroll">
-        <article className="tally" aria-label={`Tax invoice ${invoice.number}`}>
-          <h2 className="tally__title">{cancelled ? 'TAX INVOICE (CANCELLED)' : 'TAX INVOICE'}</h2>
-          <div className="tally__box">
-            <div className="tally__top">
-              <div className="tally__parties">
-                <section className="tally__cell tally__party">
-                  <strong className="tally__name">{legalName}</strong>
-                  {settings.tradeName && settings.tradeName.toLowerCase() !== legalName.toLowerCase() && <div>{settings.tradeName}</div>}
-                  {settings.address && <div className="tally__address">{settings.address}</div>}
-                  {sellerState && (
-                    <div>
-                      {sellerState}
-                      {settings.pincode ? ` - ${settings.pincode}` : ''}, India
-                    </div>
-                  )}
-                  <dl className="tally__facts tally__facts--inline">
-                    <Pair label="GSTIN/UIN" value={sellerGstin} />
-                    {sellerState && <Pair label="State Name" value={`${sellerState}, Code : ${sellerGstin.slice(0, 2)}`} />}
-                    {settings.phone && <Pair label="Contact" value={settings.phone} />}
-                    {settings.email && <Pair label="E-Mail" value={settings.email} />}
-                  </dl>
-                </section>
-                <Party
-                  title="Consignee (Ship to)"
-                  name={details.shipName || invoice.customerName}
-                  address={details.shipAddress || invoice.billingAddress}
-                  gstin={shipGstin || (details.shipName ? '' : invoice.customerGstin)}
-                  state={shipState}
-                  code={shipCode}
-                  contact={details.shipContact}
-                  phone={details.shipPhone}
-                  email={details.shipEmail}
-                />
-                <Party
-                  title="Buyer (Bill to)"
-                  name={invoice.customerName}
-                  address={invoice.billingAddress}
-                  gstin={invoice.customerGstin || ''}
-                  state={invoice.placeOfSupply}
-                  code={invoice.posCode}
-                  contact={details.buyerContact}
-                  phone={details.buyerPhone}
-                  email={details.buyerEmail}
-                />
-              </div>
-              <div className="tally__refs">
-                <dl className="tally__ref-grid">
-                  {refs.map(([label, value], index) => (
-                    <div key={index} className="tally__ref">
-                      <dt>{label}</dt>
-                      <dd>{value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                <dl className="tally__ref tally__ref--wide">
-                  <dt>Terms of Delivery</dt>
-                  <dd className="tally__address">{details.deliveryTerms}</dd>
-                </dl>
-              </div>
-            </div>
-
-            <table className="tally__lines">
-              <colgroup>
-                <col style={{ width: '5%' }} />
-                <col />
-                <col style={{ width: '11%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '6%' }} />
-                <col style={{ width: '7%' }} />
-                <col style={{ width: '13%' }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th scope="col">
-                    Sl
-                    <br />
-                    No.
-                  </th>
-                  <th scope="col">Description of Goods</th>
-                  <th scope="col">HSN/SAC</th>
-                  <th scope="col">Quantity</th>
-                  <th scope="col">Rate</th>
-                  <th scope="col">per</th>
-                  <th scope="col">Disc. %</th>
-                  <th scope="col">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoice.items.map((item, index) => (
-                  <tr key={index}>
-                    <td className="tally__c">{index + 1}</td>
-                    <td>
-                      <strong>{item.description}</strong>
-                      {item.detail && <div className="tally__detail">{item.detail}</div>}
-                    </td>
-                    <td>{item.hsn}</td>
-                    <td className="tally__n">
-                      <strong>
-                        {item.qty} {PRINT_UNIT[item.unit]}
-                      </strong>
-                    </td>
-                    <td className="tally__n">{invoiceAmount(item.rate)}</td>
-                    <td>{PRINT_UNIT[item.unit]}</td>
-                    <td className="tally__n">{item.discountPct ? `${item.discountPct} %` : ''}</td>
-                    <td className="tally__n">
-                      <strong>{invoiceAmount(item.amount)}</strong>
-                    </td>
-                  </tr>
-                ))}
-                <tr>
-                  {blanks(7)}
-                  <td className="tally__n tally__subtotal">{invoiceAmount(invoice.taxable)}</td>
-                </tr>
-                {taxRows.map((row) => (
-                  <tr key={row.label}>
-                    <td />
-                    <td className="tally__ledger">
-                      <strong>{row.label}</strong>
-                    </td>
-                    <td />
-                    <td />
-                    <td className="tally__n">{row.rate} %</td>
-                    <td />
-                    <td />
-                    <td className="tally__n">
-                      <strong>{invoiceAmount(row.amount)}</strong>
-                    </td>
-                  </tr>
-                ))}
-                {invoice.roundOff !== 0 && (
-                  <tr>
-                    <td />
-                    <td className="tally__ledger">
-                      {invoice.roundOff < 0 && <span className="tally__less">Less :</span>}
-                      <strong>Rounding Off</strong>
-                    </td>
-                    {blanks(5)}
-                    <td className="tally__n">
-                      <strong>
-                        {invoice.roundOff < 0 ? '(-)' : ''}
-                        {invoiceAmount(invoice.roundOff)}
-                      </strong>
-                    </td>
-                  </tr>
-                )}
-                <tr className="tally__fill" aria-hidden>
-                  {blanks(8)}
-                </tr>
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td />
-                  <td className="tally__n">Total</td>
-                  <td />
-                  <td className="tally__n">
-                    <strong>{totalQty}</strong>
-                  </td>
-                  {blanks(3)}
-                  <td className="tally__n tally__grand">₹ {invoiceAmount(invoice.total)}</td>
-                </tr>
-              </tfoot>
-            </table>
-
-            <div className="tally__cell tally__words">
-              <div className="tally__split">
-                <span>Amount Chargeable (in words)</span>
-                <em>E. &amp; O.E</em>
-              </div>
-              <strong>{rupeesInWords(invoice.total)}</strong>
-              {previous !== null && previous !== undefined && (
-                <dl className="tally__balance">
-                  <Pair label="Previous Balance :" value={<strong>{balance(previous)}</strong>} />
-                  <Pair label="Current Balance :" value={<strong>{balance(r2(previous + invoice.total))}</strong>} />
-                </dl>
-              )}
-            </div>
-
-            <table className="tally__hsn">
-              <thead>
-                <tr>
-                  <th scope="col" rowSpan={2}>
-                    HSN/SAC
-                  </th>
-                  <th scope="col" rowSpan={2}>
-                    Taxable
-                    <br />
-                    Value
-                  </th>
-                  {invoice.interstate ? (
-                    <th scope="colgroup" colSpan={2}>
-                      IGST
-                    </th>
-                  ) : (
-                    <>
-                      <th scope="colgroup" colSpan={2}>
-                        CGST
-                      </th>
-                      <th scope="colgroup" colSpan={2}>
-                        SGST/UTGST
-                      </th>
-                    </>
-                  )}
-                  <th scope="col" rowSpan={2}>
-                    Total
-                    <br />
-                    Tax Amount
-                  </th>
-                </tr>
-                <tr>
-                  {(invoice.interstate ? ['IGST'] : ['CGST', 'SGST']).map((head) => (
-                    <HeadPair key={head} />
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {hsnRows.map((row) => (
-                  <tr key={`${row.hsn}|${row.rate}`}>
-                    <td>{row.hsn || '—'}</td>
-                    <td className="tally__n">{invoiceAmount(row.taxable)}</td>
-                    {invoice.interstate ? (
-                      <>
-                        <td className="tally__n">{row.rate}%</td>
-                        <td className="tally__n">{invoiceAmount(row.heads.igst)}</td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="tally__n">{row.rate / 2}%</td>
-                        <td className="tally__n">{invoiceAmount(row.heads.cgst)}</td>
-                        <td className="tally__n">{row.rate / 2}%</td>
-                        <td className="tally__n">{invoiceAmount(row.heads.sgst)}</td>
-                      </>
-                    )}
-                    <td className="tally__n">{invoiceAmount(row.tax)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <th scope="row" className="tally__n">
-                    Total
-                  </th>
-                  <td className="tally__n">{invoiceAmount(invoice.taxable)}</td>
-                  {invoice.interstate ? (
-                    <>
-                      <td />
-                      <td className="tally__n">{invoiceAmount(invoice.igst)}</td>
-                    </>
-                  ) : (
-                    <>
-                      <td />
-                      <td className="tally__n">{invoiceAmount(invoice.cgst)}</td>
-                      <td />
-                      <td className="tally__n">{invoiceAmount(invoice.sgst)}</td>
-                    </>
-                  )}
-                  <td className="tally__n">{invoiceAmount(tax)}</td>
-                </tr>
-              </tfoot>
-            </table>
-
-            <div className="tally__end">
-              <div className="tally__end-left">
-                <p>
-                  Tax Amount (in words) : <strong>{rupeesInWords(tax)}</strong>
-                </p>
-                {invoice.notes && (
-                  <p className="tally__address">
-                    <span className="tally__label">Remarks:</span> {invoice.notes}
-                  </p>
-                )}
-                <div className="tally__declaration">
-                  <span className="tally__label tally__label--rule">Declaration</span>
-                  <div className="tally__address">{settings.declaration}</div>
-                  {settings.terms && <div className="tally__address">{settings.terms}</div>}
-                </div>
-              </div>
-              <div className="tally__end-right">
-                {(settings.bankName || settings.bankAccount || settings.bankBranchIfsc) && (
-                  <div className="tally__bank">
-                    <div>Company’s Bank Details</div>
-                    <dl className="tally__facts">
-                      {settings.bankName && <Pair label="Bank Name" value={<strong>{settings.bankName}</strong>} />}
-                      {settings.bankAccount && <Pair label="A/c No." value={<strong>{settings.bankAccount}</strong>} />}
-                      {settings.bankBranchIfsc && <Pair label="Branch & IFS Code" value={<strong>{settings.bankBranchIfsc}</strong>} />}
-                    </dl>
-                  </div>
-                )}
-                <div className="tally__sign">
-                  <strong>for {legalName}</strong>
-                  <span>Authorised Signatory</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          {settings.jurisdiction && <p className="tally__after">{settings.jurisdiction}</p>}
-          <p className="tally__after">This is a Computer Generated Invoice</p>
-        </article>
-      </div>
+      <InvoiceDocument invoice={invoice} settings={settings} company={db.settings} />
 
       <Drawer
         open={cancelling}
@@ -953,13 +596,3 @@ function PostedInvoice({ invoice, settings, onSaved }: { invoice: SalesInvoice; 
     </>
   );
 }
-
-/** Empty cells that keep the invoice's column lines running down the page. */
-const blanks = (count: number) => Array.from({ length: count }, (_, index) => <td key={index} />);
-
-const HeadPair = () => (
-  <>
-    <th scope="col">Rate</th>
-    <th scope="col">Amount</th>
-  </>
-);
