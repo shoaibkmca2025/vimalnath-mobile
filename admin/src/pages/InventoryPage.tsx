@@ -42,12 +42,15 @@ const orderNumber = (order: Order) => Number(order.number.replace(/\D/g, '')) ||
 /** When the order reached its current status: the last time it was set. */
 const since = (order: Order) => order.history.findLast((event) => event.status === order.status)?.at ?? order.createdAt;
 
+/** Lines not ticked as picked yet. */
+const unpicked = (order: Order) => order.lines.filter((line) => !line.picked).length;
+
 /**
  * The inventory team's panel: confirmed orders to pack (Pending), packed orders to dispatch, and what's on the way.
  * Every change is saved as the order's status, so the office sees it in Orders, and the customer in their app.
  */
 export default function InventoryPage() {
-  const { db, update } = useData();
+  const { db, update, send } = useData();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState('');
@@ -56,8 +59,12 @@ export default function InventoryPage() {
   const [cancelling, setCancelling] = useState<Order | null>(null);
   // The orders a Mark All button would move, waiting for the dialog's yes.
   const [bulk, setBulk] = useState<{ to: OrderStatus; label: string; orders: Order[] } | null>(null);
+  // A pending order moved on while items aren't ticked as picked, waiting for the dialog's yes.
+  const [unticked, setUnticked] = useState<{ order: Order; to: OrderStatus } | null>(null);
   const tab: Tab = (TABS as string[]).includes(params.get('stage') ?? '') ? (params.get('stage') as Tab) : 'confirmed';
   const office = readSession()?.role !== 'inventory';
+  // The pick list is ticked by the inventory team and the Owner; Sales see the ticks.
+  const canPick = readSession()?.role === 'inventory' || readSession()?.role === 'owner';
   // Each line's photo comes from the catalogue, so the packer can see what to pick.
   const products = useMemo(() => new Map(db.products.map((product) => [product.id, product])), [db.products]);
 
@@ -157,6 +164,15 @@ export default function InventoryPage() {
     return ok;
   };
 
+  /** Ticks or unticks one line; the server keeps who and when, so the office sees it too. */
+  const pick = (order: Order, position: number, picked: boolean) => send(`/orders/${encodeURIComponent(order.id)}/lines/${position}/picked`, 'PUT', { picked });
+
+  /** Packing or sending a pending order with items not ticked asks first; everything else moves at once. */
+  const moveChecked = (order: Order, to: OrderStatus) => {
+    if (order.status === 'confirmed' && to !== 'cancelled' && unpicked(order)) setUnticked({ order, to });
+    else void move(order, to);
+  };
+
   const pendingItems = db.orders.filter((order) => order.status === 'confirmed').reduce((sum, order) => sum + itemCount(order), 0);
 
   return (
@@ -200,7 +216,7 @@ export default function InventoryPage() {
           {rows.map((order, index) => (
             // Every other order is shaded, so it's clear where one order ends and the next begins.
             <li key={order.id} data-shade={index % 2 ? 'dark' : 'light'} data-print-hidden={printing !== null && printing !== order.id}>
-              <InventoryCard order={order} office={office} products={products} onMove={(to) => move(order, to)} onCancel={() => setCancelling(order)} onSaveNote={(text) => saveNote(order, text)} onPrint={() => setPrinting(order.id)} />
+              <InventoryCard order={order} office={office} canPick={canPick} products={products} onPick={(position, picked) => pick(order, position, picked)} onMove={(to) => moveChecked(order, to)} onCancel={() => setCancelling(order)} onSaveNote={(text) => saveNote(order, text)} onPrint={() => setPrinting(order.id)} />
             </li>
           ))}
         </ul>
@@ -209,13 +225,30 @@ export default function InventoryPage() {
       <ConfirmDialog
         open={bulk !== null}
         title={bulk ? `${bulk.label.replace('Mark All', `Mark all ${bulk.orders.length} orders`).replace(/ (Packed|Dispatched|Delivered)$/, (word) => word.toLowerCase())}?` : ''}
-        body={bulk ? `${bulk.orders.map((order) => order.number).join(', ')}. The office sees the change in Orders straight away; you can undo it from the message that follows.` : ''}
+        body={
+          bulk
+            ? `${bulk.orders.map((order) => order.number).join(', ')}.${pickWarning(bulk)} The office sees the change in Orders straight away; you can undo it from the message that follows.`
+            : ''
+        }
         confirmLabel={bulk?.label ?? 'Mark All'}
         onCancel={() => setBulk(null)}
         onConfirm={() => {
           const chosen = bulk;
           setBulk(null);
           if (chosen) void moveAll(chosen.orders, chosen.to);
+        }}
+      />
+
+      <ConfirmDialog
+        open={unticked !== null}
+        title={unticked ? `Mark ${unticked.order.number} ${unticked.to === 'packed' ? 'packed' : 'dispatched'}?` : ''}
+        body={unticked ? `${unpicked(unticked.order)} of ${plural(unticked.order.lines.length, 'line')} ${unpicked(unticked.order) === 1 ? 'isn’t' : 'aren’t'} ticked as picked yet.` : ''}
+        confirmLabel={unticked?.to === 'packed' ? 'Mark Packed Anyway' : 'Mark Dispatched Anyway'}
+        onCancel={() => setUnticked(null)}
+        onConfirm={() => {
+          const chosen = unticked;
+          setUnticked(null);
+          if (chosen) void move(chosen.order, chosen.to);
         }}
       />
 
@@ -240,10 +273,18 @@ export default function InventoryPage() {
   );
 }
 
+/** For Mark All on pending orders: how many still have items not ticked as picked. */
+function pickWarning(bulk: { to: OrderStatus; orders: Order[] }) {
+  const open = bulk.orders.filter((order) => order.status === 'confirmed' && bulk.to !== 'cancelled' && unpicked(order)).length;
+  return open ? ` ${plural(open, 'order')} still ${open === 1 ? 'has' : 'have'} items not ticked as picked.` : '';
+}
+
 function InventoryCard({
   order,
   office,
+  canPick,
   products,
+  onPick,
   onMove,
   onCancel,
   onSaveNote,
@@ -251,7 +292,9 @@ function InventoryCard({
 }: {
   order: Order;
   office: boolean;
+  canPick: boolean;
   products: Map<string, Product>;
+  onPick: (position: number, picked: boolean) => Promise<boolean>;
   onCancel: () => void;
   onMove: (to: OrderStatus) => void; onSaveNote: (text: string) => Promise<boolean>; onPrint: () => void }) {
   const [draft, setDraft] = useState(order.inventoryNote?.text ?? '');
@@ -266,6 +309,16 @@ function InventoryCard({
   const stage = order.status as Tab;
   const items = itemCount(order);
   const titleId = `inventory-${order.id}`;
+  // The pick list is open while the order is pending or packed.
+  const picking = stage === 'confirmed' || stage === 'packed';
+  const picked = order.lines.length - unpicked(order);
+  // The line being saved, so a second tap can't send it twice.
+  const [saving, setSaving] = useState<number | null>(null);
+  const tick = async (position: number, value: boolean) => {
+    setSaving(position);
+    await onPick(position, value);
+    setSaving(null);
+  };
 
   return (
     <Card className="inventory-card" aria-labelledby={titleId}>
@@ -283,6 +336,12 @@ function InventoryCard({
           </h2>
           <p className="cell-sub" style={{ whiteSpace: 'normal' }}>
             {plural(items, 'item')} · {plural(order.lines.length, 'line')} · {REACHED[stage]} {relativePhrase(formatRelativeTime(since(order)))}
+            {picking && (
+              <span className={picked === order.lines.length ? 'pick-progress pick-progress--done' : 'pick-progress'}>
+                {' · '}
+                {picked === order.lines.length ? 'All picked' : `${picked} of ${order.lines.length} picked`}
+              </span>
+            )}
             <span className="print-only-inline"> · {formatDateTime(since(order))}</span>
           </p>
         </div>
@@ -296,6 +355,11 @@ function InventoryCard({
           <caption className="visually-hidden">Items to pack for order {order.number}</caption>
           <thead>
             <tr>
+              {picking && (
+                <th scope="col" className="pick-cell">
+                  Picked
+                </th>
+              )}
               <th scope="col">Code</th>
               <th scope="col">Product</th>
               <th scope="col" className="is-num">
@@ -305,7 +369,22 @@ function InventoryCard({
           </thead>
           <tbody>
             {order.lines.map((line, index) => (
-              <tr key={`${line.productId}-${index}`}>
+              <tr key={`${line.productId}-${index}`} className={line.picked ? 'is-picked' : undefined}>
+                {picking && (
+                  <td className="pick-cell">
+                    {/* The whole cell is the tap target, so it's easy to hit on a phone in the store room. */}
+                    <label className="pick-hit">
+                      <input
+                        type="checkbox"
+                        className="pick-box"
+                        checked={Boolean(line.picked)}
+                        disabled={!canPick || saving !== null}
+                        onChange={(event) => void tick(index, event.target.checked)}
+                        aria-label={`Picked: ${formatNumber(line.qty)} × ${line.optionCode ?? line.code} ${line.name}${line.option ? `, ${line.option}` : ''}`}
+                      />
+                    </label>
+                  </td>
+                )}
                 <td className="mono">{line.optionCode ?? line.code}</td>
                 <td>
                   <div className="cell-media packing-item">
@@ -316,6 +395,11 @@ function InventoryCard({
                       {line.note && (
                         <div className="line-note">
                           <NoteIcon size={14} aria-hidden /> {line.note}
+                        </div>
+                      )}
+                      {line.picked && (
+                        <div className="cell-sub pick-by">
+                          Picked by {line.picked.by}, {formatDateTime(line.picked.at)}
                         </div>
                       )}
                     </div>

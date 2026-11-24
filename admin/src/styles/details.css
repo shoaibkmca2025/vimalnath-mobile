@@ -1243,6 +1243,43 @@
   min-width: 0;
 }
 
+/* The pick list: one big tick per line; a picked line fades and its code is struck through. */
+.table--packing .pick-cell {
+  width: 1%;
+  padding: 0;
+  text-align: center;
+}
+.pick-hit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 52px;
+  cursor: pointer;
+}
+.pick-box {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--success);
+  cursor: inherit;
+}
+.pick-hit:has(.pick-box:disabled) {
+  cursor: default;
+}
+.table--packing tr.is-picked td:not(.pick-cell) {
+  opacity: 0.55;
+}
+.table--packing tr.is-picked td.mono {
+  text-decoration: line-through;
+}
+.pick-progress {
+  font-weight: 600;
+}
+.pick-progress--done {
+  color: var(--success);
+}
+
 .table--packing td {
   vertical-align: middle;
 }

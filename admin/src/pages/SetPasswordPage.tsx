@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router';
 
 import { Button, ButtonLink } from '@/components/Button';
 import { PasswordField } from '@/components/Field';
+import { endSession } from '@/data/session';
 import { api, type ApiError } from '@/lib/api';
 
 /** Where a one-time link from the Owner lands, for new staff and for anyone who forgot their password. */
@@ -23,6 +24,9 @@ export default function SetPasswordPage() {
     setFailure(null);
     try {
       await api('/auth/set-password', 'POST', { token: params.get('token') ?? '', password });
+      // Whoever was signed in on this browser (say, the Owner who opened the link to try it) is signed out, so Sign In
+      // really signs in the person the link was for, with their own access.
+      await endSession();
       setDone(true);
     } catch (error) {
       setFailure(error as ApiError);

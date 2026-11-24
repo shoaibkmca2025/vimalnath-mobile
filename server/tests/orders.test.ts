@@ -259,6 +259,34 @@ test('request: a declined one stays out of inventory, a cancelled one cannot be 
   assert.equal((await request((await staff('inventory')).headers, 'Decline Co')).status, 403);
 });
 
+test('pick list: the inventory team ticks each line as it picks it (who, when); the office sees it; only while packing', { skip }, async () => {
+  const shop = await phone('Pick Co');
+  await shop.place([...lock(2), ...lock(1)]);
+  const desk = await staff('sales');
+  const inventory = await staff('inventory');
+  const [order] = await ofDevice('Pick Co');
+  const tick = (headers: Record<string, string>, position: number, picked: boolean) => send(`/v1/admin/orders/${order!.id}/lines/${position}/picked`, 'PUT', { picked }, headers);
+  const answer = async (res: Response) => ((await res.json()) as { orders: Order[] }).orders[0]!;
+
+  // Not confirmed yet: nothing to pick.
+  assert.equal((await tick(inventory.headers, 0, true)).status, 409);
+  await send('/v1/admin/orders/status', 'POST', { ids: [order!.id], status: 'confirmed' }, desk.headers);
+  const ticked = await answer(await tick(inventory.headers, 1, true));
+  assert.deepEqual([ticked.lines[0]!.picked, ticked.lines[1]!.picked?.by], [undefined, inventory.name]);
+  assert.ok(Date.parse(ticked.lines[1]!.picked!.at) > 0);
+  // The office sees who picked what, but only the inventory team (and the Owner) ticks.
+  assert.equal((await adminOrders(desk.headers)).find((one) => one.id === order!.id)!.lines[1]!.picked?.by, inventory.name);
+  assert.equal((await tick(desk.headers, 0, true)).status, 403);
+  // A mistake is unticked; a line that isn't in the order can't be ticked.
+  assert.equal((await answer(await tick(inventory.headers, 1, false))).lines[1]!.picked, undefined);
+  assert.equal((await tick(inventory.headers, 7, true)).status, 409);
+  // Still tickable once packed; closed once it has gone out.
+  await send('/v1/admin/orders/status', 'POST', { ids: [order!.id], status: 'packed' }, inventory.headers);
+  assert.equal((await answer(await tick(inventory.headers, 0, true))).lines[0]!.picked?.by, inventory.name);
+  await send('/v1/admin/orders/status', 'POST', { ids: [order!.id], status: 'dispatched' }, inventory.headers);
+  assert.equal((await tick(inventory.headers, 0, false)).status, 409);
+});
+
 test('inventory: packs and dispatches confirmed orders, can set them back to pending, and every change shows in the admin', { skip }, async () => {
   const ravi = await phone('Inventory Co');
   await ravi.place(lock());

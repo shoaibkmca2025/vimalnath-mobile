@@ -81,6 +81,8 @@ export type OrderLine = {
   mrp?: number;
   /** Set by the server when the line didn't match the catalogue, e.g. "No longer in the catalogue". */
   problem?: string;
+  /** Ticked on the inventory team's pick list while the order is packed. */
+  picked?: { at: string; by: string };
 };
 
 export type OrderEvent = {

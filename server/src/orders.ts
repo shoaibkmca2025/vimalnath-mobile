@@ -219,7 +219,8 @@ export function orderAdminRoutes(sql: Sql) {
           'id', o.id::text, 'number', o.number, 'createdAt', o.placed_at, 'customer', o.customer,
           'phone', nullif(o.phone, ''), 'notes', nullif(o.notes, ''), 'status', o.status, 'total', o.total,
           'lines', (select json_agg(json_build_object('productId', l.product_id, 'code', l.code, 'name', l.name, 'option', l.option,
-              'optionCode', l.option_code, 'note', l.note, 'qty', l.qty, 'mrp', l.mrp, 'problem', l.problem) order by l.position)
+              'optionCode', l.option_code, 'note', l.note, 'qty', l.qty, 'mrp', l.mrp, 'problem', l.problem,
+              'picked', case when l.picked_at is not null then json_build_object('at', l.picked_at, 'by', l.picked_by) end) order by l.position)
             from order_lines l where l.order_id = o.id),
           'history', (select json_agg(json_build_object('status', e.status, 'at', e.at, 'by', e.by) order by e.at) from order_events e where e.order_id = o.id),
           'source', o.source,
@@ -404,6 +405,21 @@ export function orderAdminRoutes(sql: Sql) {
       update orders o set inventory_note = ${text || null}, inventory_note_by = ${text ? name : null}, inventory_note_at = ${text ? sql`now()` : null}
       where o.id = ${id} and ${inventory(role) ? forInventory() : sql`true`} returning o.id`;
     if (!row) throw new HTTPException(404, { message: 'That order does not exist.' });
+    return c.json({ orders: await orders(sql`o.id = ${id}`, !inventory(role)) });
+  });
+
+  // The pick list: a line ticked as the inventory team picks it (who and when), or unticked. Only while the order is
+  // being packed. The office sees the ticks but doesn't tick.
+  admin.put('/:id/lines/:position/picked', only('owner', 'inventory'), jsonBody(z.object({ picked: z.boolean() })), async (c) => {
+    const id = parse(OrderIds.element, c.req.param('id'));
+    const position = parse(z.coerce.number().int().min(0).max(1000), c.req.param('position'));
+    const { picked } = c.req.valid('json');
+    const { name, role } = c.get('staff');
+    const [row] = await sql`
+      update order_lines l set picked_at = ${picked ? sql`now()` : null}, picked_by = ${picked ? name : null}
+      from orders o where o.id = l.order_id and l.order_id = ${id} and l.position = ${position} and o.status in ('confirmed', 'packed')
+      returning l.order_id`;
+    if (!row) throw new HTTPException(409, { message: 'This order isn’t being packed any more, so its items can’t be ticked.' });
     return c.json({ orders: await orders(sql`o.id = ${id}`, !inventory(role)) });
   });
 
