@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import type { Sql } from 'postgres';
+import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
 import { queueOrderEvent } from './notifications.ts';
+import { storeCredit } from './returns.ts';
 import { only, type Env } from './staff.ts';
 import { moveStockForOrders } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
@@ -138,7 +139,7 @@ export async function appOrders(sql: Sql, deviceId: number) {
 
 const phoneOrders = (sql: Sql, deviceId: number) => sql`
   select o.id::text as id, o.number, initcap(o.status) as status, o.client_order_id as "mobileOrderId", o.client_event_id as "mobileEventId", o.source,
-    (select json_agg(json_build_object('status', initcap(e.status), 'at', e.at) order by e.at) from order_events e where e.order_id = o.id) as history,
+    coalesce((select json_agg(json_build_object('status', initcap(e.status), 'at', e.at) order by e.at) from order_events e where e.order_id = o.id), '[]') as history,
     case when o.source = 'admin' then json_strip_nulls(json_build_object(
       'createdAt', o.placed_at, 'customer', o.customer, 'phone', nullif(o.phone, ''), 'notes', nullif(o.notes, ''), 'total', o.total,
       'lines', (select json_agg(json_build_object('productId', l.product_id, 'code', l.code, 'name', l.name, 'option', l.option,
@@ -185,7 +186,8 @@ const isoDay = (date: Date) => date.toISOString().slice(0, 10);
 const Payment = z.object({
   orderId: z.number().int().positive().max(2147483647),
   amount: z.number('Enter the amount in rupees.').int('Enter whole rupees.').positive('Enter an amount above ₹0.').max(MAX_RUPEES, 'Enter ₹100 crore or less.'),
-  method: z.enum(['cash', 'upi', 'bank', 'cheque'], 'Choose how they paid.'),
+  // store_credit: from what the customer holds after a return refunded as store credit.
+  method: z.enum(['cash', 'upi', 'bank', 'cheque', 'store_credit'], 'Choose how they paid.'),
   // A real calendar day, not after tomorrow in UTC: in India it is already tomorrow for the first 5½ hours of the UTC day.
   paidOn: z
     .string()
@@ -196,6 +198,41 @@ const Payment = z.object({
   note: z.string().trim().max(300, 'Use 300 characters or fewer.').default(''),
 });
 
+/**
+ * Orders in the admin's Order shape (admin/src/data/types.ts); empty fields are left out. `money` adds the bill and
+ * payments, which the inventory team doesn't see. Returns use it too, when a refund pays off one of a customer's orders.
+ */
+export const adminOrders = async (sql: Sql | TransactionSql, where = sql`true`, money = true) =>
+  (
+    await sql`
+      select json_strip_nulls(json_build_object(
+        'terms', ${money ? sql`o.payment_terms` : sql`null`}, 'bill', ${money ? sql`o.bill_amount` : sql`null`},
+        'payments', ${
+          money
+            ? sql`(select json_agg(json_build_object('id', p.id::text, 'amount', p.amount, 'method', p.method, 'paidOn', p.paid_on, 'note', nullif(p.note, ''), 'by', p.by, 'at', p.created_at) order by p.paid_on, p.id)
+                from order_payments p where p.order_id = o.id)`
+            : sql`null`
+        },
+        'id', o.id::text, 'number', o.number, 'createdAt', o.placed_at, 'customer', o.customer,
+        'phone', nullif(o.phone, ''), 'notes', nullif(o.notes, ''), 'status', o.status, 'total', o.total,
+        'lines', (select json_agg(json_build_object('productId', l.product_id, 'code', l.code, 'name', l.name, 'option', l.option,
+            'optionCode', l.option_code, 'note', l.note, 'qty', l.qty, 'mrp', l.mrp, 'problem', l.problem,
+            'picked', case when l.picked_at is not null then json_build_object('at', l.picked_at, 'by', l.picked_by) end) order by l.position)
+          from order_lines l where l.order_id = o.id),
+        -- An empty list, not null, for an order without events (an import, say): the admin reads it as a list.
+        'history', coalesce((select json_agg(json_build_object('status', e.status, 'at', e.at, 'by', e.by) order by e.at) from order_events e where e.order_id = o.id), '[]'),
+        'source', o.source,
+        'customerSeenAt', o.customer_seen_at,
+        'internalNote', case when o.internal_note is not null then json_build_object('text', o.internal_note, 'at', o.internal_note_at, 'by', o.internal_note_by) end,
+        'inventoryNote', case when o.inventory_note is not null then json_build_object('text', o.inventory_note, 'at', o.inventory_note_at, 'by', o.inventory_note_by) end,
+        'appUser', json_build_object('id', d.id, 'label', d.label),
+        'customerRecord', case when cu.id is not null then json_build_object('id', cu.id, 'name', cu.name) end
+      )) as "order"
+      from orders o join app_devices d on d.id = o.device_id left join customers cu on cu.id = d.customer_id
+      where ${where}
+      order by o.placed_at desc, o.id desc`
+  ).map((row) => row.order);
+
 /** /v1/admin/orders, for Owners and Sales; the inventory team sees and moves only the orders it packs and dispatches. */
 export function orderAdminRoutes(sql: Sql) {
   const admin = new Hono<Env>();
@@ -203,37 +240,7 @@ export function orderAdminRoutes(sql: Sql) {
   const office = only('owner', 'sales');
   const inventory = (role: string) => role === 'inventory';
 
-  // In the admin's Order shape (admin/src/data/types.ts); empty fields are left out. `money` adds the bill and payments,
-  // which the inventory team doesn't see.
-  const orders = async (where = sql`true`, money = true) =>
-    (
-      await sql`
-        select json_strip_nulls(json_build_object(
-          'terms', ${money ? sql`o.payment_terms` : sql`null`}, 'bill', ${money ? sql`o.bill_amount` : sql`null`},
-          'payments', ${
-            money
-              ? sql`(select json_agg(json_build_object('id', p.id::text, 'amount', p.amount, 'method', p.method, 'paidOn', p.paid_on, 'note', nullif(p.note, ''), 'by', p.by, 'at', p.created_at) order by p.paid_on, p.id)
-                  from order_payments p where p.order_id = o.id)`
-              : sql`null`
-          },
-          'id', o.id::text, 'number', o.number, 'createdAt', o.placed_at, 'customer', o.customer,
-          'phone', nullif(o.phone, ''), 'notes', nullif(o.notes, ''), 'status', o.status, 'total', o.total,
-          'lines', (select json_agg(json_build_object('productId', l.product_id, 'code', l.code, 'name', l.name, 'option', l.option,
-              'optionCode', l.option_code, 'note', l.note, 'qty', l.qty, 'mrp', l.mrp, 'problem', l.problem,
-              'picked', case when l.picked_at is not null then json_build_object('at', l.picked_at, 'by', l.picked_by) end) order by l.position)
-            from order_lines l where l.order_id = o.id),
-          'history', (select json_agg(json_build_object('status', e.status, 'at', e.at, 'by', e.by) order by e.at) from order_events e where e.order_id = o.id),
-          'source', o.source,
-          'customerSeenAt', o.customer_seen_at,
-          'internalNote', case when o.internal_note is not null then json_build_object('text', o.internal_note, 'at', o.internal_note_at, 'by', o.internal_note_by) end,
-          'inventoryNote', case when o.inventory_note is not null then json_build_object('text', o.inventory_note, 'at', o.inventory_note_at, 'by', o.inventory_note_by) end,
-          'appUser', json_build_object('id', d.id, 'label', d.label),
-          'customerRecord', case when cu.id is not null then json_build_object('id', cu.id, 'name', cu.name) end
-        )) as "order"
-        from orders o join app_devices d on d.id = o.device_id left join customers cu on cu.id = d.customer_id
-        where ${where}
-        order by o.placed_at desc, o.id desc`
-    ).map((row) => row.order);
+  const orders = (where = sql`true`, money = true) => adminOrders(sql, where, money);
 
   // shortcut: every order at once, which the admin searches and filters itself; page it on the server past about 20,000 orders.
   // The inventory team also sees delivered orders, so an order doesn't vanish the moment the office marks it delivered.
@@ -325,6 +332,14 @@ export function orderAdminRoutes(sql: Sql) {
       const changed = await tx`
         with picked as (select id, status as was from orders where id in ${tx(ids)} and status <> ${status} ${allowed} order by id for update)
         update orders o set status = ${status} from picked where o.id = picked.id returning o.id, picked.was`;
+      // Returned goods came back against the delivery: undoing it would put the stock back twice.
+      const undelivered = changed.filter((row) => row.was === 'delivered').map((row) => row.id as number);
+      if (undelivered.length) {
+        const [held] = await tx`
+          select o.number, r.number as return_number from sales_returns r join orders o on o.id = r.order_id
+          where r.order_id in ${tx(undelivered)} and r.status not in ('rejected', 'cancelled') order by r.id limit 1`;
+        if (held) throw new HTTPException(409, { message: `${held.number} has return ${held.return_number}, so it stays delivered. Cancel the return first.` });
+      }
       if (changed.length) await tx`insert into order_events ${tx(changed.map((row) => ({ order_id: row.id, status, by })))}`;
       // Delivered orders take their items from stock; one moved back from delivered puts them back.
       await moveStockForOrders(tx, changed.map((row) => ({ id: row.id as number, was: row.was as string, now: status })), by);
@@ -355,6 +370,26 @@ export function orderAdminRoutes(sql: Sql) {
         if (before + payment.amount > order.bill) throw new HTTPException(400, { message: `That is more than ${order.number} still owes (${rupees(order.bill - before)}).`, cause: { field: `payments.${index}.amount` } });
         paid.set(order.id, before + payment.amount);
       });
+      // Store credit: each customer's use of it in this request, against what they hold. Their row is locked, so two
+      // people spending the same credit at once can't both succeed.
+      const fromCredit = payments.filter((payment) => payment.method === 'store_credit');
+      if (fromCredit.length) {
+        const owners = await tx`
+          select o.id, coalesce((select merged_into from customers where id = d.customer_id), d.customer_id) as customer_id
+          from orders o join app_devices d on d.id = o.device_id where o.id in ${tx([...new Set(fromCredit.map((payment) => payment.orderId))])}`;
+        const ownerOf = new Map(owners.map((row) => [row.id as number, row.customer_id as number | null]));
+        const spend = new Map<number, number>();
+        for (const payment of fromCredit) {
+          const customer = ownerOf.get(payment.orderId);
+          if (!customer) throw new HTTPException(400, { message: 'This order has no customer record, so it can’t use store credit.', cause: { field: 'payments' } });
+          spend.set(customer, (spend.get(customer) ?? 0) + payment.amount);
+        }
+        for (const [customer, amount] of [...spend].sort((a, b) => a[0] - b[0])) {
+          await tx`select id from customers where id = ${customer} for update`;
+          const available = await storeCredit(tx, customer);
+          if (amount > available) throw new HTTPException(400, { message: `The customer has ${rupees(available)} of store credit, less than ${rupees(amount)}.`, cause: { field: 'payments' } });
+        }
+      }
       await tx`insert into order_payments ${tx(payments.map((payment) => ({ order_id: payment.orderId, amount: payment.amount, method: payment.method, paid_on: payment.paidOn, note: payment.note, by })))}`;
     });
     return c.json({ orders: await orders(sql`o.id in ${sql(ids)}`) }, 201);
@@ -363,6 +398,9 @@ export function orderAdminRoutes(sql: Sql) {
   // A payment entered by mistake. The activity log keeps who removed it.
   admin.delete('/payments/:paymentId', office, async (c) => {
     const id = parse(OrderIds.element, c.req.param('paymentId'));
+    const [settled] = await sql`
+      select r.number from order_payments p join refund_transactions t on t.id = p.refund_id join sales_returns r on r.id = t.return_id where p.id = ${id}`;
+    if (settled) throw new HTTPException(409, { message: `This payment is return ${settled.number}’s refund, set against the order. It stays on record.` });
     const [row] = await sql`delete from order_payments where id = ${id} returning order_id`;
     if (!row) throw new HTTPException(404, { message: 'That payment has already been removed.' });
     return c.json({ orders: await orders(sql`o.id = ${row.order_id}`) });
@@ -379,6 +417,9 @@ export function orderAdminRoutes(sql: Sql) {
     await sql.begin(async (tx) => {
       const [order] = await tx`select total from orders where id = ${id} for update`;
       if (!order) throw new HTTPException(404, { message: 'That order does not exist.' });
+      // A posted tax invoice fixes the bill; changing it means cancelling the invoice (or a credit note).
+      const [invoice] = await tx`select number from sales_invoices where order_id = ${id} and status = 'posted' and return_id is null`;
+      if (invoice) throw new HTTPException(409, { message: `Tax invoice ${invoice.number} fixes this bill. Cancel the invoice to change it.`, cause: { field: 'bill' } });
       const [{ paid }] = (await tx`select coalesce(sum(amount), 0)::float8 as paid from order_payments where order_id = ${id}`) as unknown as [{ paid: number }];
       if ((bill ?? order.total) < paid) throw new HTTPException(400, { message: `${rupees(paid)} has been paid already, so the bill can’t be less. Remove a payment first.`, cause: { field: 'bill' } });
       await tx`update orders set payment_terms = ${terms}, bill_amount = ${bill === order.total ? null : bill} where id = ${id}`;

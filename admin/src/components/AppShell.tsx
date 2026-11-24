@@ -1,15 +1,26 @@
 import {
   ArchiveIcon,
+  ArrowUUpLeftIcon,
+  ArrowsLeftRightIcon,
+  ChartBarIcon,
+  HandCoinsIcon,
+  ListChecksIcon,
+  SealCheckIcon,
+  BankIcon,
   BellIcon,
   BookOpenIcon,
   CalculatorIcon,
   CaretRightIcon,
+  ChatsCircleIcon,
+  ClipboardTextIcon,
   ClockCounterClockwiseIcon,
   CurrencyInrIcon,
   DeviceMobileIcon,
+  FileTextIcon,
   FolderSimpleIcon,
   GearSixIcon,
   GridFourIcon,
+  HashIcon,
   ImagesIcon,
   ListIcon,
   MagnifyingGlassIcon,
@@ -18,10 +29,14 @@ import {
   PlayCircleIcon,
   ReceiptIcon,
   RulerIcon,
+  ScalesIcon,
   ScissorsIcon,
   SignOutIcon,
+  SlidersHorizontalIcon,
   SquaresFourIcon,
+  StorefrontIcon,
   TagIcon,
+  TruckIcon,
   UserGearIcon,
   UsersThreeIcon,
   WalletIcon,
@@ -37,6 +52,8 @@ import { PageMetaContext, type PageMeta } from '@/components/pageMeta';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ThemeSwitch } from '@/components/ThemeSwitch';
 import { creditDaysOf, isOverdue } from '@/data/payments';
+import { useNewFeedback } from '@/data/feedback';
+import { useReturnCounts } from '@/data/returnCounts';
 import { useRequestNotifications } from '@/data/requestNotifications';
 import { editsStock, seesStock, stockAlerts } from '@/data/stock';
 import { inOrders } from '@/data/requests';
@@ -81,12 +98,31 @@ export function AppShell() {
     icon: ArchiveIcon,
     ...(editsStock(session?.role) ? { count: lowStock.low + lowStock.out, alert: true, alertLabel: 'low or out of stock' } : {}),
   };
-  // The inventory team only works on its own panel, the stock (and its password, under Settings).
+  // What customers send from the app's menu; Owners and Sales read it.
+  const seesFeedback = session?.role === 'owner' || session?.role === 'sales';
+  const newFeedback = useNewFeedback(seesFeedback);
+  // The inventory team only works on its own panel, the stock, returned goods to receive and check (and its password, under Settings).
   const inventoryOnly = session?.role === 'inventory';
+  // Returns: Owners and Sales see the module; the inventory team the goods it receives and checks.
+  const seesReturns = session?.role === 'owner' || session?.role === 'sales' || inventoryOnly;
+  const returnCounts = useReturnCounts(seesReturns);
+  const returnsGroup = {
+    title: 'Returns & Replacements',
+    items: [
+      { to: '/returns', label: 'Returns Dashboard', icon: ChartBarIcon, end: true },
+      { to: '/returns/list', label: 'Customer Returns', icon: ArrowUUpLeftIcon, count: returnCounts.receive + returnCounts.inspect, alert: true, alertLabel: 'goods to receive or check' },
+      { to: '/returns/replacements', label: 'Product Replacements', icon: ArrowsLeftRightIcon },
+      { to: '/returns/refunds', label: 'Refund Management', icon: HandCoinsIcon, ...(session?.role === 'owner' ? { count: returnCounts.refunds, alert: true, alertLabel: 'refunds in progress' } : {}) },
+      { to: '/returns/requests', label: 'Return Requests', icon: SealCheckIcon, ...(session?.role === 'owner' ? { count: returnCounts.decide, alert: true, alertLabel: 'waiting for a decision' } : {}) },
+      ...(session?.role === 'owner' ? [{ to: '/supplier-returns', label: 'Supplier Returns', icon: StorefrontIcon }] : []),
+      { to: '/returns/reports', label: 'Return Reports', icon: ListChecksIcon },
+      ...(session?.role === 'owner' ? [{ to: '/returns/settings', label: 'Return Settings', icon: SlidersHorizontalIcon }] : []),
+    ] as NavItem[],
+  };
 
   const groups: { title: string; items: NavItem[] }[] = inventoryOnly
     ? [
-        { title: 'Inventory', items: [{ ...inventoryItem, label: 'Orders to Pack' }, stockItem] },
+        { title: 'Inventory', items: [{ ...inventoryItem, label: 'Orders to Pack' }, stockItem, { to: '/returns/list', label: 'Returned Goods', icon: ArrowUUpLeftIcon, count: returnCounts.receive + returnCounts.inspect, alert: true, alertLabel: 'goods to receive or check' }] },
         { title: 'System', items: [{ to: '/settings', label: 'Settings', icon: GearSixIcon }] },
       ]
     : [
@@ -99,8 +135,33 @@ export function AppShell() {
         { to: '/customers', label: 'Customers', icon: UsersThreeIcon },
         ...(session?.role === 'catalogue' ? [] : [{ to: '/payments', label: 'Payments', icon: WalletIcon, count: overdue, alert: true, alertLabel: 'overdue' }]),
         ...(session?.role === 'catalogue' ? [] : [{ to: '/app-users', label: 'App Users', icon: DeviceMobileIcon }]),
+        ...(seesFeedback ? [{ to: '/feedback', label: 'Feedback', icon: ChatsCircleIcon, count: newFeedback, alert: true, alertLabel: 'new' }] : []),
       ],
     },
+    ...(seesReturns ? [returnsGroup] : []),
+    // Phase 2 (docs/ERP-ROADMAP.md): Owners only until roles get permissions.
+    ...(session?.role === 'owner'
+      ? [
+          {
+            title: 'Purchases',
+            items: [
+              { to: '/purchases', label: 'Purchases', icon: TruckIcon },
+              { to: '/suppliers', label: 'Suppliers', icon: StorefrontIcon },
+            ],
+          },
+          {
+            title: 'GST',
+            items: [
+              { to: '/gst', label: 'GST Dashboard', icon: ScalesIcon, end: true },
+              { to: '/gst/sales', label: 'Sales Register', icon: FileTextIcon },
+              { to: '/gst/purchases', label: 'Purchase Register', icon: ClipboardTextIcon },
+              { to: '/gst/hsn', label: 'HSN Summary', icon: HashIcon },
+              { to: '/gst/payments', label: 'GST Payments', icon: BankIcon },
+              { to: '/gst/settings', label: 'GST Settings', icon: SlidersHorizontalIcon },
+            ],
+          },
+        ]
+      : []),
     {
       title: 'Catalogue',
       items: [
@@ -188,7 +249,7 @@ export function AppShell() {
     inventoryOnly ? ['confirmed', 'packed', 'dispatched'].includes(order.status) : inOrders(order) && ['placed', 'confirmed', 'packed', 'dispatched'].includes(order.status),
   );
 
-  const allowed = !inventoryOnly || ['/inventory', '/stock', '/settings'].some((path) => location.pathname.startsWith(path));
+  const allowed = !inventoryOnly || ['/inventory', '/stock', '/settings', '/returns/list', '/returns/'].some((path) => location.pathname.startsWith(path)) && !['/returns/settings', '/returns/reports', '/returns/refunds', '/returns/new'].some((path) => location.pathname.startsWith(path));
 
   const signOut = async () => {
     await endSession();

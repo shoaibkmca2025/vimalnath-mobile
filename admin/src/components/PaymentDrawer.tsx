@@ -4,9 +4,10 @@ import { Button } from '@/components/Button';
 import { Drawer } from '@/components/Drawer';
 import { Segmented, TextField } from '@/components/Field';
 import { useToast } from '@/components/useToast';
-import { PAYMENT_METHODS, localDay, remainingOf, splitPayment } from '@/data/payments';
+import { CUSTOMER_METHODS, PAYMENT_METHODS, localDay, remainingOf, splitPayment } from '@/data/payments';
 import type { Order, PaymentMethod } from '@/data/types';
 import { useData } from '@/data/useData';
+import { api } from '@/lib/api';
 import { formatINR, plural } from '@/lib/format';
 
 type Props = {
@@ -33,12 +34,16 @@ export function PaymentDrawer({ open, onClose, customer, orders, logTo }: Props)
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [wasOpen, setWasOpen] = useState(open);
+  // Store credit the customer holds from returns; looked up when it's chosen.
+  const [credit, setCredit] = useState<number | null>(null);
+  const customerId = orders[0]?.customerRecord?.id;
   if (open !== wasOpen) {
     setWasOpen(open);
     // Each time it opens, it starts empty and dated today.
     if (open) {
       setDraft(fresh());
       setTouched(false);
+      setCredit(null);
     }
   }
 
@@ -52,12 +57,23 @@ export function PaymentDrawer({ open, onClose, customer, orders, logTo }: Props)
         ? 'Enter the amount in whole rupees, e.g. 25000.'
         : amount > owed
           ? `That’s more than they owe: ${formatINR(owed)}.`
-          : null,
+          : draft.method === 'store_credit' && credit !== null && amount > credit
+            ? `They hold ${formatINR(credit)} of store credit.`
+            : null,
     paidOn: !/^\d{4}-\d{2}-\d{2}$/.test(draft.paidOn) ? 'Pick the day they paid.' : draft.paidOn > today ? 'The day can’t be in the future.' : null,
   };
   const valid = !errors.amount && !errors.paidOn;
   const split = valid ? splitPayment(orders, amount) : [];
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }));
+  const pickMethod = (method: PaymentMethod) => {
+    set('method', method);
+    if (method !== 'store_credit' || !customerId) return;
+    setCredit(null);
+    api<{ available: number }>(`/returns/store-credit/${customerId}`).then(
+      (answer) => setCredit(answer.available),
+      () => setCredit(0),
+    );
+  };
 
   const save = async () => {
     setTouched(true);
@@ -122,9 +138,12 @@ export function PaymentDrawer({ open, onClose, customer, orders, logTo }: Props)
           <Segmented<PaymentMethod>
             label="Paid by"
             value={draft.method}
-            onChange={(method) => set('method', method)}
-            options={(Object.keys(PAYMENT_METHODS) as PaymentMethod[]).map((method) => ({ value: method, label: PAYMENT_METHODS[method] }))}
+            onChange={pickMethod}
+            options={CUSTOMER_METHODS.filter((method) => method !== 'store_credit' || customerId).map((method) => ({ value: method, label: PAYMENT_METHODS[method] }))}
           />
+          {draft.method === 'store_credit' && (
+            <p className="field__hint">{credit === null ? 'Looking up their store credit…' : `${customer} holds ${formatINR(credit)} of store credit from returns.`}</p>
+          )}
         </div>
         <TextField id="payment-day" label="Paid on" type="date" max={today} value={draft.paidOn} onChange={(event) => set('paidOn', event.target.value)} error={touched ? errors.paidOn : null} required />
         <TextField

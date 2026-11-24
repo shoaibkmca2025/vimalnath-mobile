@@ -1,5 +1,5 @@
 import type { Role } from './session';
-import type { Order, Product, StockItem, StockMove, StockUnit } from './types';
+import type { Order, Product, Purchase, SalesReturn, StockBucket, StockItem, StockMove, StockUnit, Supplier, SupplierReturn } from './types';
 
 /**
  * Stock, stage 1 of inventory. Each product option is an item the shop counts (a product without options is one item,
@@ -9,17 +9,59 @@ import type { Order, Product, StockItem, StockMove, StockUnit } from './types';
 export const seesStock = (role: Role | undefined) => role === 'owner' || role === 'inventory' || role === 'sales';
 export const editsStock = (role: Role | undefined) => role === 'owner' || role === 'inventory';
 
-export const UNITS: Record<StockUnit, string> = { pcs: 'PCS', box: 'BOX', kg: 'KG', meter: 'METER', feet: 'FEET', set: 'SET' };
+export const UNITS: Record<StockUnit, string> = {
+  pcs: 'PCS',
+  box: 'BOX',
+  packet: 'PACKET',
+  set: 'SET',
+  feet: 'FEET',
+  rft: 'RUNNING FT',
+  meter: 'METER',
+  sqft: 'SQ FT',
+  sqm: 'SQ M',
+  kg: 'KG',
+  sheet: 'SHEET',
+  length: 'LENGTH',
+};
 export const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28, 40] as const;
 export const ADJUST_REASONS = { damaged: 'Damaged', lost: 'Lost or stolen', returned: 'Returned by a customer', used: 'Used in the shop', found: 'Found', correction: 'Correction', other: 'Other' } as const;
 export type AdjustReason = keyof typeof ADJUST_REASONS;
 
-export const MOVE_LABEL: Record<StockMove['kind'], string> = { opening: 'Opening stock', count: 'Counted', adjust: 'Adjusted', delivered: 'Delivered', undelivered: 'Delivery undone' };
+export const MOVE_LABEL: Record<StockMove['kind'], string> = {
+  opening: 'Opening stock',
+  count: 'Counted',
+  adjust: 'Adjusted',
+  delivered: 'Delivered',
+  undelivered: 'Delivery undone',
+  purchase: 'Purchased',
+  purchase_cancelled: 'Purchase cancelled',
+  return_received: 'Returned by customer',
+  return_inspected: 'Return checked',
+  return_reversed: 'Return cancelled',
+  replacement: 'Replacement given',
+  replacement_reversed: 'Replacement undone',
+  written_off: 'Written off',
+  supplier_return: 'Sent back to supplier',
+  supplier_return_reversed: 'Supplier return cancelled',
+};
+
+/** The stock a move changed, when it isn't what can be sold. */
+export const BUCKET_LABEL: Record<StockBucket, string> = { available: 'For sale', held: 'Awaiting check', damaged: 'Damaged', defective: 'Defective' };
 
 export const itemKey = (productId: string, option: string) => `${productId}\u0000${option}`;
 
-/** What the server answers a stock or order change with: the items and orders as they are now. */
-export type Answer = { orders?: Order[]; stock?: StockItem[]; removedStock?: { productId: string; option: string }[] };
+/** What the server answers a change with: the orders, stock items, bills or supplier as they are now. */
+export type Answer = {
+  orders?: Order[];
+  stock?: StockItem[];
+  removedStock?: { productId: string; option: string }[];
+  purchases?: Purchase[];
+  removedPurchases?: string[];
+  supplier?: Supplier;
+  returns?: SalesReturn[];
+  supplierReturns?: SupplierReturn[];
+  removedSupplierReturns?: string[];
+};
 
 /** The stock list with the server's answer applied: changed items replaced, new ones added, removed ones gone. */
 export function mergeStock(stock: StockItem[], answer: Answer | undefined): StockItem[] {

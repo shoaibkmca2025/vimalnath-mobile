@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 
 import type { ServerKey } from './server';
+import type { Answer } from './stock';
 import type { Activity, Database } from './types';
 
 /** What an edit adds to the activity log; the time and the admin's name are filled in. */
@@ -15,9 +16,10 @@ export type DataContextValue = {
   update: <K extends ServerKey>(key: K, change: (current: Database[K]) => Database[K], log?: LogEntry) => Promise<boolean>;
   /**
    * An order change the server works out itself (a payment, a bill), sent as is; the orders it answers with replace
-   * the ones shown. Like `update`, it resolves false, after an error toast, if the server refuses it.
+   * the ones shown, and the answer comes back for the page's own records (bills, suppliers). It resolves false, after
+   * an error toast, if the server refuses it.
    */
-  send: (path: string, method: 'POST' | 'PUT' | 'DELETE', body: unknown, log?: LogEntry) => Promise<boolean>;
+  send: (path: string, method: 'POST' | 'PUT' | 'DELETE', body: unknown, log?: LogEntry) => Promise<Answer | false>;
 };
 
 export const DataContext = createContext<DataContextValue | null>(null);

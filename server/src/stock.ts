@@ -11,7 +11,7 @@ import { jsonBody } from './validate.ts';
  * change to the quantity. Owners and the inventory team change it; Sales see it without purchase prices.
  */
 
-export const UNITS = ['pcs', 'box', 'kg', 'meter', 'feet', 'set'] as const;
+export const UNITS = ['pcs', 'box', 'packet', 'set', 'feet', 'rft', 'meter', 'sqft', 'sqm', 'kg', 'sheet', 'length'] as const;
 export const GST_RATES = [0, 0.25, 3, 5, 12, 18, 28, 40] as const;
 /** Why staff added or took away stock by hand. */
 export const ADJUST_REASONS = ['damaged', 'lost', 'returned', 'used', 'found', 'correction', 'other'] as const;
@@ -70,6 +70,7 @@ export const stockItems = (sql: Sql | TransactionSql, owner: boolean, where = sq
     s.gst_rate::float8 as "gstRate", ${owner ? sql`s.purchase_price::float8` : sql`null::float8`} as "purchasePrice",
     s.selling_price::float8 as "sellingPrice", s.wholesale_price::float8 as "wholesalePrice", s.quantity::float8 as quantity,
     s.min_stock::float8 as "minStock", s.max_stock::float8 as "maxStock", s.rack, s.location, s.updated_at as "updatedAt",
+    s.held::float8 as held, s.damaged::float8 as damaged, s.defective::float8 as defective,
     -- An option renamed or removed in the product editor leaves its stock behind; the admin shows it to clear up.
     (not exists (select 1 from product_options o where o.product_id = s.product_id and o.label = s.option_label)
       and not (s.option_label = '' and not exists (select 1 from product_options o where o.product_id = s.product_id))) as orphan
@@ -88,13 +89,27 @@ export async function appStock(sql: Sql) {
   return states;
 }
 
-/** Changes one item's quantity and records why. The update locks the row, so two changes at once both count. */
-async function move(tx: TransactionSql, item: { productId: string; option: string }, change: number, record: { kind: string; reason?: string; note?: string; orderId?: number; by: string }) {
+/** Which stock a change moves: what can be sold, or goods held for inspection, damaged or defective. */
+export const BUCKETS = ['available', 'held', 'damaged', 'defective'] as const;
+export type Bucket = (typeof BUCKETS)[number];
+const COLUMN: Record<Bucket, string> = { available: 'quantity', held: 'held', damaged: 'damaged', defective: 'defective' };
+
+type MoveRecord = { kind: string; reason?: string; note?: string; orderId?: number; purchaseId?: number; returnId?: number; supplierReturnId?: number; bucket?: Bucket; by: string };
+
+/**
+ * Changes one item's quantity, in one of its stocks, and records why. The update locks the row, so two changes at once
+ * both count. Returns the new balance, or null for an item that isn't counted (nothing to move). Only what can be sold
+ * goes below zero; held, damaged and defective stock refuse to (a database check).
+ */
+export async function move(tx: TransactionSql, item: { productId: string; option: string }, change: number, record: MoveRecord) {
+  const bucket = record.bucket ?? 'available';
+  const column = tx(COLUMN[bucket]);
   const [row] = await tx`
-    update stock_items set quantity = quantity + ${change}, updated_at = now()
-    where product_id = ${item.productId} and option_label = ${item.option} returning quantity::float8 as balance`;
-  if (!row) return;
-  await tx`insert into stock_moves ${tx({ product_id: item.productId, option_label: item.option, change, balance: row.balance, kind: record.kind, reason: record.reason ?? '', note: record.note ?? '', order_id: record.orderId ?? null, by: record.by })}`;
+    update stock_items set ${column} = ${column} + ${change}, updated_at = now()
+    where product_id = ${item.productId} and option_label = ${item.option} returning ${column}::float8 as balance`;
+  if (!row) return null;
+  await tx`insert into stock_moves ${tx({ product_id: item.productId, option_label: item.option, change, balance: row.balance, kind: record.kind, reason: record.reason ?? '', note: record.note ?? '', order_id: record.orderId ?? null, purchase_id: record.purchaseId ?? null, return_id: record.returnId ?? null, supplier_return_id: record.supplierReturnId ?? null, bucket, by: record.by })}`;
+  return row.balance as number;
 }
 
 /**
@@ -234,8 +249,10 @@ export function stockRoutes(sql: Sql) {
     return c.json(
       await sql`
         select m.id::text as id, m.product_id as "productId", m.option_label as option, m.change::float8 as change, m.balance::float8 as balance,
-          m.kind, m.reason, m.note, m.order_id::text as "orderId", o.number as "orderNumber", m.by, m.at
-        from stock_moves m left join orders o on o.id = m.order_id
+          m.kind, m.reason, m.note, m.order_id::text as "orderId", o.number as "orderNumber", m.purchase_id::text as "purchaseId", pu.number as "purchaseNumber",
+          m.bucket, m.return_id::text as "returnId", r.number as "returnNumber", m.supplier_return_id::text as "supplierReturnId", sr.number as "supplierReturnNumber", m.by, m.at
+        from stock_moves m left join orders o on o.id = m.order_id left join purchases pu on pu.id = m.purchase_id
+          left join sales_returns r on r.id = m.return_id left join supplier_returns sr on sr.id = m.supplier_return_id
         where ${productId === undefined ? sql`true` : sql`m.product_id = ${productId} and m.option_label = ${option}`}
         order by m.id desc limit 300`,
     );

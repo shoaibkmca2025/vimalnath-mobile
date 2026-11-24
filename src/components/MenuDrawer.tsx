@@ -20,6 +20,7 @@ const ITEMS: { label: string; icon: IconName; href: Href; color?: string }[] = [
   { label: 'Installation Videos', icon: 'logo-youtube', href: '/videos', color: '#ff0000' },
   { label: 'Settings', icon: 'settings-outline', href: '/settings' },
   { label: 'More Apps', icon: 'apps-outline', href: '/more-apps' },
+  { label: 'Feedback', icon: 'chatbubble-ellipses-outline', href: '/feedback' },
   { label: 'About', icon: 'information-circle-outline', href: '/about' },
 ];
 

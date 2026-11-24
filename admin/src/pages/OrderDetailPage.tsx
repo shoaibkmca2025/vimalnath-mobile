@@ -26,6 +26,7 @@ import { ConfirmDialog } from '@/components/Dialog';
 import { EmptyState } from '@/components/EmptyState';
 import { SelectField, TextAreaField } from '@/components/Field';
 import { OrderPaymentCard } from '@/components/OrderPaymentCard';
+import { TaxInvoiceCard } from '@/components/TaxInvoiceCard';
 import { PageHeader } from '@/components/PageHeader';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
@@ -393,6 +394,8 @@ export default function OrderDetailPage() {
           </Card>
 
           <OrderPaymentCard order={order} />
+
+          {readSession()?.role === 'owner' && <TaxInvoiceCard order={order} />}
 
           <Card aria-labelledby="customer-title">
             <CardHeader

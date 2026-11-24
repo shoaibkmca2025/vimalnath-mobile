@@ -94,7 +94,8 @@ export type OrderEvent = {
 
 /** Cash is due on delivery; credit, the Settings' credit period after it. */
 export type PaymentTerms = 'cash' | 'credit';
-export type PaymentMethod = 'cash' | 'upi' | 'bank' | 'cheque';
+/** return: a return's refund set against the order. store_credit: paid from credit the customer holds. */
+export type PaymentMethod = 'cash' | 'upi' | 'bank' | 'cheque' | 'return' | 'store_credit';
 
 /** Money received towards an order, in whole rupees, on the day staff say it came in (YYYY-MM-DD). */
 export type Payment = { id: string; amount: number; method: PaymentMethod; paidOn: string; note?: string; by: string; at: string };
@@ -133,7 +134,7 @@ export type Order = {
   payments?: Payment[];
 };
 
-export type StockUnit = 'pcs' | 'box' | 'kg' | 'meter' | 'feet' | 'set';
+export type StockUnit = 'pcs' | 'box' | 'packet' | 'set' | 'feet' | 'rft' | 'meter' | 'sqft' | 'sqm' | 'kg' | 'sheet' | 'length';
 
 /**
  * One item the shop counts: a product option, or a product without options (option ''). Prices are rupees and paise
@@ -153,8 +154,12 @@ export type StockItem = {
   purchasePrice: number | null;
   sellingPrice: number | null;
   wholesalePrice: number | null;
-  /** Below zero when more was delivered than counted. */
+  /** What can be sold. Below zero when more was delivered than counted. */
   quantity: number;
+  /** Not for sale: goods back from customers waiting for the quality check, and damaged or defective goods. */
+  held?: number;
+  damaged?: number;
+  defective?: number;
   minStock: number | null;
   maxStock: number | null;
   rack: string;
@@ -171,16 +176,272 @@ export type StockMove = {
   option: string;
   change: number;
   balance: number;
-  kind: 'opening' | 'count' | 'adjust' | 'delivered' | 'undelivered';
+  kind:
+    | 'opening'
+    | 'count'
+    | 'adjust'
+    | 'delivered'
+    | 'undelivered'
+    | 'purchase'
+    | 'purchase_cancelled'
+    | 'return_received'
+    | 'return_inspected'
+    | 'return_reversed'
+    | 'replacement'
+    | 'replacement_reversed'
+    | 'written_off'
+    | 'supplier_return'
+    | 'supplier_return_reversed';
+  /** Which stock it moved; missing for what can be sold. */
+  bucket?: StockBucket;
+  returnId?: string | null;
+  returnNumber?: string | null;
+  supplierReturnId?: string | null;
+  supplierReturnNumber?: string | null;
   reason: string;
   note: string;
-  orderId?: string;
-  orderNumber?: string;
+  orderId?: string | null;
+  orderNumber?: string | null;
+  purchaseId?: string | null;
+  purchaseNumber?: string | null;
   by: string;
   at: string;
 };
 
-export type ActivityArea = 'orders' | 'catalogue' | 'calculators' | 'content' | 'settings';
+/** Phase 2: someone the shop buys from. Money is rupees and paise; outstanding is what the shop still owes them. */
+export type Supplier = {
+  id: number;
+  name: string;
+  company: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  gstin: string;
+  address: string;
+  state: string;
+  openingBalance: number;
+  paymentDays: number | null;
+  bankDetails: string;
+  notes: string;
+  archived: boolean;
+  createdAt: string;
+  /** Received bills. */
+  bills: number;
+  billed: number;
+  paid: number;
+  /** Opening balance + received bills − payments. Below zero: an advance. */
+  outstanding: number;
+  /** Supplier returns: credit notes received, and money they refunded. */
+  credited?: number;
+  refunded?: number;
+  lastPurchase: string | null;
+  drafts: number;
+};
+
+export type PurchaseStatus = 'draft' | 'received' | 'cancelled';
+
+/** One line of a supplier's bill: a copy of the item as bought. Rates are before GST. */
+export type PurchaseItem = { productId: string; option: string; name: string; code: string; qty: number; unit: StockUnit; rate: number; discountPct: number; gstRate: number };
+
+export type SupplierPayment = { id: string; amount: number; method: PaymentMethod; paidOn: string; note?: string; by: string; at: string };
+
+/** A supplier's bill. Its figures are worked out by the server from the items and charges. */
+export type Purchase = {
+  id: string;
+  /** The shop's own number, PUR-0001. */
+  number: string;
+  supplier: { id: number; name: string };
+  /** The number on the supplier's bill. */
+  supplierInvoice?: string;
+  billDate: string;
+  status: PurchaseStatus;
+  items: PurchaseItem[];
+  freight: number;
+  otherCharges: number;
+  discount: number;
+  roundOff: number;
+  subtotal: number;
+  tax: number;
+  total: number;
+  notes?: string;
+  attachment?: string;
+  payments?: SupplierPayment[];
+  createdBy: string;
+  createdAt: string;
+  receivedBy?: string;
+  receivedAt?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
+  supplierGstin?: string;
+  /** IGST (another state) rather than CGST + SGST, fixed when the bill was saved. */
+  interstate: boolean;
+  /** Input tax credit as the accountant reviewed it; every bill starts pending. */
+  itcStatus: ItcStatus;
+  /** The return month (YYYY-MM) it was claimed or reversed in. */
+  itcPeriod?: string;
+  itcNote?: string;
+  itcBy?: string;
+  itcAt?: string;
+};
+
+export type ItcStatus = 'pending' | 'eligible' | 'ineligible' | 'claimed' | 'reversed';
+
+/** The shop's GST registration and invoice numbering (GST Settings). */
+export type GstSettings = {
+  legalName: string;
+  tradeName: string;
+  gstin: string;
+  address: string;
+  pincode: string;
+  registrationType: 'regular' | 'composition';
+  invoicePrefix: string;
+  terms: string;
+  /** Printed under the shop's address: phone numbers and email. */
+  phone: string;
+  email: string;
+  bankName: string;
+  bankAccount: string;
+  bankBranchIfsc: string;
+  declaration: string;
+  /** e.g. SUBJECT TO NASHIK JURISDICTION */
+  jurisdiction: string;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+  /** This financial year (26-27) and the last invoice number used in it. */
+  financialYear?: string;
+  lastInvoiceNumber?: number;
+};
+
+/** One line of a tax invoice, as the shop bills: qty × rate (before GST) less a discount, with its share of the tax. */
+export type InvoiceItem = {
+  productId: string;
+  option: string;
+  /** The item's code, as the invoice prints it. */
+  description: string;
+  /** The smaller line under it, e.g. its name or profile series. */
+  detail: string;
+  hsn: string;
+  qty: number;
+  unit: StockUnit;
+  /** Per unit, before GST. */
+  rate: number;
+  discountPct: number;
+  /** qty × rate less the discount: the line's value before GST. */
+  amount: number;
+  gstRate: number;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+};
+
+/** A GST tax invoice made from an order. Drafts have no number; posted ones are cancelled, never deleted. */
+export type SalesInvoice = {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  number?: string;
+  financialYear?: string;
+  invoiceDate: string;
+  status: 'draft' | 'posted' | 'cancelled';
+  customerId?: number;
+  customerName: string;
+  /** Empty for an unregistered buyer (B2C). */
+  customerGstin?: string;
+  billingAddress?: string;
+  placeOfSupply?: string;
+  posCode?: string;
+  interstate: boolean;
+  sellerGstin?: string;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  roundOff: number;
+  total: number;
+  notes?: string;
+  details?: InvoiceDetails;
+  /** What the buyer owed just before this invoice, fixed when it was posted. */
+  previousBalance?: number;
+  /** A replacement's tax invoice: the return it gives goods for. */
+  returnId?: string;
+  returnNumber?: string;
+  items: InvoiceItem[];
+  createdBy: string;
+  createdAt: string;
+  postedBy?: string;
+  postedAt?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
+};
+
+/** What a tax invoice prints besides the buyer's GST details: contacts, ship-to, and delivery and order references. */
+export type InvoiceDetails = Partial<
+  Record<
+    | 'buyerContact'
+    | 'buyerPhone'
+    | 'buyerEmail'
+    | 'shipName'
+    | 'shipAddress'
+    | 'shipGstin'
+    | 'shipState'
+    | 'shipContact'
+    | 'shipPhone'
+    | 'shipEmail'
+    | 'deliveryNote'
+    | 'paymentTerms'
+    | 'reference'
+    | 'otherReferences'
+    | 'buyerOrderNo'
+    | 'buyerOrderDate'
+    | 'dispatchDocNo'
+    | 'deliveryNoteDate'
+    | 'dispatchedThrough'
+    | 'destination'
+    | 'deliveryTerms',
+    string
+  >
+>;
+
+/** GST paid to the government, entered from the challan. */
+export type GstPayment = {
+  id: string;
+  period: string;
+  paidOn: string;
+  challan: string;
+  cpin: string;
+  cin: string;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  cess: number;
+  interest: number;
+  penalty: number;
+  note: string;
+  attachment: string | null;
+  by: string;
+  at: string;
+};
+
+/** From the app's menu: a rating, a problem report, a suggestion or other feedback. */
+export type AppFeedback = {
+  id: string;
+  rating: number | null;
+  kind: 'feedback' | 'problem' | 'suggestion';
+  message: string;
+  appVersion: string;
+  platform: string;
+  status: 'new' | 'seen' | 'resolved';
+  staffNote: string;
+  handledBy: string | null;
+  handledAt: string | null;
+  createdAt: string;
+  appUser: { id: number; label: string; name: string; business: string; phone: string };
+  customer: { id: number; name: string } | null;
+};
+
+export type ActivityArea = 'orders' | 'returns' | 'purchases' | 'catalogue' | 'calculators' | 'content' | 'settings';
 
 /** One change made in the admin, newest first in the log. */
 export type Activity = { id: string; at: string; by: string; area: ActivityArea; summary: string; to?: string };
@@ -200,3 +461,283 @@ export type Seed = {
 
 /** Everything the admin shows and edits. */
 export type Database = Omit<Seed, 'generatedAt'> & { orders: Order[]; moreApps: MoreApp[]; activity: Activity[]; stock: StockItem[] };
+
+// ---------- Phase 4: Returns & Replacements ----------
+
+export type StockBucket = 'available' | 'held' | 'damaged' | 'defective';
+export type ReturnKind = 'refund' | 'replacement';
+export type ReturnStatus = 'pending' | 'under_review' | 'approved' | 'rejected' | 'received' | 'inspected' | 'refunded' | 'replaced' | 'closed' | 'cancelled';
+export type ReturnReason = 'wrong_product' | 'damaged' | 'defective' | 'wrong_size' | 'changed_mind' | 'duplicate_order' | 'quality' | 'other';
+export type ReturnCondition = 'unopened' | 'good' | 'opened' | 'damaged' | 'defective' | 'used' | 'incomplete';
+/** Where a returned item goes after the quality check. */
+export type ReturnOutcome = 'restock' | 'damaged' | 'defective' | 'write_off';
+export type RefundMethod = 'cash' | 'upi' | 'bank' | 'cheque' | 'original' | 'store_credit' | 'adjustment';
+export type RefundStatus = 'pending' | 'approved' | 'processing' | 'completed' | 'failed' | 'cancelled';
+export type ReturnAction = 'create' | 'approve' | 'receive' | 'inspect' | 'refund';
+
+/** A returned item: a copy of the line as it was sold (the invoice line when the order was invoiced). */
+export type ReturnItem = {
+  position: number;
+  source: 'invoice' | 'order';
+  sourcePosition: number;
+  productId: string;
+  option: string;
+  description: string;
+  name: string;
+  hsn: string;
+  unit: StockUnit;
+  qty: number;
+  /** Per unit: before GST when invoiced, the price billed otherwise. */
+  rate: number;
+  gstRate: number;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  /** Taxable value and GST. */
+  amount: number;
+  condition: ReturnCondition;
+  outcome?: ReturnOutcome;
+  outcomeNote?: string;
+  inspectedBy?: string;
+  inspectedAt?: string;
+};
+
+/** Goods given in exchange. */
+export type ReplacementItem = {
+  position: number;
+  productId: string;
+  option: string;
+  description: string;
+  name: string;
+  hsn: string;
+  unit: StockUnit;
+  qty: number;
+  rate: number;
+  discountPct: number;
+  gstRate: number;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  amount: number;
+};
+
+/** Money settling a return. out: paid to the customer. in: the difference they paid for a dearer replacement. */
+export type RefundTransaction = {
+  id: string;
+  direction: 'out' | 'in';
+  amount: number;
+  method: RefundMethod;
+  orderId?: string;
+  orderNumber?: string;
+  reference?: string;
+  paidOn?: string;
+  status: RefundStatus;
+  note?: string;
+  createdBy: string;
+  createdAt: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  completedBy?: string;
+  completedAt?: string;
+};
+export type RefundRow = RefundTransaction & { returnId: string; returnNumber: string; kind: ReturnKind; customerName: string };
+
+export type SalesReturn = {
+  id: string;
+  number: string;
+  kind: ReturnKind;
+  orderId: string;
+  orderNumber: string;
+  /** The order's posted tax invoice, when there was one. */
+  invoiceId?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  interstate?: boolean;
+  /** The buyer as the original invoice has them. */
+  customerGstin?: string;
+  billingAddress?: string;
+  placeOfSupply?: string;
+  posCode?: string;
+  customerId?: number;
+  customerName: string;
+  customerPhone?: string;
+  returnDate: string;
+  reason: ReturnReason;
+  reasonNote?: string;
+  status: ReturnStatus;
+  /** Whole rupees, GST included. */
+  returnValue: number;
+  replacementValue: number;
+  charges: number;
+  chargesNote?: string;
+  /** returnValue − charges − replacementValue: above 0 the shop owes the customer, below 0 the customer owes the shop. */
+  settleAmount: number;
+  /** late: after the return period. category: not a returnable category. */
+  flags: ('late' | 'category')[];
+  attachments: string[];
+  notes?: string;
+  /** Sent back with every action: an older one was decided on an out-of-date screen. */
+  version: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  items: ReturnItem[];
+  replacementItems?: ReplacementItem[];
+  refunds?: RefundTransaction[];
+  creditNote?: { id: string; number: string; date: string; status: 'posted' | 'cancelled'; taxable: number; cgst: number; sgst: number; igst: number; roundOff: number; total: number; cancelReason?: string };
+  replacementInvoice?: { id: string; number?: string; status: SalesInvoice['status']; total: number };
+};
+
+export type ReturnEvent = {
+  id: string;
+  kind: 'created' | 'edited' | 'status' | 'received' | 'inspected' | 'replaced' | 'credit_note' | 'refund' | 'note' | 'attachment';
+  from?: ReturnStatus;
+  to?: ReturnStatus;
+  note?: string;
+  by: string;
+  at: string;
+};
+export type ReturnStockMove = { id: string; productId: string; option: string; change: number; balance: number; bucket: StockBucket; kind: StockMove['kind']; by: string; at: string };
+
+export type ReturnSettings = {
+  eligibilityDays: number;
+  requireApproval: boolean;
+  allowReplacements: boolean;
+  refundApproval: boolean;
+  eligibleCategories: string[];
+  restockRule: 'inspect' | 'unopened';
+  damagedHandling: 'keep' | 'write_off';
+  allowNegativeStock: boolean;
+  replacementTax: 'invoice' | 'none';
+  creditNoteOnReceipt: boolean;
+  returnPrefix: string;
+  creditNotePrefix: string;
+  supplierReturnPrefix: string;
+  refundMethods: RefundMethod[];
+  terms: string;
+  permissions: Record<ReturnAction, ('sales' | 'catalogue' | 'inventory')[]>;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+};
+
+/** A delivered order as a return starts from it (GET /returns/orders/:id). */
+export type ReturnSource = {
+  order: { id: string; number: string; status: OrderStatus; customer: string; phone?: string; customerId?: number; bill: number; deliveredAt?: string; lastDay: string | null };
+  invoice: { id: string; number: string; date: string; interstate: boolean } | null;
+  lines: {
+    source: 'invoice' | 'order';
+    position: number;
+    productId: string;
+    option: string;
+    description: string;
+    name: string;
+    hsn: string;
+    unit: StockUnit;
+    qty: number;
+    rate: number;
+    gstRate: number;
+    taxable: number;
+    cgst: number;
+    sgst: number;
+    igst: number;
+    returned: number;
+    returnable: number;
+    eligible: boolean;
+  }[];
+};
+export type ReturnableOrder = { id: string; number: string; customer: string; phone?: string; placedAt: string; bill: number; invoiceNumber?: string | null; deliveredAt?: string | null };
+
+/** A GST credit note against a posted tax invoice, for goods returned. */
+export type CreditNote = {
+  id: string;
+  number: string;
+  noteDate: string;
+  status: 'posted' | 'cancelled';
+  returnId: string;
+  returnNumber: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  orderId: string;
+  customerName: string;
+  customerGstin?: string;
+  placeOfSupply: string;
+  posCode: string;
+  interstate: boolean;
+  sellerGstin: string;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  roundOff: number;
+  total: number;
+  createdBy: string;
+  createdAt: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
+  items: { productId: string; option: string; description: string; hsn: string; qty: number; unit: StockUnit; rate: number; gstRate: number; taxable: number; cgst: number; sgst: number; igst: number }[];
+};
+
+export type SupplierReturnStatus = 'draft' | 'approved' | 'dispatched' | 'supplier_received' | 'credited' | 'settled' | 'closed' | 'cancelled';
+export type SupplierReturnReason = 'wrong_product' | 'damaged' | 'defective' | 'wrong_size' | 'excess' | 'quality' | 'other';
+export type SupplierReturnItem = {
+  position: number;
+  purchasePosition: number;
+  productId: string;
+  option: string;
+  name: string;
+  code: string;
+  qty: number;
+  unit: StockUnit;
+  rate: number;
+  gstRate: number;
+  taxable: number;
+  tax: number;
+  bucket: 'available' | 'damaged' | 'defective';
+};
+export type SupplierReturn = {
+  id: string;
+  number: string;
+  supplier: { id: number; name: string; gstin?: string };
+  purchaseId: string;
+  purchaseNumber: string;
+  supplierInvoice?: string;
+  billDate: string;
+  returnDate: string;
+  reason: SupplierReturnReason;
+  reasonNote?: string;
+  status: SupplierReturnStatus;
+  challan?: string;
+  transport?: string;
+  interstate: boolean;
+  taxable: number;
+  tax: number;
+  total: number;
+  creditNoteNumber?: string;
+  creditNoteDate?: string;
+  creditNoteAmount?: number;
+  creditNoteTax?: number;
+  settlement?: 'adjust' | 'refund';
+  refundAmount?: number;
+  refundMethod?: 'cash' | 'upi' | 'bank' | 'cheque';
+  refundReference?: string;
+  refundedOn?: string;
+  attachments: string[];
+  notes?: string;
+  version: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  items: SupplierReturnItem[];
+  events?: { id: string; kind: string; from?: SupplierReturnStatus; to?: SupplierReturnStatus; note?: string; by: string; at: string }[];
+};
+export type SupplierReturnSource = {
+  purchase: { id: string; number: string; status: PurchaseStatus; interstate: boolean };
+  lines: { position: number; productId: string; option: string; name: string; code: string; qty: number; unit: StockUnit; rate: number; gstRate: number; returned: number; returnable: number }[];
+};
+
+/** The shop as a return receipt prints it (GET /returns/shop). */
+export type ShopDetails = { legalName: string; tradeName: string; gstin: string; address: string; pincode: string; phone: string; email: string; jurisdiction: string };

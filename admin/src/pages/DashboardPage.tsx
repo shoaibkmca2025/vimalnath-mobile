@@ -14,6 +14,8 @@ import {
   WarningIcon,
   XCircleIcon,
   ArchiveIcon,
+  StorefrontIcon,
+  TruckIcon,
   type Icon,
 } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
@@ -33,6 +35,7 @@ import { seesStock, stockAlerts, stockValue } from '@/data/stock';
 import { isRequest, requestState } from '@/data/requests';
 import { readSession } from '@/data/session';
 import { useData } from '@/data/useData';
+import { usePurchasing } from '@/hooks/usePurchasing';
 import type { OrderStatus } from '@/data/types';
 import { formatDate, formatDay, formatHours, formatINR, formatINRCompact, formatNumber, formatPercent, formatRelativeTime, formatWeekday, plural, relativePhrase } from '@/lib/format';
 import { getSystemRange } from '@/generated/app-lib/glass-calculator';
@@ -138,6 +141,21 @@ export default function DashboardPage() {
     };
   }, [db.orders, db.settings, db.stock, now]);
   const showBusiness = session?.role !== 'catalogue';
+  // Purchases are for Owners (docs/ERP-ROADMAP.md): bills received today, and what's still owed to suppliers.
+  const owner = session?.role === 'owner';
+  const { suppliers, purchases } = usePurchasing(owner);
+  const buying = useMemo(() => {
+    const today = localDay(new Date(now));
+    const received = (purchases ?? []).filter((bill) => bill.status === 'received' && bill.billDate === today);
+    const owing = (suppliers ?? []).filter((supplier) => supplier.outstanding > 0);
+    return {
+      loaded: Boolean(suppliers && purchases),
+      today: received.reduce((sum, bill) => sum + bill.total, 0),
+      todayBills: received.length,
+      owed: owing.reduce((sum, supplier) => sum + supplier.outstanding, 0),
+      owedTo: owing.length,
+    };
+  }, [suppliers, purchases, now]);
   const monthPoints = business.months.map((month) => ({
     key: month.key,
     label: formatMonth(month.date),
@@ -221,7 +239,7 @@ export default function DashboardPage() {
           <h2 id="today-title" className="nav-group__title" style={{ margin: 0 }}>
             Today
           </h2>
-          <div className="stats">
+          <div className={owner ? 'stats stats--3' : 'stats'}>
             <Stat
               label="Today’s sales"
               icon={CurrencyInrIcon}
@@ -230,6 +248,16 @@ export default function DashboardPage() {
               foot={business.salesOrders ? `${plural(business.salesOrders, 'order')} delivered today, at the bill` : 'No orders delivered yet today'}
               to="/orders?status=delivered"
             />
+            {owner && (
+              <Stat
+                label="Today’s purchases"
+                icon={TruckIcon}
+                value={formatINRCompact(buying.today)}
+                title={formatINR(buying.today)}
+                foot={buying.loaded ? `${plural(buying.todayBills, 'bill')} received today` : 'Loading…'}
+                to="/purchases"
+              />
+            )}
             <Stat
               label="Pending customer payments"
               icon={WalletIcon}
@@ -238,6 +266,16 @@ export default function DashboardPage() {
               foot={business.overdue ? <span className="money-late">{formatINR(business.overdue)} overdue</span> : `Owed by ${plural(business.owing, 'customer')}, nothing overdue`}
               to="/payments"
             />
+            {owner && (
+              <Stat
+                label="Supplier payments due"
+                icon={StorefrontIcon}
+                value={formatINRCompact(buying.owed)}
+                title={formatINR(buying.owed)}
+                foot={buying.loaded ? `Owed to ${plural(buying.owedTo, 'supplier')}` : 'Loading…'}
+                to="/suppliers"
+              />
+            )}
             {seesStock(session?.role) && (
               <>
                 {session?.role === 'owner' ? (

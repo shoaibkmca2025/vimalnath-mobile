@@ -294,7 +294,7 @@ function InventoryCard({
   office: boolean;
   canPick: boolean;
   products: Map<string, Product>;
-  onPick: (position: number, picked: boolean) => Promise<boolean>;
+  onPick: (position: number, picked: boolean) => Promise<unknown>;
   onCancel: () => void;
   onMove: (to: OrderStatus) => void; onSaveNote: (text: string) => Promise<boolean>; onPrint: () => void }) {
   const [draft, setDraft] = useState(order.inventoryNote?.text ?? '');

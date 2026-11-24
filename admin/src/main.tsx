@@ -11,6 +11,7 @@ import '@/styles/tokens.css';
 import '@/styles/base.css';
 import '@/styles/components.css';
 import '@/styles/details.css';
+import '@/styles/returns.css';
 
 applyTheme(readTheme());
 

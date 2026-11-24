@@ -164,6 +164,14 @@ export default function StockPage() {
                 ? `min ${row.stock.minStock === null ? '—' : formatQty(row.stock.minStock)} · max ${row.stock.maxStock === null ? '—' : formatQty(row.stock.maxStock)}`
                 : 'No min or max'}
             </div>
+            {(row.stock.held || row.stock.damaged || row.stock.defective) ? (
+              <div className="cell-sub">
+                Not for sale:{' '}
+                {[row.stock.held ? `${formatQty(row.stock.held)} to check` : '', row.stock.damaged ? `${formatQty(row.stock.damaged)} damaged` : '', row.stock.defective ? `${formatQty(row.stock.defective)} defective` : '']
+                  .filter(Boolean)
+                  .join(' · ')}
+              </div>
+            ) : null}
           </>
         ) : (
           <span className="muted">—</span>

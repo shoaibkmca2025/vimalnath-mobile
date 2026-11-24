@@ -398,6 +398,22 @@ export async function respondToShopOrder(id: string, decision: 'confirm' | 'decl
   publish({ connected: true, centralOrders: result.orders, error: undefined, lastSyncedAt: new Date().toISOString() });
 }
 
+export type FeedbackKind = 'feedback' | 'problem' | 'suggestion';
+export type Feedback = { rating: number | null; kind: FeedbackKind; message: string; appVersion: string; platform: string };
+
+/** The menu's Feedback screen. Sent straight away rather than queued: the screen says when it didn't go. */
+export async function sendFeedback(feedback: Feedback): Promise<void> {
+  await initializeAdminSync();
+  if (!connection.enabled) throw new Error('Log in first, so the shop knows who it’s from.');
+  try {
+    await request({ ...connection }, 'feedback', feedback);
+  } catch (error) {
+    // A shop server from before feedback answers that the address doesn't exist.
+    if (error instanceof Error && /does not exist|returned 404/.test(error.message)) throw new Error('The shop’s server can’t take feedback yet.');
+    throw error;
+  }
+}
+
 /** The Notifications screen's list, newest first (up to 100). */
 export async function fetchNotifications(): Promise<AppNotification[]> {
   await initializeAdminSync();

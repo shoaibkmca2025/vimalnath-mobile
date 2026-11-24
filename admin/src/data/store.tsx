@@ -115,7 +115,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, orders: merge(previous.base.orders), stock: mergeStock(previous.base.stock, result) } } : previous));
         const entry = log && (await api<Activity>('/activity', 'POST', log).catch(() => null));
         if (entry) setState((previous) => (previous.status === 'ready' ? { ...previous, base: { ...previous.base, activity: [entry, ...previous.base.activity] } } : previous));
-        return true;
+        // A delete answers with nothing; it still succeeded.
+        return result ?? {};
       });
       queue.current = saving.catch(() => false);
       return saving;

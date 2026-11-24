@@ -4,6 +4,7 @@ import type { Sql } from 'postgres';
 import { z } from 'zod';
 
 import { only, type Env } from './staff.ts';
+import { GSTIN } from './gst.ts';
 import { jsonBody, parse } from './validate.ts';
 
 const CustomerId = z.coerce.number().int().positive().max(2147483647);
@@ -23,6 +24,7 @@ export function customerRoutes(sql: Sql) {
 
   const customers = (where = sql`true`) => sql`
     select c.id, c.name, c.tags, c.note, c.created_at as "createdAt",
+      c.gstin, c.legal_name as "legalName", c.billing_address as "billingAddress", c.state, c.pincode,
       -- Contact details come from the customer's apps: each one from the newest profile that gives it, so a second
       -- phone that left the business name blank doesn't hide the one the first phone sent.
       coalesce((select d.phone from app_devices d where d.customer_id = c.id and d.phone <> '' order by d.profile_updated_at desc nulls last limit 1), '') as phone,
@@ -56,11 +58,31 @@ export function customerRoutes(sql: Sql) {
     return c.json(customer);
   });
 
-  const Change = z.object({ name: Name.optional(), tags: Tags.optional(), note: Note.optional() }).refine((change) => Object.keys(change).length > 0, 'Nothing to change.');
+  // GST details for tax invoices: an empty GSTIN is an unregistered buyer.
+  const Change = z
+    .object({
+      name: Name.optional(),
+      tags: Tags.optional(),
+      note: Note.optional(),
+      gstin: z
+        .string()
+        .trim()
+        .max(15)
+        .transform((gstin) => gstin.toUpperCase())
+        .refine((gstin) => !gstin || GSTIN.test(gstin), 'Enter the 15-character GSTIN, e.g. 27AAPFU0939F1ZV.')
+        .optional(),
+      legalName: z.string().trim().max(150, 'Use 150 characters or fewer.').optional(),
+      billingAddress: z.string().trim().max(500, 'Use 500 characters or fewer.').optional(),
+      state: z.string().trim().max(60).optional(),
+      pincode: z.string().trim().regex(/^(\d{6})?$/, 'Enter the 6-digit PIN code.').optional(),
+    })
+    .refine((change) => Object.keys(change).length > 0, 'Nothing to change.');
 
   admin.patch('/:id', jsonBody(Change), async (c) => {
     const id = parse(CustomerId, c.req.param('id'));
-    const [row] = await sql`update customers set ${sql(c.req.valid('json'))} where id = ${id} and merged_into is null returning id`;
+    const { legalName, billingAddress, ...rest } = c.req.valid('json');
+    const change = { ...rest, ...(legalName === undefined ? {} : { legal_name: legalName }), ...(billingAddress === undefined ? {} : { billing_address: billingAddress }) };
+    const [row] = await sql`update customers set ${sql(change)} where id = ${id} and merged_into is null returning id`;
     if (!row) throw new HTTPException(404, { message: 'That customer does not exist.' });
     return c.json(await one(id));
   });

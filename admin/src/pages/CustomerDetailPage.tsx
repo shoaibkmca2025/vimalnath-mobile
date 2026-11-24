@@ -9,6 +9,7 @@ import { DataTable, type Column } from '@/components/DataTable';
 import { EmptyState } from '@/components/EmptyState';
 import { TextAreaField, TextField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
+import { CustomerGstCard } from '@/components/CustomerGstCard';
 import { PaymentDrawer } from '@/components/PaymentDrawer';
 import { Stat } from '@/components/Stat';
 import { useToast } from '@/components/useToast';
@@ -349,6 +350,8 @@ export default function CustomerDetailPage() {
                 </div>
               </div>
             </Card>
+
+            <CustomerGstCard customer={customer} onSaved={setCustomer} />
 
             <Card aria-labelledby="phones-title">
               <CardHeader id="phones-title" title="Their app" description={plural(customer.appUsers.length, 'phone')} />

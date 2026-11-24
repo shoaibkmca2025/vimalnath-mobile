@@ -8,6 +8,7 @@ import { clientOf } from './app.ts';
 import { readCalculators } from './calculators.ts';
 import { readCatalogue } from './catalogue.ts';
 import { readContent } from './content.ts';
+import { AppFeedback, saveFeedback } from './feedback.ts';
 import { customerPhoto } from './media.ts';
 import { appInbox, appUnread, isPushService, webPushKeys } from './notifications.ts';
 import { AppOrder, appOrders, placeOrder, respondToRequest } from './orders.ts';
@@ -194,6 +195,12 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
   app.post('/profile', jsonBody(ProfileEvent), async (c) => {
     await sql`update app_devices set ${sql(c.req.valid('json').profile)}, profile_updated_at = now() where id = ${c.get('deviceId')}`;
     return c.json({ received: true });
+  });
+
+  // The menu's Feedback screen: a rating, a problem, a suggestion. Staff read it under Feedback in the admin.
+  app.post('/feedback', jsonBody(AppFeedback), async (c) => {
+    await saveFeedback(sql, c.get('deviceId'), c.req.valid('json'));
+    return c.json({ received: true }, 201);
   });
 
   // The customer's own photo, from Create Account or the User screen: the photo itself as the body, its type as Content-Type.
