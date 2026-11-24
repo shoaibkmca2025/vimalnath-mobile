@@ -37,7 +37,7 @@ export function mediaAdminRoutes(sql: Sql) {
   const media = new Hono<Env>();
 
   // Sales and the inventory team upload too: photos and documents for returns.
-  media.post('/', only('owner', 'catalogue', 'sales', 'inventory'), async (c) => {
+  media.post('/', only('owner', 'catalogue', 'sales', 'inventory', 'accountant'), async (c) => {
     const type = c.req.header('content-type')?.split(';')[0]?.trim() ?? '';
     const kind = IMAGE_TYPES.includes(type) ? 'image' : type === 'application/pdf' ? 'pdf' : null;
     if (!kind) throw new HTTPException(400, { message: 'Choose a JPG, PNG or WebP photo, or a PDF.' });

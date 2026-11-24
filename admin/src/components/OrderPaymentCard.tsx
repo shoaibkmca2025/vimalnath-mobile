@@ -10,11 +10,15 @@ import { PaymentDrawer } from '@/components/PaymentDrawer';
 import { useToast } from '@/components/useToast';
 import { ORDER_STATUS, customerOf } from '@/data/orders';
 import { PAYMENT_METHODS, PAYMENT_TERMS, billOf, billStatus, creditDaysOf, dayLabel, isBilled, stateLabel, termsOf } from '@/data/payments';
+import { handlesMoney, readSession } from '@/data/session';
 import type { Order, Payment, PaymentTerms } from '@/data/types';
 import { useData } from '@/data/useData';
 import { formatINR, plural } from '@/lib/format';
 
-/** An order's bill: cash or credit, the amount owed, what's been paid and when the rest is due. Owners and Sales only. */
+/**
+ * An order's bill: cash or credit, the amount owed, what's been paid and when the rest is due. The Owner and the Accountant
+ * change the bill and record payments; Sales see it.
+ */
 export function OrderPaymentCard({ order }: { order: Order }) {
   const { db, send } = useData();
   const toast = useToast();
@@ -39,6 +43,7 @@ export function OrderPaymentCard({ order }: { order: Order }) {
   const payments = [...(order.payments ?? [])].reverse();
   const unpriced = order.lines.some((line) => line.mrp === undefined);
   const to = `/orders/${order.id}`;
+  const money = handlesMoney(readSession()?.role);
 
   const bill = /^\s*[\d,]+\s*$/.test(billDraft) ? Number(billDraft.replace(/[^\d]/g, '')) : NaN;
   const billError = !Number.isInteger(bill) || bill < 0 ? 'Enter the bill in whole rupees, e.g. 25000.' : bill < status.paid ? `${formatINR(status.paid)} has been paid already, so the bill can’t be less.` : null;
@@ -73,6 +78,8 @@ export function OrderPaymentCard({ order }: { order: Order }) {
       <div className="card__body stack">
         {billed ? (
           <>
+            {money && (
+            <>
             <div className="field">
               <span className="field__label">Terms</span>
               <Segmented<PaymentTerms>
@@ -118,7 +125,15 @@ export function OrderPaymentCard({ order }: { order: Order }) {
                 </Button>
               </div>
             )}
+            </>
+            )}
             <dl className="kv kv--compact kv--split">
+              {!money && (
+                <>
+                  <dt>Terms</dt>
+                  <dd>{PAYMENT_TERMS[terms]}</dd>
+                </>
+              )}
               <dt>Bill</dt>
               <dd className="num">{formatINR(status.bill)}</dd>
               <dt>Paid</dt>
@@ -130,9 +145,11 @@ export function OrderPaymentCard({ order }: { order: Order }) {
               <dt>Due</dt>
               <dd className={status.state === 'overdue' ? 'money-late' : undefined}>{due}</dd>
             </dl>
-            <Button variant="primary" icon={CurrencyInrIcon} disabled={status.remaining === 0} onClick={() => setPaying(true)}>
-              Record Payment
-            </Button>
+            {money && (
+              <Button variant="primary" icon={CurrencyInrIcon} disabled={status.remaining === 0} onClick={() => setPaying(true)}>
+                Record Payment
+              </Button>
+            )}
           </>
         ) : (
           <p className="muted">{order.status === 'requested' ? 'It’s billed once the customer confirms it.' : `${ORDER_STATUS[order.status].label} orders aren’t billed.`}</p>
@@ -157,7 +174,7 @@ export function OrderPaymentCard({ order }: { order: Order }) {
                   {payment.note && ` · ${payment.note}`}
                 </span>
               </span>
-              <IconButton icon={TrashIcon} tone="danger" label={`Remove the ${formatINR(payment.amount)} payment`} onClick={() => setRemoving(payment)} />
+              {money && <IconButton icon={TrashIcon} tone="danger" label={`Remove the ${formatINR(payment.amount)} payment`} onClick={() => setRemoving(payment)} />}
             </li>
           ))}
         </ul>

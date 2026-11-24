@@ -59,35 +59,35 @@ const pay = (headers: Record<string, string>, payments: Record<string, unknown>[
 const answer = async (res: Response) => (await res.json()) as { orders: Order[]; error: { message: string; field?: string } };
 
 test('payments: recorded against an order with who took them, never past its bill, and removable', { skip }, async () => {
-  const sales = await staff('sales');
-  const placed = await order('Pay Co', sales.headers);
+  const accountant = await staff('accountant');
+  const placed = await order('Pay Co', accountant.headers);
   assert.equal(placed.total, 3000);
   assert.equal(placed.terms, 'credit');
   assert.equal(placed.bill, undefined);
   assert.equal(placed.payments, undefined);
 
-  const first = await pay(sales.headers, [{ orderId: Number(placed.id), amount: 1000, method: 'upi', note: ' UTR 4471 ' }]);
+  const first = await pay(accountant.headers, [{ orderId: Number(placed.id), amount: 1000, method: 'upi', note: ' UTR 4471 ' }]);
   assert.equal(first.status, 201);
   const [paid] = (await answer(first)).orders;
   assert.deepEqual(
     paid!.payments!.map(({ amount, method, paidOn, note, by }) => ({ amount, method, paidOn, note, by })),
-    [{ amount: 1000, method: 'upi', paidOn: today, note: 'UTR 4471', by: sales.name }],
+    [{ amount: 1000, method: 'upi', paidOn: today, note: 'UTR 4471', by: accountant.name }],
   );
 
-  const over = await pay(sales.headers, [{ orderId: Number(placed.id), amount: 2500 }]);
+  const over = await pay(accountant.headers, [{ orderId: Number(placed.id), amount: 2500 }]);
   assert.equal(over.status, 400);
   assert.deepEqual((await answer(over)).error, { message: `That is more than ${placed.number} still owes (₹2,000).`, field: 'payments.0.amount' });
 
   // Two payments that together pass the bill: neither is saved.
-  const together = await pay(sales.headers, [{ orderId: Number(placed.id), amount: 1500 }, { orderId: Number(placed.id), amount: 600 }]);
+  const together = await pay(accountant.headers, [{ orderId: Number(placed.id), amount: 1500 }, { orderId: Number(placed.id), amount: 600 }]);
   assert.equal((await answer(together)).error.field, 'payments.1.amount');
   const [saved] = await sql`select count(*)::int as count from order_payments where order_id = ${placed.id}`;
   assert.equal(saved!.count, 1);
 
-  const removed = await send(`/v1/admin/orders/payments/${paid!.payments![0]!.id}`, 'DELETE', undefined, sales.headers);
+  const removed = await send(`/v1/admin/orders/payments/${paid!.payments![0]!.id}`, 'DELETE', undefined, accountant.headers);
   assert.equal(removed.status, 200);
   assert.equal((await answer(removed)).orders[0]!.payments, undefined);
-  assert.equal((await send(`/v1/admin/orders/payments/${paid!.payments![0]!.id}`, 'DELETE', undefined, sales.headers)).status, 404);
+  assert.equal((await send(`/v1/admin/orders/payments/${paid!.payments![0]!.id}`, 'DELETE', undefined, accountant.headers)).status, 404);
 });
 
 test('payments: one cheque split across two bills is saved in one go', { skip }, async () => {
@@ -104,16 +104,16 @@ test('payments: one cheque split across two bills is saved in one go', { skip },
 });
 
 test('billing: cash or credit, and a discounted bill that can’t go below what’s been paid', { skip }, async () => {
-  const sales = await staff('sales');
-  const placed = await order('Bill Co', sales.headers);
-  const billing = (body: unknown) => send(`/v1/admin/orders/${placed.id}/billing`, 'PUT', body, sales.headers);
+  const accountant = await staff('accountant');
+  const placed = await order('Bill Co', accountant.headers);
+  const billing = (body: unknown) => send(`/v1/admin/orders/${placed.id}/billing`, 'PUT', body, accountant.headers);
 
   const discounted = await billing({ terms: 'cash', bill: 2800 });
   assert.equal(discounted.status, 200);
   const [saved] = (await answer(discounted)).orders;
   assert.deepEqual([saved!.terms, saved!.bill, saved!.total], ['cash', 2800, 3000]);
 
-  await pay(sales.headers, [{ orderId: Number(placed.id), amount: 2000 }]);
+  await pay(accountant.headers, [{ orderId: Number(placed.id), amount: 2000 }]);
   const below = await billing({ terms: 'cash', bill: 1500 });
   assert.equal(below.status, 400);
   assert.deepEqual((await answer(below)).error, { message: '₹2,000 has been paid already, so the bill can’t be less. Remove a payment first.', field: 'bill' });
@@ -125,21 +125,21 @@ test('billing: cash or credit, and a discounted bill that can’t go below what�
 });
 
 test('payments: none on cancelled orders or unset bills, and no days in the future', { skip }, async () => {
-  const sales = await staff('sales');
-  const placed = await order('Refuse Co', sales.headers);
+  const accountant = await staff('accountant');
+  const placed = await order('Refuse Co', accountant.headers);
   const orderId = Number(placed.id);
 
-  const future = await pay(sales.headers, [{ orderId, amount: 100, paidOn: '2099-01-01' }]);
+  const future = await pay(accountant.headers, [{ orderId, amount: 100, paidOn: '2099-01-01' }]);
   assert.deepEqual((await answer(future)).error, { message: 'The day can’t be in the future.', field: 'payments.0.paidOn' });
-  assert.equal((await answer(await pay(sales.headers, [{ orderId, amount: 100, paidOn: '2026-02-30' }]))).error.field, 'payments.0.paidOn');
-  assert.equal((await answer(await pay(sales.headers, [{ orderId, amount: 100.5 }]))).error.message, 'Enter whole rupees.');
-  assert.equal((await answer(await pay(sales.headers, [{ orderId, amount: 100, method: 'card' }]))).error.message, 'Choose how they paid.');
+  assert.equal((await answer(await pay(accountant.headers, [{ orderId, amount: 100, paidOn: '2026-02-30' }]))).error.field, 'payments.0.paidOn');
+  assert.equal((await answer(await pay(accountant.headers, [{ orderId, amount: 100.5 }]))).error.message, 'Enter whole rupees.');
+  assert.equal((await answer(await pay(accountant.headers, [{ orderId, amount: 100, method: 'card' }]))).error.message, 'Choose how they paid.');
 
-  await send(`/v1/admin/orders/${placed.id}/billing`, 'PUT', { terms: 'credit', bill: 0 }, sales.headers);
-  assert.equal((await answer(await pay(sales.headers, [{ orderId, amount: 100 }]))).error.message, `Set the bill amount for ${placed.number} first.`);
+  await send(`/v1/admin/orders/${placed.id}/billing`, 'PUT', { terms: 'credit', bill: 0 }, accountant.headers);
+  assert.equal((await answer(await pay(accountant.headers, [{ orderId, amount: 100 }]))).error.message, `Set the bill amount for ${placed.number} first.`);
 
-  await send('/v1/admin/orders/status', 'POST', { ids: [orderId], status: 'cancelled' }, sales.headers);
-  assert.equal((await answer(await pay(sales.headers, [{ orderId, amount: 100 }]))).error.message, `${placed.number} is cancelled, so it takes no payments.`);
+  await send('/v1/admin/orders/status', 'POST', { ids: [orderId], status: 'cancelled' }, (await staff('owner')).headers);
+  assert.equal((await answer(await pay(accountant.headers, [{ orderId, amount: 100 }]))).error.message, `${placed.number} is cancelled, so it takes no payments.`);
 });
 
 test('access: the inventory team never sees bills or payments and can’t record them; catalogue editors can’t either', { skip }, async () => {
@@ -158,4 +158,12 @@ test('access: the inventory team never sees bills or payments and can’t record
   assert.equal((await pay(inventory.headers, [{ orderId: Number(placed.id), amount: 100 }])).status, 403);
   assert.equal((await send(`/v1/admin/orders/${placed.id}/billing`, 'PUT', { terms: 'credit', bill: null }, inventory.headers)).status, 403);
   assert.equal((await pay((await staff('catalogue')).headers, [{ orderId: Number(placed.id), amount: 100 }])).status, 403);
+
+  // Sales see the bill and payments but don't take money: recording, removing and billing are the Owner's and the Accountant's.
+  const sales = await staff('sales');
+  const desk = ((await (await send('/v1/admin/orders', 'GET', undefined, sales.headers)).json()) as Order[]).find((item) => item.id === placed.id)!;
+  assert.deepEqual([desk.bill, desk.payments?.length], [2900, 1]);
+  assert.equal((await pay(sales.headers, [{ orderId: Number(placed.id), amount: 100 }])).status, 403);
+  assert.equal((await send(`/v1/admin/orders/payments/${desk.payments![0]!.id}`, 'DELETE', undefined, sales.headers)).status, 403);
+  assert.equal((await send(`/v1/admin/orders/${placed.id}/billing`, 'PUT', { terms: 'credit', bill: null }, sales.headers)).status, 403);
 });

@@ -288,14 +288,14 @@ export async function saveDraft(tx: TransactionSql, id: number, draft: InvoiceDr
 /** /v1/admin/gst. */
 export function gstRoutes(sql: Sql) {
   const routes = new Hono<Env>();
-  routes.use(only('owner'));
+  routes.use(only('owner', 'accountant'));
 
   const settingsWithNumber = async () => {
     const year = financialYear(indiaDay());
     return { ...(await gstSettings(sql)), financialYear: year, lastInvoiceNumber: await lastNumber(sql, year) };
   };
   routes.get('/settings', async (c) => c.json(await settingsWithNumber()));
-  routes.put('/settings', jsonBody(Settings), async (c) => {
+  routes.put('/settings', only('owner'), jsonBody(Settings), async (c) => {
     const input = c.req.valid('json');
     const year = financialYear(indiaDay());
     await sql.begin(async (tx) => {

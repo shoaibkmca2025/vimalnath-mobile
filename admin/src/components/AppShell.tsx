@@ -57,7 +57,7 @@ import { useReturnCounts } from '@/data/returnCounts';
 import { useRequestNotifications } from '@/data/requestNotifications';
 import { editsStock, seesStock, stockAlerts } from '@/data/stock';
 import { inOrders } from '@/data/requests';
-import { endSession, readSession } from '@/data/session';
+import { endSession, handlesMoney, movesOrders, readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import { initials } from '@/lib/format';
 
@@ -104,7 +104,9 @@ export function AppShell() {
   // The inventory team only works on its own panel, the stock, returned goods to receive and check (and its password, under Settings).
   const inventoryOnly = session?.role === 'inventory';
   // Returns: Owners and Sales see the module; the inventory team the goods it receives and checks.
-  const seesReturns = session?.role === 'owner' || session?.role === 'sales' || inventoryOnly;
+  const accountant = session?.role === 'accountant';
+  const money = handlesMoney(session?.role);
+  const seesReturns = session?.role === 'owner' || session?.role === 'sales' || inventoryOnly || accountant;
   const returnCounts = useReturnCounts(seesReturns);
   const returnsGroup = {
     title: 'Returns & Replacements',
@@ -112,9 +114,9 @@ export function AppShell() {
       { to: '/returns', label: 'Returns Dashboard', icon: ChartBarIcon, end: true },
       { to: '/returns/list', label: 'Customer Returns', icon: ArrowUUpLeftIcon, count: returnCounts.receive + returnCounts.inspect, alert: true, alertLabel: 'goods to receive or check' },
       { to: '/returns/replacements', label: 'Product Replacements', icon: ArrowsLeftRightIcon },
-      { to: '/returns/refunds', label: 'Refund Management', icon: HandCoinsIcon, ...(session?.role === 'owner' ? { count: returnCounts.refunds, alert: true, alertLabel: 'refunds in progress' } : {}) },
+      { to: '/returns/refunds', label: 'Refund Management', icon: HandCoinsIcon, ...(money ? { count: returnCounts.refunds, alert: true, alertLabel: 'refunds in progress' } : {}) },
       { to: '/returns/requests', label: 'Return Requests', icon: SealCheckIcon, ...(session?.role === 'owner' ? { count: returnCounts.decide, alert: true, alertLabel: 'waiting for a decision' } : {}) },
-      ...(session?.role === 'owner' ? [{ to: '/supplier-returns', label: 'Supplier Returns', icon: StorefrontIcon }] : []),
+      ...(money ? [{ to: '/supplier-returns', label: 'Supplier Returns', icon: StorefrontIcon }] : []),
       { to: '/returns/reports', label: 'Return Reports', icon: ListChecksIcon },
       ...(session?.role === 'owner' ? [{ to: '/returns/settings', label: 'Return Settings', icon: SlidersHorizontalIcon }] : []),
     ] as NavItem[],
@@ -131,16 +133,16 @@ export function AppShell() {
       title: 'Sales',
       items: [
         { to: '/orders', label: 'Orders', icon: ReceiptIcon, count: undelivered, alert: true, alertLabel: 'not delivered yet' },
-        ...(session?.role === 'catalogue' ? [] : [{ to: '/order-requests', label: 'Order Requests', icon: PaperPlaneTiltIcon, count: requestUpdates, alert: true }, inventoryItem]),
+        ...(movesOrders(session?.role) ? [{ to: '/order-requests', label: 'Order Requests', icon: PaperPlaneTiltIcon, count: requestUpdates, alert: true }, inventoryItem] : []),
         { to: '/customers', label: 'Customers', icon: UsersThreeIcon },
         ...(session?.role === 'catalogue' ? [] : [{ to: '/payments', label: 'Payments', icon: WalletIcon, count: overdue, alert: true, alertLabel: 'overdue' }]),
-        ...(session?.role === 'catalogue' ? [] : [{ to: '/app-users', label: 'App Users', icon: DeviceMobileIcon }]),
+        ...(movesOrders(session?.role) ? [{ to: '/app-users', label: 'App Users', icon: DeviceMobileIcon }] : []),
         ...(seesFeedback ? [{ to: '/feedback', label: 'Feedback', icon: ChatsCircleIcon, count: newFeedback, alert: true, alertLabel: 'new' }] : []),
       ],
     },
     ...(seesReturns ? [returnsGroup] : []),
-    // Phase 2 (docs/ERP-ROADMAP.md): Owners only until roles get permissions.
-    ...(session?.role === 'owner'
+    // The Owner and the Accountant; GST Settings, the shop's registration, stays the Owner's.
+    ...(money
       ? [
           {
             title: 'Purchases',
@@ -157,11 +159,15 @@ export function AppShell() {
               { to: '/gst/purchases', label: 'Purchase Register', icon: ClipboardTextIcon },
               { to: '/gst/hsn', label: 'HSN Summary', icon: HashIcon },
               { to: '/gst/payments', label: 'GST Payments', icon: BankIcon },
-              { to: '/gst/settings', label: 'GST Settings', icon: SlidersHorizontalIcon },
+              ...(session?.role === 'owner' ? [{ to: '/gst/settings', label: 'GST Settings', icon: SlidersHorizontalIcon }] : []),
             ],
           },
         ]
       : []),
+    // The Accountant keeps the books, not the catalogue or the app's content.
+    ...(accountant
+      ? []
+      : [
     {
       title: 'Catalogue',
       items: [
@@ -190,6 +196,7 @@ export function AppShell() {
         ...(session?.role === 'sales' ? [] : [{ to: '/media', label: 'Media Library', icon: FolderSimpleIcon }]),
       ],
     },
+        ]),
     {
       title: 'System',
       items: [
@@ -249,7 +256,14 @@ export function AppShell() {
     inventoryOnly ? ['confirmed', 'packed', 'dispatched'].includes(order.status) : inOrders(order) && ['placed', 'confirmed', 'packed', 'dispatched'].includes(order.status),
   );
 
-  const allowed = !inventoryOnly || ['/inventory', '/stock', '/settings', '/returns/list', '/returns/'].some((path) => location.pathname.startsWith(path)) && !['/returns/settings', '/returns/reports', '/returns/refunds', '/returns/new'].some((path) => location.pathname.startsWith(path));
+  const under = (pages: string[]) => pages.some((page) => location.pathname === page || location.pathname.startsWith(`${page}/`));
+  const allowed = inventoryOnly
+    ? ['/inventory', '/stock', '/settings', '/returns/list', '/returns/'].some((path) => location.pathname.startsWith(path)) && !['/returns/settings', '/returns/reports', '/returns/refunds', '/returns/new'].some((path) => location.pathname.startsWith(path))
+    : accountant
+      ? // The Accountant's pages; anything else typed in or linked to goes to the dashboard.
+        location.pathname === '/' || (under(['/orders', '/customers', '/payments', '/purchases', '/suppliers', '/supplier-returns', '/gst', '/returns', '/activity', '/settings']) && !under(['/gst/settings', '/returns/settings', '/returns/new']))
+      : // The books are the Owner's and the Accountant's.
+        money || !under(['/gst', '/purchases', '/suppliers', '/supplier-returns']);
 
   const signOut = async () => {
     await endSession();
@@ -361,7 +375,7 @@ export function AppShell() {
           </header>
 
           <main id="main" ref={mainRef} className="main" tabIndex={-1}>
-            {allowed ? <Outlet /> : <Navigate to="/inventory" replace />}
+            {allowed ? <Outlet /> : <Navigate to={inventoryOnly ? '/inventory' : '/'} replace />}
           </main>
         </div>
       </div>

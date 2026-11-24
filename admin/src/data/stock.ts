@@ -6,7 +6,7 @@ import type { Order, Product, Purchase, SalesReturn, StockBucket, StockItem, Sto
  * under option ''). An item is tracked once it has stock details; delivered orders then take from it.
  */
 
-export const seesStock = (role: Role | undefined) => role === 'owner' || role === 'inventory' || role === 'sales';
+export const seesStock = (role: Role | undefined) => role === 'owner' || role === 'inventory' || role === 'sales' || role === 'accountant';
 export const editsStock = (role: Role | undefined) => role === 'owner' || role === 'inventory';
 
 export const UNITS: Record<StockUnit, string> = {

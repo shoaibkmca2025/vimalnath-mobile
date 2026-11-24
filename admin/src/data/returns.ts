@@ -134,7 +134,8 @@ export const FLAGS: Record<SalesReturn['flags'][number], string> = {
 
 /** Owners may do anything; other roles what Return Settings gives them. */
 export const canDo = (settings: Pick<ReturnSettings, 'permissions'> | null, role: Role | undefined, action: ReturnAction) =>
-  role === 'owner' || Boolean(role && settings && (settings.permissions[action] as string[]).includes(role));
+  // The Accountant pays refunds whatever Return Settings say (server/src/returns.ts can()).
+  role === 'owner' || (role === 'accountant' && action === 'refund') || Boolean(role && settings && (settings.permissions[action] as string[]).includes(role));
 
 /** Money settled on a return: refunds out, collections in, and what is still to do either way. */
 export function moneyOf(ret: Pick<SalesReturn, 'settleAmount' | 'refunds'>) {
@@ -187,7 +188,7 @@ export function actionsFor(ret: SalesReturn, settings: ReturnSettings | null, ro
     if (money.leftOut > 0) actions.push('refund');
     if (money.leftIn > 0) actions.push('collect');
   }
-  if (ret.invoiceId && goodsBack(status) && (!ret.creditNote || ret.creditNote.status === 'cancelled') && may('approve') && (ret.kind === 'refund' || settings?.replacementTax === 'invoice'))
+  if (ret.invoiceId && goodsBack(status) && (!ret.creditNote || ret.creditNote.status === 'cancelled') && (may('approve') || role === 'accountant') && (ret.kind === 'refund' || settings?.replacementTax === 'invoice'))
     actions.push('creditNote');
   if (['inspected', 'refunded', 'replaced'].includes(status) && !uninspected && money.settled && (ret.kind === 'refund' || status === 'replaced') && may('approve')) actions.push('close');
   const cancellable = ['pending', 'under_review', 'approved', 'received', 'inspected'].includes(status) && !money.paidOut && !money.paidIn;

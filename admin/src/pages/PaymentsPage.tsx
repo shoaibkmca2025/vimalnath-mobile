@@ -16,6 +16,7 @@ import type { Order, Payment } from '@/data/types';
 import { useData } from '@/data/useData';
 import { useDrawerItem } from '@/hooks/useDrawerItem';
 import { downloadCsv } from '@/lib/csv';
+import { handlesMoney, readSession } from '@/data/session';
 import { formatINR, formatINRCompact, formatPercent, plural } from '@/lib/format';
 
 type Show = 'overdue' | 'owing' | 'all' | 'received';
@@ -116,17 +117,22 @@ export default function PaymentsPage() {
       sortValue: (account) => account.lastPaid ?? '',
       cell: (account) => (account.lastPaid ? <span className="num">{dayLabel(account.lastPaid)}</span> : <span className="muted">None yet</span>),
     },
-    {
-      key: 'actions',
-      header: 'Actions',
-      hideHeader: true,
-      align: 'actions',
-      cell: (account) => (
-        <Button size="sm" icon={HandCoinsIcon} disabled={!account.remaining} onClick={() => drawer.show(account)}>
-          Record Payment
-        </Button>
-      ),
-    },
+    // Sales see who owes what; the Owner and the Accountant take the money.
+    ...(handlesMoney(readSession()?.role)
+      ? [
+          {
+            key: 'actions',
+            header: 'Actions',
+            hideHeader: true,
+            align: 'actions' as const,
+            cell: (account: (typeof rows)[number]) => (
+              <Button size="sm" icon={HandCoinsIcon} disabled={!account.remaining} onClick={() => drawer.show(account)}>
+                Record Payment
+              </Button>
+            ),
+          },
+        ]
+      : []),
   ];
 
   const receivedColumns: Column<Received>[] = [

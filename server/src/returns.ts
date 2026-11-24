@@ -112,8 +112,9 @@ export async function returnSettings(sql: Sql | TransactionSql): Promise<ReturnS
   return row as ReturnSettings;
 }
 
-/** Owners may do anything; other roles what Return Settings gives them. */
-export const can = (settings: Pick<ReturnSettings, 'permissions'>, role: Role, action: Action) => role === 'owner' || (settings.permissions[action] as string[]).includes(role);
+/** Owners may do anything; the Accountant pays refunds; other roles what Return Settings gives them. */
+export const can = (settings: Pick<ReturnSettings, 'permissions'>, role: Role, action: Action) =>
+  role === 'owner' || (role === 'accountant' && action === 'refund') || (settings.permissions[action] as string[]).includes(role);
 const VERB: Record<Action, string> = { create: 'record returns', approve: 'approve returns', receive: 'receive returned goods', inspect: 'check returned goods', refund: 'pay refunds' };
 function need(settings: ReturnSettings, role: Role, action: Action) {
   if (!can(settings, role, action)) throw new HTTPException(403, { message: `Your role can’t ${VERB[action]}. An Owner can change that under Return Settings.` });
@@ -614,7 +615,7 @@ async function completeRefund(tx: TransactionSql, refund: { id: number; return_i
 /** /v1/admin/returns. Who may do what comes from Return Settings; Owners may do everything. */
 export function returnRoutes(sql: Sql) {
   const routes = new Hono<Env>();
-  routes.use(only('owner', 'sales', 'inventory'));
+  routes.use(only('owner', 'sales', 'inventory', 'accountant'));
   const owners = only('owner');
 
   const answer = async (id: number, orderIds: number[] = [], stockKeys: { productId: string; option: string }[] = []) => {
@@ -702,7 +703,7 @@ export function returnRoutes(sql: Sql) {
   });
 
   // GST credit notes, for the GST registers. Owners only, like the rest of GST.
-  routes.get('/credit-notes', owners, async (c) => c.json(await creditNotes(sql)));
+  routes.get('/credit-notes', only('owner', 'accountant'), async (c) => c.json(await creditNotes(sql)));
 
   // Every refund and collection, for Refund Management.
   routes.get('/refunds', async (c) =>
@@ -972,7 +973,8 @@ export function returnRoutes(sql: Sql) {
     const id = parse(Id, c.req.param('id'));
     const staff = c.get('staff');
     await sql.begin(async (tx) => {
-      need(await returnSettings(tx), staff.role, 'approve');
+      // Credit notes are the Accountant's work too.
+      if (staff.role !== 'accountant') need(await returnSettings(tx), staff.role, 'approve');
       const ret = await lockReturn(tx, id, c.req.valid('json').version);
       if (!GOODS_BACK.includes(ret.status)) throw new HTTPException(409, { message: `A credit note follows the goods coming back; ${ret.number} is ${LABEL[ret.status]}.` });
       await issueCreditNote(tx, id, staff.name);
@@ -981,7 +983,7 @@ export function returnRoutes(sql: Sql) {
     return c.json(await answer(id));
   });
 
-  routes.post('/credit-notes/:noteId/cancel', owners, jsonBody(z.object({ reason: Text(300).min(1, 'Give the reason for cancelling.') })), async (c) => {
+  routes.post('/credit-notes/:noteId/cancel', only('owner', 'accountant'), jsonBody(z.object({ reason: Text(300).min(1, 'Give the reason for cancelling.') })), async (c) => {
     const noteId = parse(Id, c.req.param('noteId'));
     const staff = c.get('staff');
     const id = await sql.begin(async (tx) => {

@@ -10,7 +10,7 @@ import { importSeed } from '../src/import-data.ts';
 import { migrate } from '../src/migrate.ts';
 import { orderAdminRoutes } from '../src/orders.ts';
 import { purchaseRoutes, supplierRoutes } from '../src/purchases.ts';
-import { returnRoutes } from '../src/returns.ts';
+import { can, returnRoutes } from '../src/returns.ts';
 import { adminRoutes, issuePasswordLink, sha256 } from '../src/staff.ts';
 import { supplierReturnRoutes } from '../src/supplier-returns.ts';
 import { seed } from './seed-fixture.ts';
@@ -47,7 +47,7 @@ const send = (path: string, method = 'GET', body?: unknown, headers: Record<stri
 type Answer = { returns: SalesReturn[]; orders: Order[]; supplierReturns: SupplierReturn[]; error: { message: string; field?: string } };
 const answer = async (res: Response) => (await res.json()) as Answer;
 
-async function staff(role: 'owner' | 'sales' | 'inventory') {
+async function staff(role: 'owner' | 'sales' | 'inventory' | 'accountant') {
   const email = `${role}${++next}@example.com`;
   const [row] = await sql`insert into staff_users (name, email, role) values (${`${role} ${next}`}, ${email}, ${role}) returning id`;
   const token = new URL(await issuePasswordLink(sql, row!.id, ORIGIN)).searchParams.get('token');
@@ -417,4 +417,22 @@ test('replacement on an invoiced order: a credit note for the goods back, and a 
   assert.match(posted.number, /^VSC-\d{2}-\d{2}-\d+$/);
   const [bill] = await sql`select bill_amount from orders where id = ${id}`;
   assert.equal(bill!.bill_amount, 7080);
+});
+
+test('the Accountant: GST, purchases, suppliers, supplier returns, refunds and credit notes; not GST settings; Sales none of the books', { skip }, async () => {
+  const accountant = await staff('accountant');
+  for (const path of ['/v1/admin/gst/settings', '/v1/admin/gst/invoices', '/v1/admin/gst/payments', '/v1/admin/purchases', '/v1/admin/suppliers', '/v1/admin/supplier-returns', '/v1/admin/returns', '/v1/admin/returns/credit-notes']) {
+    assert.equal((await send(path, 'GET', undefined, accountant)).status, 200, path);
+  }
+  // The shop's GST registration stays the Owner's.
+  assert.equal((await send('/v1/admin/gst/settings', 'PUT', { legalName: 'X' }, accountant)).status, 403);
+  assert.equal((await send('/v1/admin/returns/settings', 'PUT', {}, accountant)).status, 403);
+  // Refunds are theirs whatever Return Settings say; approving returns isn't.
+  const settings = { permissions: { create: ['sales'], approve: [], receive: ['inventory'], inspect: ['inventory'], refund: [] } } as unknown as Parameters<typeof can>[0];
+  assert.deepEqual([can(settings, 'accountant', 'refund'), can(settings, 'accountant', 'approve'), can(settings, 'sales', 'refund')], [true, false, false]);
+
+  const sales = await staff('sales');
+  for (const path of ['/v1/admin/gst/settings', '/v1/admin/gst/invoices', '/v1/admin/purchases', '/v1/admin/suppliers', '/v1/admin/supplier-returns', '/v1/admin/returns/credit-notes']) {
+    assert.equal((await send(path, 'GET', undefined, sales)).status, 403, path);
+  }
 });

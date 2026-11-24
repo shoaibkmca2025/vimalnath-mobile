@@ -33,7 +33,7 @@ import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
 import { NEXT_ACTION_LABEL, ORDER_STATUS, STATUS_ORDER, customerOf, customersFromOrders, itemCount, nextStatus, stepLabel, stepsOf, whatsappLink } from '@/data/orders';
 import { inOrders } from '@/data/requests';
-import { readSession } from '@/data/session';
+import { handlesMoney, movesOrders, readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import type { GstSettings, Order, OrderStatus, SalesInvoice } from '@/data/types';
 import { api } from '@/lib/api';
@@ -82,6 +82,8 @@ export default function OrderDetailPage() {
     );
 
   const by = () => readSession()?.name ?? 'Admin';
+  // Cancelling an order, and bringing a cancelled one back, are the Owner's.
+  const owner = readSession()?.role === 'owner';
 
   const setStatus = async (status: OrderStatus) => {
     if (status === order.status) return;
@@ -169,7 +171,7 @@ export default function OrderDetailPage() {
             <Button icon={PrinterIcon} onClick={() => window.print()} className="no-print">
               Print
             </Button>
-            {next && (
+            {next && movesOrders(readSession()?.role) && (
               <Button variant="primary" icon={next === 'confirmed' ? CheckIcon : next === 'packed' ? PackageIcon : next === 'dispatched' ? TruckIcon : undefined} onClick={() => setStatus(next)} className="no-print">
                 {NEXT_ACTION_LABEL[next]}
               </Button>
@@ -317,6 +319,8 @@ export default function OrderDetailPage() {
             </p>
           </Card>
 
+          {movesOrders(readSession()?.role) && (
+          <>
           <Card aria-labelledby="internal-title" className="no-print">
             <CardHeader
               id="internal-title"
@@ -355,6 +359,8 @@ export default function OrderDetailPage() {
               </div>
             </div>
           </Card>
+          </>
+          )}
         </div>
 
         <div className="stack editor__aside">
@@ -373,13 +379,17 @@ export default function OrderDetailPage() {
                 </span>
               </p>
             )}
-              <SelectField
-                label="Change status"
-                value={order.status}
-                onChange={(event) => setStatus(event.target.value as OrderStatus)}
-                options={STATUS_ORDER.map((value) => ({ value, label: ORDER_STATUS[value].label }))}
-                hint="The customer sees the new status in their app after its next sync."
-              />
+              {movesOrders(readSession()?.role) && (
+                <SelectField
+                  label="Change status"
+                  value={order.status}
+                  onChange={(event) => setStatus(event.target.value as OrderStatus)}
+                  // Cancelling, and bringing a cancelled order back, are the Owner's.
+                  options={STATUS_ORDER.filter((value) => owner || value !== 'cancelled' || order.status === 'cancelled').map((value) => ({ value, label: ORDER_STATUS[value].label }))}
+                  disabled={!owner && order.status === 'cancelled'}
+                  hint={!owner && order.status === 'cancelled' ? 'Only the Owner can bring a cancelled order back.' : 'The customer sees the new status in their app after its next sync.'}
+                />
+              )}
             </div>
             <ol className="timeline" aria-label="Status history">
               {timeline.map((step) => (
@@ -398,7 +408,7 @@ export default function OrderDetailPage() {
 
           <OrderPaymentCard order={order} />
 
-          {readSession()?.role === 'owner' && <TaxInvoiceCard order={order} />}
+          {handlesMoney(readSession()?.role) && <TaxInvoiceCard order={order} />}
 
           <Card aria-labelledby="customer-title">
             <CardHeader
@@ -450,7 +460,7 @@ export default function OrderDetailPage() {
             </div>
           </Card>
 
-          {order.status !== 'cancelled' && order.status !== 'delivered' && order.status !== 'declined' && (
+          {owner && order.status !== 'cancelled' && order.status !== 'delivered' && order.status !== 'declined' && (
             <Button variant="danger-plain" icon={XCircleIcon} onClick={() => setConfirmCancel(true)} className="no-print">
               {order.status === 'requested' ? 'Cancel Request' : 'Cancel Order'}
             </Button>
@@ -486,7 +496,8 @@ export default function OrderDetailPage() {
  */
 function OrderBill({ order }: { order: Order }) {
   const { db } = useData();
-  const owner = readSession()?.role === 'owner';
+  // The Owner and the Accountant read GST invoices and settings.
+  const owner = handlesMoney(readSession()?.role);
   const [gst, setGst] = useState<{ settings: GstSettings; invoices: SalesInvoice[] } | null>(null);
   useEffect(() => {
     if (!owner) return;

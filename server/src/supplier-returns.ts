@@ -189,7 +189,7 @@ const event = (tx: TransactionSql, id: number, kind: string, by: string, details
 /** /v1/admin/supplier-returns. */
 export function supplierReturnRoutes(sql: Sql) {
   const routes = new Hono<Env>();
-  routes.use(only('owner'));
+  routes.use(only('owner', 'accountant'));
 
   const answer = async (id: number, moved: { product_id: string; option_label: string }[] = []) => ({
     supplierReturns: await supplierReturns(sql, sql`r.id = ${id}`),

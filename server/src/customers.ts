@@ -17,10 +17,13 @@ const Tags = z
 const distinctTags = (tags: string[]) => tags.filter((tag, index) => tags.findIndex((other) => other.toLowerCase() === tag.toLowerCase()) === index);
 const Note = z.string().trim().max(2000, 'Use 2,000 characters or fewer.');
 
-/** /v1/admin/customers, for Owners and Sales. Money figures leave out cancelled orders, as the dashboard does. */
+/**
+ * /v1/admin/customers, for Owners and Sales, and for the Accountant to see balances. Money figures leave out cancelled
+ * orders, as the dashboard does.
+ */
 export function customerRoutes(sql: Sql) {
   const admin = new Hono<Env>();
-  admin.use(only('owner', 'sales'));
+  admin.use(only('owner', 'sales', 'accountant'));
 
   const customers = (where = sql`true`) => sql`
     select c.id, c.name, c.tags, c.note, c.created_at as "createdAt",
@@ -78,7 +81,7 @@ export function customerRoutes(sql: Sql) {
     })
     .refine((change) => Object.keys(change).length > 0, 'Nothing to change.');
 
-  admin.patch('/:id', jsonBody(Change), async (c) => {
+  admin.patch('/:id', only('owner', 'sales'), jsonBody(Change), async (c) => {
     const id = parse(CustomerId, c.req.param('id'));
     const { legalName, billingAddress, ...rest } = c.req.valid('json');
     const change = { ...rest, ...(legalName === undefined ? {} : { legal_name: legalName }), ...(billingAddress === undefined ? {} : { billing_address: billingAddress }) };
@@ -88,7 +91,7 @@ export function customerRoutes(sql: Sql) {
   });
 
   // Moves the other customer's phones, and with them their orders, here. Their tags and note are kept on this one.
-  admin.post('/:id/merge', jsonBody(z.object({ from: CustomerId })), async (c) => {
+  admin.post('/:id/merge', only('owner'), jsonBody(z.object({ from: CustomerId })), async (c) => {
     const id = parse(CustomerId, c.req.param('id'));
     const { from } = c.req.valid('json');
     if (from === id) throw new HTTPException(400, { message: 'Choose a different customer to merge.', cause: { field: 'from' } });

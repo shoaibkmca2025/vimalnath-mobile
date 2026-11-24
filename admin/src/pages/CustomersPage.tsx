@@ -16,6 +16,7 @@ import { accounts, creditDaysOf } from '@/data/payments';
 import { useData } from '@/data/useData';
 import { api } from '@/lib/api';
 import { downloadCsv } from '@/lib/csv';
+import { readSession } from '@/data/session';
 import { formatDate, formatINR, formatNumber, formatRelativeDay, initials, plural } from '@/lib/format';
 
 export default function CustomersPage() {
@@ -166,7 +167,8 @@ export default function CustomersPage() {
         }
       />
 
-      {duplicates.length > 0 && (
+      {/* Merging is the Owner's. */}
+      {duplicates.length > 0 && readSession()?.role === 'owner' && (
         <Card aria-labelledby="duplicates-title" style={{ marginBottom: 'var(--space-4)' }}>
           <CardHeader id="duplicates-title" title="Possible duplicates" description="These look like the same customer. Merging moves the phones and orders across; nothing is deleted." />
           <ul className="list">

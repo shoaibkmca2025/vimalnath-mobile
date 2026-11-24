@@ -103,7 +103,9 @@ test('totals leave out cancelled orders; open counts what is not delivered yet',
   for (const qty of [1, 2, 3]) await anil.order(qty);
   const [third, second] = await ordersOf('Anil Traders');
   const desk = await staff();
-  await send('/v1/admin/orders/status', 'POST', { ids: [third!.id], status: 'cancelled' }, desk);
+  // Sales move orders along; cancelling is the Owner's.
+  assert.equal((await send('/v1/admin/orders/status', 'POST', { ids: [third!.id], status: 'cancelled' }, desk)).status, 403);
+  await send('/v1/admin/orders/status', 'POST', { ids: [third!.id], status: 'cancelled' }, await staff('owner'));
   await send('/v1/admin/orders/status', 'POST', { ids: [second!.id], status: 'delivered' }, desk);
   const customer = await named('Anil Traders');
   // SSS on p1 is ₹1,500: 1 + 2 count, the cancelled 3 doesn't.
@@ -143,7 +145,10 @@ test('merge: phones and their orders move over, tags and notes are kept, and the
   const gone = await named('Ravi (second phone)');
   await send(`/v1/admin/customers/${gone.id}`, 'PATCH', { tags: ['Dealer', 'contractor'], note: 'Second phone is the site manager’s' }, desk);
 
-  const merged = (await (await send(`/v1/admin/customers/${keep.id}/merge`, 'POST', { from: gone.id }, desk)).json()) as Customer;
+  // Merging is the Owner's: Sales edit customers but don't merge them.
+  assert.equal((await send(`/v1/admin/customers/${keep.id}/merge`, 'POST', { from: gone.id }, desk)).status, 403);
+  const owner = await staff('owner');
+  const merged = (await (await send(`/v1/admin/customers/${keep.id}/merge`, 'POST', { from: gone.id }, owner)).json()) as Customer;
   assert.deepEqual(merged.appUsers.map((user) => user.label), ['Ravi Glass Works', 'Ravi (second phone)']);
   // Ravi's first two orders (1 + 2 handles) and the second phone's one; SSS on p1 is ₹1,500.
   assert.deepEqual([merged.orders, merged.spent], [3, 6000]);
@@ -155,14 +160,19 @@ test('merge: phones and their orders move over, tags and notes are kept, and the
   assert.equal(((await (await send(`/v1/admin/customers/${gone.id}`, 'GET', undefined, desk)).json()) as Customer).id, keep.id);
   assert.equal((await ordersOf('Ravi (second phone)'))[0]!.customerRecord?.id, keep.id);
 
-  assert.equal((await send(`/v1/admin/customers/${keep.id}/merge`, 'POST', { from: keep.id }, desk)).status, 400);
-  assert.equal((await send(`/v1/admin/customers/${keep.id}/merge`, 'POST', { from: gone.id }, desk)).status, 404);
+  assert.equal((await send(`/v1/admin/customers/${keep.id}/merge`, 'POST', { from: keep.id }, owner)).status, 400);
+  assert.equal((await send(`/v1/admin/customers/${keep.id}/merge`, 'POST', { from: gone.id }, owner)).status, 404);
 });
 
-test('access: Owners and Sales work with customers; Catalogue editors and signed-out people cannot', { skip }, async () => {
+test('access: Owners and Sales work with customers; the Accountant sees them; Catalogue editors and signed-out people cannot', { skip }, async () => {
   assert.equal((await send('/v1/admin/customers')).status, 401);
   assert.equal((await send('/v1/admin/customers', 'GET', undefined, await staff('catalogue'))).status, 403);
   assert.equal((await send('/v1/admin/customers', 'GET', undefined, await staff('owner'))).status, 200);
+  const accountant = await staff('accountant');
+  const [anyone] = (await (await send('/v1/admin/customers', 'GET', undefined, accountant)).json()) as Customer[];
+  assert.ok(anyone, 'the Accountant sees customers and their balances');
+  assert.equal((await send(`/v1/admin/customers/${anyone!.id}`, 'PATCH', { note: 'x' }, accountant)).status, 403);
+  assert.equal((await send(`/v1/admin/customers/${anyone!.id}/merge`, 'POST', { from: anyone!.id }, accountant)).status, 403);
 });
 
 // A database that had app users before Module 7: the migration gives each one its own customer.

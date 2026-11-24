@@ -14,7 +14,7 @@ import { ORDER_STATUS, STATUS_ORDER, isCounted, itemCount } from '@/data/orders'
 import { PAYMENT_TERMS, billOf, isBilled, paidOf, remainingOf, termsOf } from '@/data/payments';
 import { productTitle } from '@/data/products';
 import { inOrders } from '@/data/requests';
-import { readSession } from '@/data/session';
+import { movesOrders, readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import type { Order, OrderStatus } from '@/data/types';
 import { downloadCsv } from '@/lib/csv';
@@ -173,9 +173,11 @@ export default function OrdersPage() {
             <Button icon={DownloadSimpleIcon} onClick={exportRows} disabled={!rows.length}>
               Export CSV
             </Button>
-            <ButtonLink to="/order-requests" icon={PaperPlaneTiltIcon}>
-              Order Requests
-            </ButtonLink>
+            {movesOrders(readSession()?.role) && (
+              <ButtonLink to="/order-requests" icon={PaperPlaneTiltIcon}>
+                Order Requests
+              </ButtonLink>
+            )}
           </>
         }
       />
@@ -213,7 +215,8 @@ export default function OrdersPage() {
           columns={columns}
           getRowId={(order) => order.id}
           onRowClick={(order) => navigate(`/orders/${order.id}`)}
-          selectable
+          // Moving orders in bulk is for those who move them; the Accountant only looks.
+          selectable={movesOrders(readSession()?.role)}
           selected={selected}
           onSelectedChange={setSelected}
           resetKey={`${status}|${query}|${productId ?? ''}`}

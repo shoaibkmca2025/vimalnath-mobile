@@ -280,10 +280,10 @@ const itemsWhere = (sql: Sql, items: { productId: string; option: string }[]) =>
   sql`exists (select 1 from jsonb_to_recordset(${sql.json(items.map(({ productId, option }) => ({ productId, option })))}) as k("productId" text, option text)
     where k."productId" = s.product_id and k.option = s.option_label)`;
 
-/** /v1/admin/purchases. */
+/** /v1/admin/purchases, for the Owner and the Accountant. */
 export function purchaseRoutes(sql: Sql) {
   const routes = new Hono<Env>();
-  routes.use(only('owner'));
+  routes.use(only('owner', 'accountant'));
 
   // shortcut: every bill at once, which the admin searches and filters itself; page it on the server past a few thousand.
   routes.get('/', async (c) => c.json(await purchases(sql)));
@@ -360,10 +360,10 @@ export function purchaseRoutes(sql: Sql) {
   return routes;
 }
 
-/** /v1/admin/suppliers. */
+/** /v1/admin/suppliers, for the Owner and the Accountant. */
 export function supplierRoutes(sql: Sql) {
   const routes = new Hono<Env>();
-  routes.use(only('owner'));
+  routes.use(only('owner', 'accountant'));
 
   routes.get('/', async (c) => c.json(await suppliers(sql)));
 

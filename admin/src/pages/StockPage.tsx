@@ -32,7 +32,8 @@ export default function StockPage() {
   const navigate = useNavigate();
   const [deleting, setDeleting] = useState<StockRow | null>(null);
   const role = readSession()?.role;
-  const owner = role === 'owner';
+  // Purchase prices: the Owner, and the Accountant for purchase bills.
+  const owner = role === 'owner' || role === 'accountant';
   const canEdit = editsStock(role);
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState('');

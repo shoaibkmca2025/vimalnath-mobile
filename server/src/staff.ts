@@ -11,7 +11,7 @@ import { loadConfig } from './config.ts';
 import { connect } from './db.ts';
 import { jsonBody, parse } from './validate.ts';
 
-const ROLES = ['owner', 'sales', 'catalogue', 'inventory'] as const;
+const ROLES = ['owner', 'sales', 'catalogue', 'inventory', 'accountant'] as const;
 export type Role = (typeof ROLES)[number];
 type Staff = { id: number; name: string; email: string; role: Role };
 export type Env = { Variables: { staff: Staff; sessionHash: string } };

@@ -154,11 +154,16 @@ test('status: each change records who made it, the phone sees it, and undo is a 
   assert.deepEqual(confirmed.orders.map((order) => order.status), ['confirmed', 'confirmed']);
   assert.deepEqual(confirmed.orders[0]!.history.map((step) => [step.status, step.by]), [['placed', 'App'], ['confirmed', desk.name]]);
 
-  await send('/v1/admin/orders/status', 'POST', { ids: [ids[1]], status: 'cancelled' }, desk.headers);
-  const undone = (await (await send('/v1/admin/orders/status', 'POST', { ids: [ids[1]], status: 'confirmed' }, desk.headers)).json()) as { orders: Order[] };
+  // Cancelling, and bringing a cancelled order back, are the Owner's; Sales are refused, and their "restore" changes nothing.
+  assert.equal((await send('/v1/admin/orders/status', 'POST', { ids: [ids[1]], status: 'cancelled' }, desk.headers)).status, 403);
+  const owner = await staff('owner');
+  await send('/v1/admin/orders/status', 'POST', { ids: [ids[1]], status: 'cancelled' }, owner.headers);
+  const kept = (await (await send('/v1/admin/orders/status', 'POST', { ids: [ids[1]], status: 'confirmed' }, desk.headers)).json()) as { orders: Order[] };
+  assert.equal(kept.orders[0]!.status, 'cancelled');
+  const undone = (await (await send('/v1/admin/orders/status', 'POST', { ids: [ids[1]], status: 'confirmed' }, owner.headers)).json()) as { orders: Order[] };
   assert.deepEqual(undone.orders[0]!.history.map((step) => step.status), ['placed', 'confirmed', 'cancelled', 'confirmed']);
   // Setting the status it already has records nothing.
-  const same = (await (await send('/v1/admin/orders/status', 'POST', { ids: [ids[1]], status: 'confirmed' }, desk.headers)).json()) as { orders: Order[] };
+  const same = (await (await send('/v1/admin/orders/status', 'POST', { ids: [ids[1]], status: 'confirmed' }, owner.headers)).json()) as { orders: Order[] };
   assert.equal(same.orders[0]!.history.length, 4);
 
   const seen = (await ravi.orders()).orders.find((order) => order.mobileOrderId === 'local-1')!;
@@ -180,11 +185,21 @@ test('internal note: saved for staff, removed when emptied, never sent to the ph
   assert.equal((await send('/v1/admin/orders/999999/internal-note', 'PUT', { text: 'x' }, desk.headers)).status, 404);
 });
 
-test('access: Owners and Sales work on orders; Catalogue editors and signed-out people cannot', { skip }, async () => {
+test('access: Owners and Sales work on orders; the Accountant sees them with their money; Catalogue editors and signed-out people cannot', { skip }, async () => {
   assert.equal((await send('/v1/admin/orders')).status, 401);
   assert.equal((await send('/v1/admin/orders', 'GET', undefined, (await staff('catalogue')).headers)).status, 403);
   assert.equal((await send('/v1/admin/orders', 'GET', undefined, (await staff('owner')).headers)).status, 200);
   assert.equal((await send('/v1/admin/orders/status', 'POST', { ids: [1], status: 'shipped' }, (await staff('sales')).headers)).status, 400);
+
+  // The Accountant: every order, with its bill, but doesn't move orders, write their notes or send order requests.
+  const accountant = (await staff('accountant')).headers;
+  const all = (await adminOrders(accountant)) as (Order & { terms?: string })[];
+  assert.ok(all.length > 0 && all.some((order) => order.terms), 'every order, with its terms and bill');
+  const id = all[0]!.id;
+  assert.equal((await send('/v1/admin/orders/status', 'POST', { ids: [id], status: 'confirmed' }, accountant)).status, 403);
+  assert.equal((await send(`/v1/admin/orders/${id}/internal-note`, 'PUT', { text: 'x' }, accountant)).status, 403);
+  assert.equal((await send(`/v1/admin/orders/${id}/inventory-note`, 'PUT', { text: 'x' }, accountant)).status, 403);
+  assert.equal((await send('/v1/admin/orders', 'POST', { appUserId: 1, customer: 'x', lines: [] }, accountant)).status, 403);
 });
 
 type ShopOrder = AppOrders['orders'][number] & { id: string; source: string; details?: { customer: string; total: number; lines: Line[] } };
@@ -332,7 +347,9 @@ test('inventory: packs and dispatches confirmed orders, can set them back to pen
   const cancelled = (await (await move([third.id], 'cancelled')).json()) as { orders: Order[] };
   assert.deepEqual(cancelled.orders[0]!.history.at(-1), { ...cancelled.orders[0]!.history.at(-1)!, status: 'cancelled', by: inventory.name });
   assert.equal(((await (await move([third.id], 'confirmed')).json()) as { orders: Order[] }).orders[0]!.status, 'cancelled');
-  assert.equal(((await (await send('/v1/admin/orders/status', 'POST', { ids: [third.id], status: 'confirmed' }, desk.headers)).json()) as { orders: Order[] }).orders[0]!.status, 'confirmed');
+  // Sales can't bring it back either; the Owner can.
+  assert.equal(((await (await send('/v1/admin/orders/status', 'POST', { ids: [third.id], status: 'confirmed' }, desk.headers)).json()) as { orders: Order[] }).orders[0]!.status, 'cancelled');
+  assert.equal(((await (await send('/v1/admin/orders/status', 'POST', { ids: [third.id], status: 'confirmed' }, (await staff('owner')).headers)).json()) as { orders: Order[] }).orders[0]!.status, 'confirmed');
 
   // The inventory team marks a dispatched order delivered, and can undo that back to dispatched, but no further.
   const pendingDelivery = (await (await move([newer!.id], 'delivered')).json()) as { orders: Order[] };

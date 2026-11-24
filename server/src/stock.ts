@@ -151,9 +151,10 @@ export async function moveStockForOrders(tx: TransactionSql, changes: { id: numb
 /** /v1/admin/stock. */
 export function stockRoutes(sql: Sql) {
   const stock = new Hono<Env>();
-  stock.use(only('owner', 'inventory', 'sales'));
+  // The Accountant sees it, with purchase prices, for purchase bills; only Owners and the inventory team change it.
+  stock.use(only('owner', 'inventory', 'sales', 'accountant'));
   const keepers = only('owner', 'inventory');
-  const isOwner = (role: string) => role === 'owner';
+  const isOwner = (role: string) => role === 'owner' || role === 'accountant';
 
   stock.get('/', async (c) => c.json(await stockItems(sql, isOwner(c.get('staff').role))));
 

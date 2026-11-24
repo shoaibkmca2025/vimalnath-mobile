@@ -20,6 +20,7 @@ import { PAYMENT_METHODS, accounts, billOf, billStatus, creditDaysOf, dayLabel, 
 import { useData } from '@/data/useData';
 import type { Order } from '@/data/types';
 import { api, type ApiError } from '@/lib/api';
+import { handlesMoney, movesOrders, readSession } from '@/data/session';
 import { formatDate, formatINR, formatINRCompact, formatNumber, formatRelativeDay, formatRelativeTime, initials, plural, relativePhrase } from '@/lib/format';
 
 type Draft = { name: string; tags: string; note: string };
@@ -199,9 +200,11 @@ export default function CustomerDetailPage() {
                 title="Payments"
                 description={`Credit orders fall due ${plural(creditDays, 'day')} after delivery; cash orders on delivery.`}
                 action={
-                  <Button size="sm" variant="primary" icon={HandCoinsIcon} disabled={!account?.remaining} onClick={() => setPaying(true)}>
-                    Record Payment
-                  </Button>
+                  handlesMoney(readSession()?.role) && (
+                    <Button size="sm" variant="primary" icon={HandCoinsIcon} disabled={!account?.remaining} onClick={() => setPaying(true)}>
+                      Record Payment
+                    </Button>
+                  )
                 }
               />
               <div className="card__body stack">
@@ -270,6 +273,7 @@ export default function CustomerDetailPage() {
               )}
             </Card>
 
+            {movesOrders(readSession()?.role) && (
             <Card aria-labelledby="notes-title">
               <CardHeader id="notes-title" title="Notes and tags" description="Only people using this admin see these." />
               <div className="card__body stack">
@@ -295,6 +299,7 @@ export default function CustomerDetailPage() {
                 </div>
               </div>
             </Card>
+            )}
           </div>
 
           <div className="stack editor__aside">

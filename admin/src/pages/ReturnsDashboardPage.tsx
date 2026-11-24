@@ -43,7 +43,7 @@ export default function ReturnsDashboardPage() {
 
   // Supplier returns are Owners' (like purchases).
   useEffect(() => {
-    if (role !== 'owner') return;
+    if (role !== 'owner' && role !== 'accountant') return;
     let active = true;
     api<SupplierReturn[]>('/supplier-returns').then(
       (loaded) => active && setSupplierReturns(loaded),
@@ -123,7 +123,7 @@ export default function ReturnsDashboardPage() {
             <Stat label="Products returned" icon={PackageIcon} value={formatNumber(summary.items)} foot="Units, all items" />
             <Stat label="Refunded" icon={HandCoinsIcon} value={formatINRCompact(summary.refunded)} title={formatINR(summary.refunded)} foot={summary.pendingRefund ? `${formatINR(summary.pendingRefund)} still to refund` : 'Nothing left to refund'} to="/returns/refunds" />
             <Stat label="Replacements" icon={ArrowsLeftRightIcon} value={formatNumber(summary.replacements)} foot={`${plural(summary.refunds, 'refund return')} besides`} to="/returns/replacements" />
-            {role === 'owner' && <Stat label="Supplier returns" icon={StorefrontIcon} value={formatNumber(supplierCount)} foot="Sent back to suppliers" to="/supplier-returns" />}
+            {(role === 'owner' || role === 'accountant') && <Stat label="Supplier returns" icon={StorefrontIcon} value={formatNumber(supplierCount)} foot="Sent back to suppliers" to="/supplier-returns" />}
           </div>
 
           <Card aria-labelledby="month-title">

@@ -64,7 +64,8 @@ export function StockDrawer({ row, open, onClose }: { row: StockRow | null; open
   const { send } = useData();
   const toast = useToast();
   const role = readSession()?.role;
-  const owner = role === 'owner';
+  // Purchase prices: the Owner, and the Accountant for purchase bills.
+  const owner = role === 'owner' || role === 'accountant';
   const canEdit = editsStock(role);
   const item = row?.stock;
   const isNew = !item;

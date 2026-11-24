@@ -23,8 +23,9 @@ const ROLES: { value: Role; label: string }[] = [
   { value: 'sales', label: 'Sales: orders and customers' },
   { value: 'catalogue', label: 'Catalogue editor: products, prices and content' },
   { value: 'inventory', label: 'Inventory manager: packs and dispatches confirmed orders' },
+  { value: 'accountant', label: 'Accountant: GST invoices, payments, purchases and suppliers' },
 ];
-const ROLE_NAME: Record<Role, string> = { owner: 'Owner', sales: 'Sales', catalogue: 'Catalogue editor', inventory: 'Inventory manager' };
+const ROLE_NAME: Record<Role, string> = { owner: 'Owner', sales: 'Sales', catalogue: 'Catalogue editor', inventory: 'Inventory manager', accountant: 'Accountant' };
 const EMPTY: Draft = { name: '', email: '', role: 'sales', active: true };
 const draftOf = (item: Member | 'new' | null): Draft => (item && item !== 'new' ? { name: item.name, email: item.email, role: item.role, active: item.active } : EMPTY);
 

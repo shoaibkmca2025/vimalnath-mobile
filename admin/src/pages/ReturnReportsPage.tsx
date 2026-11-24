@@ -8,7 +8,7 @@ import { Segmented, TextField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { localDay } from '@/data/payments';
 import { CONDITIONS, OUTCOMES, PERIOD_LABEL, REFUND_METHODS, REFUND_STATUS, RETURN_KIND, RETURN_REASONS, RETURN_STATUS, SUPPLIER_REASONS, SUPPLIER_RETURN_STATUS, isActive, moneyOf, periodOf, type PeriodChoice } from '@/data/returns';
-import { readSession } from '@/data/session';
+import { handlesMoney, readSession } from '@/data/session';
 import { UNITS, stockRows } from '@/data/stock';
 import type { CreditNote, SupplierReturn } from '@/data/types';
 import { useData } from '@/data/useData';
@@ -21,7 +21,8 @@ import { formatINR, formatNumber, plural } from '@/lib/format';
 export default function ReturnReportsPage() {
   const { returns, error } = useReturns();
   const { db } = useData();
-  const owner = readSession()?.role === 'owner';
+  // Credit notes and supplier returns: the Owner and the Accountant.
+  const owner = handlesMoney(readSession()?.role);
   const [period, setPeriod] = useState<PeriodChoice>('month');
   const [custom, setCustom] = useState({ from: '', to: '' });
   const [notes, setNotes] = useState<CreditNote[] | null>(null);

@@ -233,11 +233,16 @@ export const adminOrders = async (sql: Sql | TransactionSql, where = sql`true`, 
       order by o.placed_at desc, o.id desc`
   ).map((row) => row.order);
 
-/** /v1/admin/orders, for Owners and Sales; the inventory team sees and moves only the orders it packs and dispatches. */
+/**
+ * /v1/admin/orders, for Owners and Sales; the inventory team sees and moves only the orders it packs and dispatches. The
+ * Accountant sees every order and handles its money (bill and payments) but doesn't move it.
+ */
 export function orderAdminRoutes(sql: Sql) {
   const admin = new Hono<Env>();
-  admin.use(only('owner', 'sales', 'inventory'));
+  admin.use(only('owner', 'sales', 'inventory', 'accountant'));
   const office = only('owner', 'sales');
+  // An order's bill and the payments towards it.
+  const money = only('owner', 'accountant');
   const inventory = (role: string) => role === 'inventory';
 
   const orders = (where = sql`true`, money = true) => adminOrders(sql, where, money);
@@ -325,9 +330,12 @@ export function orderAdminRoutes(sql: Sql) {
     const { ids, status } = c.req.valid('json');
     const { name: by, role } = c.get('staff');
     const from = INVENTORY_MOVES[status];
+    if (role === 'accountant') throw new HTTPException(403, { message: 'Accountants see orders but don’t change their status.' });
     if (inventory(role) && !from) throw new HTTPException(403, { message: 'The inventory team can mark orders pending, packed, dispatched, delivered or cancelled.' });
+    // Sales move orders along; cancelling one, or bringing a cancelled one back, is the Owner's.
+    if (role === 'sales' && status === 'cancelled') throw new HTTPException(403, { message: 'Only the Owner can cancel an order.' });
     await sql.begin(async (tx) => {
-      const allowed = inventory(role) ? tx`and status in ${tx(from!)}` : tx``;
+      const allowed = inventory(role) ? tx`and status in ${tx(from!)}` : role === 'sales' ? tx`and status <> 'cancelled'` : tx``;
       // Locked in id order, with the status each had, so stock knows which orders were delivered before.
       const changed = await tx`
         with picked as (select id, status as was from orders where id in ${tx(ids)} and status <> ${status} ${allowed} order by id for update)
@@ -351,7 +359,7 @@ export function orderAdminRoutes(sql: Sql) {
 
   // Payments: money a customer paid towards one or more orders, e.g. one cheque split across their oldest bills. All are
   // saved or none. An order can't be paid past its bill, and only orders in progress or delivered take payments.
-  admin.post('/payments', office, jsonBody(z.object({ payments: z.array(Payment).min(1, 'Enter a payment.').max(200) })), async (c) => {
+  admin.post('/payments', money, jsonBody(z.object({ payments: z.array(Payment).min(1, 'Enter a payment.').max(200) })), async (c) => {
     const { payments } = c.req.valid('json');
     const by = c.get('staff').name;
     const ids = [...new Set(payments.map((payment) => payment.orderId))];
@@ -396,7 +404,7 @@ export function orderAdminRoutes(sql: Sql) {
   });
 
   // A payment entered by mistake. The activity log keeps who removed it.
-  admin.delete('/payments/:paymentId', office, async (c) => {
+  admin.delete('/payments/:paymentId', money, async (c) => {
     const id = parse(OrderIds.element, c.req.param('paymentId'));
     const [settled] = await sql`
       select r.number from order_payments p join refund_transactions t on t.id = p.refund_id join sales_returns r on r.id = t.return_id where p.id = ${id}`;
@@ -411,7 +419,7 @@ export function orderAdminRoutes(sql: Sql) {
     terms: z.enum(['cash', 'credit'], 'Choose cash or credit.'),
     bill: z.number('Enter the bill in rupees.').int('Enter whole rupees.').min(0, 'Enter ₹0 or more.').max(MAX_RUPEES, 'Enter ₹100 crore or less.').nullable(),
   });
-  admin.put('/:id/billing', office, jsonBody(Billing), async (c) => {
+  admin.put('/:id/billing', money, jsonBody(Billing), async (c) => {
     const id = parse(OrderIds.element, c.req.param('id'));
     const { terms, bill } = c.req.valid('json');
     await sql.begin(async (tx) => {
@@ -438,7 +446,7 @@ export function orderAdminRoutes(sql: Sql) {
   });
 
   // The inventory team's note, e.g. "2 hinges short" or the transport and LR number. All staff read it; the customer never does.
-  admin.put('/:id/inventory-note', jsonBody(z.object({ text: z.string().trim().max(2000, 'Use 2,000 characters or fewer.') })), async (c) => {
+  admin.put('/:id/inventory-note', only('owner', 'sales', 'inventory'), jsonBody(z.object({ text: z.string().trim().max(2000, 'Use 2,000 characters or fewer.') })), async (c) => {
     const id = parse(OrderIds.element, c.req.param('id'));
     const { text } = c.req.valid('json');
     const { name, role } = c.get('staff');
