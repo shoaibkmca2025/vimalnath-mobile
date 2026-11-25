@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 
 import { Button } from '@/components/Button';
 import { PasswordField, TextField } from '@/components/Field';
@@ -23,7 +23,8 @@ export default function LoginPage() {
     document.title = 'Sign In · Vimalnath Admin';
   }, []);
 
-  if (readSession()) return <Navigate to={from} replace />;
+  // Someone already signed in on this browser (say, the Owner) still gets the form, so another account can sign in here.
+  const signedIn = readSession();
 
   const emailError = !email.trim() ? 'Enter your email address.' : !EMAIL.test(email.trim()) ? 'Enter an email address like name@company.com.' : null;
   const passwordError = !password ? 'Enter your password.' : null;
@@ -60,6 +61,13 @@ export default function LoginPage() {
         </div>
 
         <form className="stack" onSubmit={submit} noValidate>
+          {signedIn && (
+            <p className="notice" role="status">
+              <span>
+                You’re signed in as {signedIn.name}. Sign in below to switch this browser to another account, or <Link to={from}>go back to the admin</Link>.
+              </span>
+            </p>
+          )}
           <TextField
             ref={emailRef}
             label="Email"
