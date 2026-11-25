@@ -15,22 +15,22 @@ import { jsonBody, parse } from './validate.ts';
 
 const DAY = 86_400_000;
 const MAX_RUPEES = 100_000_000;
-const METHODS = ['cash', 'upi', 'bank', 'cheque'] as const;
+export const METHODS = ['cash', 'upi', 'bank', 'cheque'] as const;
 /** 2 digits for the state, the PAN, an entity number, Z, and a check character. */
-const GSTIN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
-const MEDIA = /^\/v1\/media\/[a-f0-9]{24}\.(webp|pdf)$/;
+export const GSTIN = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+export const MEDIA = /^\/v1\/media\/[a-f0-9]{24}\.(webp|pdf)$/;
 
-const Id = z.coerce.number().int().positive().max(2147483647);
-const Text = (max: number) => z.string().trim().max(max, `Use ${max} characters or fewer.`);
+export const Id = z.coerce.number().int().positive().max(2147483647);
+export const Text = (max: number) => z.string().trim().max(max, `Use ${max} characters or fewer.`);
 const paise = (value: number) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6;
-const Rupees = (label: string) =>
+export const Rupees = (label: string) =>
   z
     .number(`Enter the ${label} in rupees.`)
     .min(0, `Enter ₹0 or more for the ${label}.`)
     .max(MAX_RUPEES, `Enter a ${label} of ₹10 crore or less.`)
     .refine(paise, `Use rupees and paise, e.g. 125.50, for the ${label}.`);
 const isoDay = (date: Date) => date.toISOString().slice(0, 10);
-const Day = (label: string) =>
+export const Day = (label: string) =>
   z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, `Pick the ${label}.`)
@@ -39,7 +39,7 @@ const Day = (label: string) =>
     // Not after tomorrow in UTC: in India it is already tomorrow for the first 5½ hours of the UTC day.
     .refine((day) => day <= isoDay(new Date(Date.now() + DAY)), 'The day can’t be in the future.');
 const key = (productId: string, option: string) => `${productId}\u0000${option}`;
-const rupees = (amount: number) => `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: 2 })}`;
+export const rupees = (amount: number) => `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const UNIT_LABEL: Record<string, string> = { pcs: 'PCS', box: 'BOX', packet: 'PACKET', set: 'SET', feet: 'FEET', rft: 'RFT', meter: 'METER', sqft: 'SQ FT', sqm: 'SQ M', kg: 'KG', sheet: 'SHEET', length: 'LENGTH' };
 
 const Supplier = z.object({

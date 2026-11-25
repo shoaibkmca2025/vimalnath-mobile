@@ -31,7 +31,9 @@ import { TaxInvoiceCard } from '@/components/TaxInvoiceCard';
 import { PageHeader } from '@/components/PageHeader';
 import { Thumb } from '@/components/Thumb';
 import { useToast } from '@/components/useToast';
-import { NEXT_ACTION_LABEL, ORDER_STATUS, STATUS_ORDER, customerOf, customersFromOrders, itemCount, nextStatus, stepLabel, stepsOf, whatsappLink } from '@/data/orders';
+import type { CustomerRecord } from '@/data/customers';
+import { NEXT_ACTION_LABEL, ORDER_STATUS, STATUS_ORDER, customerOf, customersFromOrders, isOpen, itemCount, nextStatus, stepLabel, stepsOf, whatsappLink } from '@/data/orders';
+import { accounts, creditDaysOf } from '@/data/payments';
 import { inOrders } from '@/data/requests';
 import { handlesMoney, movesOrders, readSession } from '@/data/session';
 import { useData } from '@/data/useData';
@@ -182,6 +184,7 @@ export default function OrderDetailPage() {
 
       <OrderBill order={order} />
       <div className="no-print">
+      <CreditWarning order={order} />
 
       <Card aria-label="Progress" className="no-print" style={{ marginBottom: 'var(--space-4)' }}>
         {order.status === 'cancelled' || order.status === 'declined' ? (
@@ -516,5 +519,36 @@ function OrderBill({ order }: { order: Order }) {
     <div className="print-only-block">
       <InvoiceDocument invoice={current ?? estimateOf(order, db.stock)} settings={gst?.settings ?? null} company={db.settings} estimate={current?.status !== 'posted'} />
     </div>
+  );
+}
+
+/** On an open order: the customer already owes more than the credit limit the Owner or the Accountant set for them. */
+function CreditWarning({ order }: { order: Order }) {
+  const { db } = useData();
+  const id = order.customerRecord?.id;
+  const open = isOpen(order.status);
+  const [limit, setLimit] = useState<{ id: number; value: number | null } | null>(null);
+  useEffect(() => {
+    if (!id || !open) return;
+    let active = true;
+    // Staff who can't see customers (the inventory team) just don't get the warning.
+    api<CustomerRecord>(`/customers/${id}`).then(
+      (customer) => active && setLimit({ id, value: customer.creditLimit ?? null }),
+      () => {},
+    );
+    return () => {
+      active = false;
+    };
+  }, [id, open]);
+  if (!open || !id || limit?.id !== id || limit.value === null) return null;
+  const owed = accounts(db.orders.filter((one) => one.customerRecord?.id === id), creditDaysOf(db.settings))[0]?.remaining ?? 0;
+  if (owed <= limit.value) return null;
+  return (
+    <p className="notice notice--danger" role="status" style={{ marginBottom: 'var(--space-4)' }}>
+      <WarningCircleIcon size={16} weight="bold" aria-hidden />
+      <span>
+        {order.customer} owes {formatINR(owed)}, over their credit limit of {formatINR(limit.value)}. <Link to={`/customers/${id}`}>See their payments</Link> before sending more on credit.
+      </span>
+    </p>
   );
 }

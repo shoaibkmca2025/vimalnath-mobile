@@ -18,7 +18,7 @@ import {
   TruckIcon,
   type Icon,
 } from '@phosphor-icons/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { OrderStatusBadge } from '@/components/Badge';
@@ -26,6 +26,7 @@ import { ButtonLink } from '@/components/Button';
 import { Card, CardHeader } from '@/components/Card';
 import { AreaChart } from '@/components/Charts';
 import { Segmented } from '@/components/Field';
+import { GstRange } from '@/components/GstRange';
 import { PageHeader } from '@/components/PageHeader';
 import { Stat } from '@/components/Stat';
 import { DAY, averageStepHours, bucket, change, dailySeries, ordersBetween, salesByCategory, topCustomers, topProducts, totals, type Ranked } from '@/data/analytics';
@@ -33,9 +34,12 @@ import { ORDER_STATUS } from '@/data/orders';
 import { accounts, billOf, creditDaysOf, deliveredDay, isBilled, isOverdue, localDay } from '@/data/payments';
 import { seesStock, stockAlerts, stockValue } from '@/data/stock';
 import { isRequest, requestState } from '@/data/requests';
-import { readSession } from '@/data/session';
+import type { ProfitLoss } from '@/data/accounts';
+import { initialRange, resolveRange } from '@/data/gst';
+import { handlesMoney, readSession } from '@/data/session';
 import { useData } from '@/data/useData';
 import { usePurchasing } from '@/hooks/usePurchasing';
+import { api } from '@/lib/api';
 import type { OrderStatus } from '@/data/types';
 import { formatDate, formatDay, formatHours, formatINR, formatINRCompact, formatNumber, formatPercent, formatRelativeTime, formatWeekday, plural, relativePhrase } from '@/lib/format';
 import { getSystemRange } from '@/generated/app-lib/glass-calculator';
@@ -141,8 +145,8 @@ export default function DashboardPage() {
     };
   }, [db.orders, db.settings, db.stock, now]);
   const showBusiness = session?.role !== 'catalogue';
-  // Purchases are for Owners (docs/ERP-ROADMAP.md): bills received today, and what's still owed to suppliers.
-  const owner = session?.role === 'owner';
+  // Purchases are the Owner's and the Accountant's: bills received today, and what's still owed to suppliers.
+  const owner = handlesMoney(session?.role);
   const { suppliers, purchases } = usePurchasing(owner);
   const buying = useMemo(() => {
     const today = localDay(new Date(now));
@@ -278,7 +282,7 @@ export default function DashboardPage() {
             )}
             {seesStock(session?.role) && (
               <>
-                {session?.role === 'owner' ? (
+                {owner ? (
                   <Stat
                     label="Stock value"
                     icon={ArchiveIcon}
@@ -318,6 +322,8 @@ export default function DashboardPage() {
           </Card>
         </section>
       )}
+
+      {owner && <ProfitSection />}
 
       <div className="toolbar">
         <Segmented<Range>
@@ -710,5 +716,47 @@ function RankedList({
         </li>
       ))}
     </ol>
+  );
+}
+
+/** Profit and loss for a chosen period, from the server's figures (Reports › Profit & Loss), for the Owner and the Accountant. */
+function ProfitSection() {
+  const [range, setRange] = useState(() => initialRange('month'));
+  const period = resolveRange(range);
+  const path = `/reports/profit-loss?from=${period.from}&to=${period.to}`;
+  const [loaded, setLoaded] = useState<{ path: string; data: ProfitLoss | null } | null>(null);
+  useEffect(() => {
+    let active = true;
+    api<ProfitLoss>(path).then(
+      (data) => active && setLoaded({ path, data }),
+      () => active && setLoaded({ path, data: null }),
+    );
+    return () => {
+      active = false;
+    };
+  }, [path]);
+  const data = loaded?.path === path ? loaded.data : undefined;
+  const show = (value: number | undefined) => (value === undefined ? '…' : formatINRCompact(value));
+  const word = (value: number | undefined, kind: string) => `${kind} ${value !== undefined && value < 0 ? 'loss' : 'profit'}`;
+  return (
+    <section className="stack" aria-labelledby="profit-title">
+      <div className="row-wrap" style={{ alignItems: 'flex-end', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
+        <h2 id="profit-title" className="nav-group__title" style={{ margin: 0 }}>
+          Profit & loss, {period.label}
+        </h2>
+        <GstRange value={range} onChange={setRange} />
+      </div>
+      {data === null ? (
+        <p className="muted">Couldn’t load the figures. Open Reports › Profit & Loss to try again.</p>
+      ) : (
+        <div className="stats">
+          <Stat label="Net sales" icon={CurrencyInrIcon} value={show(data?.netSales)} title={data ? formatINR(data.netSales) : undefined} foot={data ? `${plural(data.sales.orders, 'order')} delivered, before GST` : 'Loading…'} to="/reports/sales" />
+          <Stat label="Purchases" icon={TruckIcon} value={show(data?.purchases.value)} title={data ? formatINR(data.purchases.value) : undefined} foot={data ? `${plural(data.purchases.count, 'bill')}, before GST` : undefined} to="/reports/purchases" />
+          <Stat label="Expenses" icon={WalletIcon} value={show(data?.expenseTotal)} title={data ? formatINR(data.expenseTotal) : undefined} foot="Approved" to="/expenses" />
+          <Stat label={word(data?.grossProfit, 'Gross')} icon={CurrencyInrIcon} value={show(data?.grossProfit)} title={data ? formatINR(data.grossProfit) : undefined} foot="Sales less cost of goods" to="/reports" />
+          <Stat label={word(data?.netProfit, 'Net')} icon={CurrencyInrIcon} value={show(data?.netProfit)} title={data ? formatINR(data.netProfit) : undefined} foot="After expenses" to="/reports" />
+        </div>
+      )}
+    </section>
   );
 }

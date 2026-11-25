@@ -219,7 +219,18 @@ export default function CustomerDetailPage() {
                   </dd>
                   <dt>Overdue</dt>
                   <dd className={account?.overdue ? 'num money-late' : 'num'}>{formatINR(account?.overdue ?? 0)}</dd>
+                  <dt>Credit limit</dt>
+                  <dd className="num">{customer.creditLimit === null || customer.creditLimit === undefined ? 'No limit' : formatINR(customer.creditLimit)}</dd>
                 </dl>
+                {customer.creditLimit !== null && customer.creditLimit !== undefined && (account?.remaining ?? 0) > customer.creditLimit && (
+                  <p className="notice notice--danger" role="status">
+                    <WarningCircleIcon size={16} weight="bold" aria-hidden />
+                    <span>
+                      Over the credit limit by {formatINR((account?.remaining ?? 0) - customer.creditLimit)}. Take a payment before sending more on credit.
+                    </span>
+                  </p>
+                )}
+                {handlesMoney(readSession()?.role) && <CreditLimitField customer={customer} onSaved={setCustomer} />}
                 {account && account.overdueBills > 0 && (
                   <p className="notice notice--danger">
                     <WarningCircleIcon size={16} weight="bold" aria-hidden />
@@ -430,5 +441,37 @@ export default function CustomerDetailPage() {
 
       {account && <PaymentDrawer open={paying} onClose={() => setPaying(false)} customer={customer.name} orders={account.unpaid} logTo={`/customers/${customer.id}`} />}
     </>
+  );
+}
+
+/** The Owner or the Accountant sets how much this customer may owe; empty means no limit. */
+function CreditLimitField({ customer, onSaved }: { customer: CustomerRecord; onSaved: (customer: CustomerRecord) => void }) {
+  const toast = useToast();
+  const saved = customer.creditLimit === null || customer.creditLimit === undefined ? '' : String(customer.creditLimit);
+  const [value, setValue] = useState(saved);
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    const text = value.replace(/[,\s₹]/g, '');
+    const creditLimit = text === '' ? null : Number(text);
+    if (creditLimit !== null && (!Number.isInteger(creditLimit) || creditLimit < 0)) return void toast({ tone: 'error', message: 'Enter the limit in whole rupees, or leave it empty for no limit.' });
+    setSaving(true);
+    try {
+      onSaved(await api<CustomerRecord>(`/customers/${customer.id}`, 'PATCH', { creditLimit }));
+      toast({ message: creditLimit === null ? 'Credit limit removed.' : `Credit limit set to ${formatINR(creditLimit)}.` });
+    } catch (problem) {
+      toast({ tone: 'error', message: problem instanceof Error ? problem.message : 'Couldn’t save the limit.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="row-wrap" style={{ alignItems: 'flex-end', gap: 'var(--space-2)' }}>
+      <TextField label="Credit limit" prefix="₹" inputMode="numeric" value={value} onChange={(event) => setValue(event.target.value)} placeholder="No limit" hint="Most they may owe. Empty: no limit." autoComplete="off" />
+      {value !== saved && (
+        <Button size="sm" variant="primary" loading={saving} onClick={save}>
+          Save Limit
+        </Button>
+      )}
+    </div>
   );
 }

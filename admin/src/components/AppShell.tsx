@@ -3,6 +3,9 @@ import {
   ArrowUUpLeftIcon,
   ArrowsLeftRightIcon,
   ChartBarIcon,
+  ChartLineUpIcon,
+  CoinsIcon,
+  HourglassIcon,
   HandCoinsIcon,
   ListChecksIcon,
   SealCheckIcon,
@@ -149,6 +152,18 @@ export function AppShell() {
             items: [
               { to: '/purchases', label: 'Purchases', icon: TruckIcon },
               { to: '/suppliers', label: 'Suppliers', icon: StorefrontIcon },
+              { to: '/expenses', label: 'Expenses', icon: ReceiptIcon },
+            ],
+          },
+          {
+            title: 'Reports',
+            items: [
+              { to: '/reports', label: 'Profit & Loss', icon: ChartLineUpIcon, end: true },
+              { to: '/reports/sales', label: 'Sales Report', icon: ChartBarIcon },
+              { to: '/reports/purchases', label: 'Purchase Report', icon: ChartBarIcon },
+              { to: '/reports/stock', label: 'Stock Report', icon: PackageIcon },
+              { to: '/reports/cash-bank', label: 'Cash & Bank', icon: CoinsIcon },
+              { to: '/reports/outstanding', label: 'Outstanding', icon: HourglassIcon },
             ],
           },
           {
@@ -157,6 +172,7 @@ export function AppShell() {
               { to: '/gst', label: 'GST Dashboard', icon: ScalesIcon, end: true },
               { to: '/gst/sales', label: 'Sales Register', icon: FileTextIcon },
               { to: '/gst/purchases', label: 'Purchase Register', icon: ClipboardTextIcon },
+              { to: '/gst/gstr1', label: 'GSTR-1', icon: FileTextIcon },
               { to: '/gst/hsn', label: 'HSN Summary', icon: HashIcon },
               { to: '/gst/payments', label: 'GST Payments', icon: BankIcon },
               ...(session?.role === 'owner' ? [{ to: '/gst/settings', label: 'GST Settings', icon: SlidersHorizontalIcon }] : []),
@@ -261,9 +277,9 @@ export function AppShell() {
     ? ['/inventory', '/stock', '/settings', '/returns/list', '/returns/'].some((path) => location.pathname.startsWith(path)) && !['/returns/settings', '/returns/reports', '/returns/refunds', '/returns/new'].some((path) => location.pathname.startsWith(path))
     : accountant
       ? // The Accountant's pages; anything else typed in or linked to goes to the dashboard.
-        location.pathname === '/' || (under(['/orders', '/customers', '/payments', '/purchases', '/suppliers', '/supplier-returns', '/gst', '/returns', '/activity', '/settings']) && !under(['/gst/settings', '/returns/settings', '/returns/new']))
+        location.pathname === '/' || (under(['/orders', '/customers', '/payments', '/purchases', '/suppliers', '/supplier-returns', '/expenses', '/reports', '/gst', '/returns', '/activity', '/settings']) && !under(['/gst/settings', '/returns/settings', '/returns/new']))
       : // The books are the Owner's and the Accountant's.
-        money || !under(['/gst', '/purchases', '/suppliers', '/supplier-returns']);
+        money || !under(['/gst', '/purchases', '/suppliers', '/supplier-returns', '/expenses', '/reports']);
 
   const signOut = async () => {
     await endSession();

@@ -24,6 +24,8 @@ export type CustomerRecord = {
   billingAddress: string;
   state: string;
   pincode: string;
+  /** Whole rupees the customer may owe; null or missing: no limit. Set by the Owner or the Accountant. */
+  creditLimit?: number | null;
 };
 
 export type DuplicatePair = { keep: CustomerRecord; merge: CustomerRecord; reason: string };

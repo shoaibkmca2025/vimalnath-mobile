@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { computeInvoice, financialYear, hsnSummary, invoiceHsnTable, purchaseHeads, rangeOf, summary3b, utilise } from '../src/data/gst.ts';
-import type { Purchase, SalesInvoice } from '../src/data/types.ts';
+import { computeInvoice, financialYear, gstr1, hsnSummary, invoiceHsnTable, purchaseHeads, rangeOf, summary3b, utilise } from '../src/data/gst.ts';
+import type { CreditNote, Purchase, SalesInvoice } from '../src/data/types.ts';
 import { rupeesInWords } from '../src/lib/words.ts';
 
 test('set-off: IGST credit first, then CGST and SGST credit, never CGST against SGST', () => {
@@ -88,6 +88,14 @@ test('periods: financial years start in April; ranges for this and last month an
   assert.deepEqual(rangeOf('previous', '2026-01-15'), { from: '2025-12-01', to: '2025-12-31', label: 'December 2025' });
   assert.equal(rangeOf('month', '2028-02-10').to, '2028-02-29');
   assert.deepEqual([rangeOf('previousFy', '2026-11-21').from, rangeOf('previousFy', '2026-11-21').to], ['2025-04-01', '2026-03-31']);
+  // 2026-11-25 is a Wednesday; 2026-03-01 a Sunday, so its week began in February.
+  assert.deepEqual(rangeOf('today', '2026-11-25'), { from: '2026-11-25', to: '2026-11-25', label: 'Today' });
+  assert.deepEqual(rangeOf('yesterday', '2026-03-01'), { from: '2026-02-28', to: '2026-02-28', label: 'Yesterday' });
+  assert.deepEqual(rangeOf('week', '2026-11-25'), { from: '2026-11-23', to: '2026-11-29', label: 'This week' });
+  assert.deepEqual([rangeOf('week', '2026-03-01').from, rangeOf('week', '2026-03-01').to], ['2026-02-23', '2026-03-01']);
+  assert.deepEqual(rangeOf('quarter', '2026-11-25'), { from: '2026-10-01', to: '2026-12-31', label: 'Oct–Dec 2026' });
+  assert.deepEqual(rangeOf('previousQuarter', '2026-02-10'), { from: '2025-10-01', to: '2025-12-31', label: 'Oct–Dec 2025' });
+  assert.deepEqual(rangeOf('quarter', '2027-05-05'), { from: '2027-04-01', to: '2027-06-30', label: 'Apr–Jun 2027' });
 });
 
 test('HSN summary: grouped by HSN and rate, with each group’s documents counted once', () => {
@@ -132,4 +140,44 @@ test('invoice: VSC-26-27-412 to the paisa, with its HSN table', () => {
     ],
   );
   assert.deepEqual([computeInvoice([{ qty: 1, rate: 1000, discountPct: 0, gstRate: 18 }], true).igst, computeInvoice([{ qty: 1, rate: 1000, discountPct: 0, gstRate: 18 }], true).total], [180, 1180]);
+});
+
+test('GSTR-1: B2B per invoice and rate, B2C Large over ₹1 lakh inter-state, B2C Small net of its credit notes, CDNR, CDNUR and documents', () => {
+  const line = (gstRate: number, taxable: number, interstate: boolean) => {
+    const tax = Math.round(taxable * gstRate) / 100;
+    return { gstRate, taxable, igst: interstate ? tax : 0, cgst: interstate ? 0 : tax / 2, sgst: interstate ? 0 : tax / 2 };
+  };
+  const invoice = (id: string, number: string, extra: Partial<SalesInvoice>, items: ReturnType<typeof line>[]) =>
+    ({ id, number, invoiceDate: '2026-11-10', status: 'posted', customerName: `Buyer ${id}`, interstate: false, posCode: '27', placeOfSupply: 'Maharashtra', total: items.reduce((sum, item) => sum + item.taxable + item.igst + item.cgst + item.sgst, 0), items, ...extra }) as unknown as SalesInvoice;
+  const invoices = [
+    invoice('a', 'VSC-26-27-9', { customerGstin: '27AAPFU0939F1ZV' }, [line(18, 1000, false), line(5, 200, false)]),
+    invoice('b', 'VSC-26-27-10', { interstate: true, posCode: '29', placeOfSupply: 'Karnataka' }, [line(18, 150000, true)]),
+    invoice('c', 'VSC-26-27-11', {}, [line(18, 1000, false)]),
+    invoice('d', 'VSC-26-27-12', { interstate: true, posCode: '29', placeOfSupply: 'Karnataka' }, [line(18, 4000, true)]),
+    invoice('e', 'VSC-26-27-13', { status: 'cancelled' }, [line(18, 500, false)]),
+    invoice('f', 'VSC-26-27-14', { invoiceDate: '2026-12-01' }, [line(18, 999, false)]),
+  ];
+  const note = (number: string, invoiceId: string, extra: Partial<CreditNote>, items: ReturnType<typeof line>[]) =>
+    ({ number, invoiceId, invoiceNumber: invoices.find((one) => one.id === invoiceId)!.number, noteDate: '2026-11-20', status: 'posted', customerName: 'x', posCode: '27', placeOfSupply: 'Maharashtra', interstate: false, total: 1, items, ...extra }) as unknown as CreditNote;
+  const notes = [
+    note('CN-26-27-1', 'c', {}, [line(18, 200, false)]),
+    note('CN-26-27-2', 'a', { customerGstin: '27AAPFU0939F1ZV' }, [line(5, 200, false)]),
+    note('CN-26-27-3', 'b', { interstate: true, posCode: '29', placeOfSupply: 'Karnataka' }, [line(18, 10000, true)]),
+  ];
+  const report = gstr1(invoices, notes, rangeOf('month', '2026-11-25'));
+
+  assert.deepEqual(report.b2b.map((row) => [row.number, row.rate, row.taxable, row.cgst]), [['VSC-26-27-9', 5, 200, 5], ['VSC-26-27-9', 18, 1000, 90]], 'one row per rate');
+  assert.deepEqual(report.b2cl.map((row) => [row.number, row.pos, row.taxable, row.igst]), [['VSC-26-27-10', '29-Karnataka', 150000, 27000]]);
+  assert.deepEqual(
+    report.b2cs.map((row) => [row.pos, row.type, row.rate, row.taxable]),
+    [['27-Maharashtra', 'INTRA', 18, 800], ['29-Karnataka', 'INTER', 18, 4000]],
+    'small inter-state stays B2C Small; its credit note comes off',
+  );
+  assert.deepEqual(report.cdnr.map((row) => [row.number, row.invoice, row.taxable]), [['CN-26-27-2', 'VSC-26-27-9', 200]]);
+  assert.deepEqual(report.cdnur.map((row) => [row.number, row.invoice]), [['CN-26-27-3', 'VSC-26-27-10']]);
+  assert.deepEqual(report.docs, [
+    { nature: 'Invoices for outward supply', from: 'VSC-26-27-9', to: 'VSC-26-27-13', total: 5, cancelled: 1 },
+    { nature: 'Credit Note', from: 'CN-26-27-1', to: 'CN-26-27-3', total: 3, cancelled: 0 },
+  ]);
+  assert.deepEqual(report.problems, []);
 });

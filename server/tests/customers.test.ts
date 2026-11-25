@@ -173,6 +173,15 @@ test('access: Owners and Sales work with customers; the Accountant sees them; Ca
   assert.ok(anyone, 'the Accountant sees customers and their balances');
   assert.equal((await send(`/v1/admin/customers/${anyone!.id}`, 'PATCH', { note: 'x' }, accountant)).status, 403);
   assert.equal((await send(`/v1/admin/customers/${anyone!.id}/merge`, 'POST', { from: anyone!.id }, accountant)).status, 403);
+
+  // The credit limit: the Owner's and the Accountant's, never Sales'.
+  const limit = async (who: Record<string, string>, creditLimit: number | null) => send(`/v1/admin/customers/${anyone!.id}`, 'PATCH', { creditLimit }, who);
+  assert.equal((await limit(await staff('sales'), 50000)).status, 403);
+  assert.equal((await limit(accountant, 2.5)).status, 400, 'whole rupees');
+  const set = await limit(accountant, 50000);
+  assert.equal(set.status, 200);
+  assert.equal(((await set.json()) as Customer & { creditLimit: number | null }).creditLimit, 50000);
+  assert.equal(((await (await limit(await staff('owner'), null)).json()) as Customer & { creditLimit: number | null }).creditLimit, null, 'cleared: no limit');
 });
 
 // A database that had app users before Module 7: the migration gives each one its own customer.

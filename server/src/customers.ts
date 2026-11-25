@@ -27,7 +27,7 @@ export function customerRoutes(sql: Sql) {
 
   const customers = (where = sql`true`) => sql`
     select c.id, c.name, c.tags, c.note, c.created_at as "createdAt",
-      c.gstin, c.legal_name as "legalName", c.billing_address as "billingAddress", c.state, c.pincode,
+      c.gstin, c.legal_name as "legalName", c.billing_address as "billingAddress", c.state, c.pincode, c.credit_limit as "creditLimit",
       -- Contact details come from the customer's apps: each one from the newest profile that gives it, so a second
       -- phone that left the business name blank doesn't hide the one the first phone sent.
       coalesce((select d.phone from app_devices d where d.customer_id = c.id and d.phone <> '' order by d.profile_updated_at desc nulls last limit 1), '') as phone,
@@ -78,13 +78,18 @@ export function customerRoutes(sql: Sql) {
       billingAddress: z.string().trim().max(500, 'Use 500 characters or fewer.').optional(),
       state: z.string().trim().max(60).optional(),
       pincode: z.string().trim().regex(/^(\d{6})?$/, 'Enter the 6-digit PIN code.').optional(),
+      creditLimit: z.number('Enter the limit in whole rupees.').int('Enter the limit in whole rupees.').min(0, 'Enter ₹0 or more.').max(1_000_000_000, 'Enter ₹100 crore or less.').nullable().optional(),
     })
     .refine((change) => Object.keys(change).length > 0, 'Nothing to change.');
 
-  admin.patch('/:id', only('owner', 'sales'), jsonBody(Change), async (c) => {
+  admin.patch('/:id', jsonBody(Change), async (c) => {
     const id = parse(CustomerId, c.req.param('id'));
-    const { legalName, billingAddress, ...rest } = c.req.valid('json');
-    const change = { ...rest, ...(legalName === undefined ? {} : { legal_name: legalName }), ...(billingAddress === undefined ? {} : { billing_address: billingAddress }) };
+    const { legalName, billingAddress, creditLimit, ...rest } = c.req.valid('json');
+    const role = c.get('staff').role;
+    // The credit limit is a money decision (the Owner's and the Accountant's); the rest of the profile is for Owners and Sales.
+    if (creditLimit !== undefined && role !== 'owner' && role !== 'accountant') throw new HTTPException(403, { message: 'Only the Owner or the Accountant sets a credit limit.' });
+    if (role === 'accountant' && (Object.keys(rest).length || legalName !== undefined || billingAddress !== undefined)) throw new HTTPException(403, { message: 'The Accountant sets the credit limit; the rest of the profile is for the Owner and Sales.' });
+    const change = { ...rest, ...(legalName === undefined ? {} : { legal_name: legalName }), ...(billingAddress === undefined ? {} : { billing_address: billingAddress }), ...(creditLimit === undefined ? {} : { credit_limit: creditLimit }) };
     const [row] = await sql`update customers set ${sql(change)} where id = ${id} and merged_into is null returning id`;
     if (!row) throw new HTTPException(404, { message: 'That customer does not exist.' });
     return c.json(await one(id));

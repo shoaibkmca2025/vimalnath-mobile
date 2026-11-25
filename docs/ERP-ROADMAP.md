@@ -46,14 +46,15 @@ The existing stack stays. New modules follow the patterns already in place:
 | Sales | Customers, Payments | ✅ |
 | GST | GST Dashboard (with GSTR-3B working), Sales Register, tax invoices, Purchase Register (input tax credit), HSN Summary, GST Payments, GST Settings | ✅ |
 | GST | Credit notes for returns (Sales Register tab, GSTR-3B and HSN net of them) | ✅ |
-| GST | GSTR-1 sections and export, GSTR-2B matching, debit notes | ⬜ Phase 3 |
+| GST | GSTR-1 working (B2B, B2C Large and Small, CDNR, CDNUR, documents issued; CSV per section in the offline tool's columns) | ✅ |
+| GST | GSTR-2B matching, debit notes | ⬜ Phase 3 |
 | Returns & Replacements | Returns Dashboard, Customer Returns, Product Replacements, Refund Management, Return Requests, Supplier Returns, Return Reports, Return Settings | ✅ |
 | Sales | Quotations | ⬜ Phase 3 |
 | Sales | Feedback from the app | ✅ |
 | Purchases | Purchases, Suppliers | ✅ |
-| Purchases | Expenses | ⬜ Phase 4 |
+| Purchases | Expenses (Accountant enters, Owner approves; bill upload; GST and seller GSTIN; cancelled, never deleted once approved) | ✅ |
 | Catalogue | Products, Stock, Prices, Categories, Price Lists | ✅ |
-| Reports | Sales, purchases, stock, GST, profit and loss | ⬜ Phase 4 |
+| Reports | Profit & Loss (Tally's trading and P&L layout), Sales (day, week, month, year, customer, product, category, salesperson), Purchases, Stock (valuation, low and out, damaged and returned, movement), Cash & Bank books with the daily collection, Outstanding (customers and suppliers); CSV export and print | ✅ |
 | App Content | Banners, videos, More Apps, media | ✅ |
 | System | Activity, Staff, Notifications, Settings | ✅ (permissions ⬜) |
 
@@ -68,7 +69,7 @@ New tables, by phase:
 | 2 (✅) | `suppliers`, `purchases`, `purchase_items`, `supplier_payments`; `stock_moves` gains purchase moves |
 | 3 (part ✅) | `gst_settings`, `sales_invoices`, `sales_invoice_items`, `invoice_counters`, `gst_payments`, purchases' `itc_*` columns, customers' GST columns; next: `credit_notes`,, `invoice_items`, `quotations`, `quotation_items`, `credit_notes`, `returns`, `return_items`, `invoice_numbers` (per type, per financial year); `customers` gains GSTIN, addresses, state, credit limit, opening balance |
 | Returns (✅) | `return_settings`, `sales_returns`, `sales_return_items`, `replacement_items`, `return_events` (status history and audit log), `refund_transactions`, `sales_credit_notes`, `supplier_returns`, `supplier_return_items`, `supplier_return_events`; `stock_items` gains `held`, `damaged`, `defective`; `stock_moves` gains `bucket`, `return_id`, `supplier_return_id`; `sales_invoices` gains `return_id`; `order_payments` gains `refund_id` and the methods `return` and `store_credit` (migration 025) |
-| 4 | `expenses`, `expense_categories`, `documents`; reports read existing tables |
+| 4 (✅) | `expenses`, `book_openings` (migration 027); reports read the existing tables (`server/src/reports.ts`) |
 | 5 | `permissions` (per role), `notifications` for staff, barcode labels |
 
 Key relations: a purchase belongs to a supplier and has items pointing at a stock item (product + option); a stock move points at the order or purchase that caused it; a supplier payment points at a supplier and, usually, one purchase.
@@ -105,9 +106,9 @@ Tests: `server/tests/returns.test.ts` (the real-world cases: one item of several
 | --- | --- | --- |
 | 1. Core | Sign-in, dashboard, products and categories, stock and stock ledger, customers, customer payments | ✅ |
 | 2. Purchases | Suppliers (profile, ledger, outstanding), purchase bills with items, freight, discount and GST, receive goods → stock in, supplier payments, bill attachment, dashboard purchase cards | ✅ |
-| 3. Billing and GST | Done: GST settings, customer GST details, tax invoices from orders (CGST/SGST or IGST by place of supply, numbered per financial year, print, cancel), purchase tax split and input tax credit review, registers, HSN summary, GSTR-3B working with the legal set-off order, GST payments. Credit notes with returns are done (Phase 4 below). Next: GSTR-1 sections and JSON/Excel export, GSTR-2B upload and matching, debit notes, quotations, WhatsApp sharing, credit limits | 🔨 |
+| 3. Billing and GST | Done: GST settings, customer GST details, tax invoices from orders (CGST/SGST or IGST by place of supply, numbered per financial year, print, cancel), purchase tax split and input tax credit review, registers, HSN summary, GSTR-3B working with the legal set-off order, GST payments. Credit notes with returns are done (Phase 4 below). Also done: GSTR-1 working with CSV per section, customer credit limits (migration 028; warned on the customer and their open orders). Next: GSTR-2B upload and matching, debit notes. Quotations are Order Requests (sent to the customer's app, confirmed into an order, printed as an estimate) | 🔨 |
 | Returns & Replacements | Customer returns and exchanges with approval, receipt, quality check and restocking rules, refunds and store credit, GST credit notes, supplier returns, dashboard, reports, settings and permissions | ✅ |
-| 4. Accounts and reports | Expenses, cash and bank book, sales, purchase, stock and GST reports, profit and loss, Excel and PDF export | ⬜ |
+| 4. Accounts and reports | Expenses, cash and bank book, sales, purchase, stock and GST reports, profit and loss, CSV (opens in Excel) and print (save as PDF); date filters for today, yesterday, this week, month, quarter and financial year | ✅ |
 | 5. Advanced | Barcodes and QR labels, barcode billing, Accountant and Manager roles with permissions, staff notifications, stock ageing, customer-specific prices | ⬜ |
 
 ## 7. Decisions needed

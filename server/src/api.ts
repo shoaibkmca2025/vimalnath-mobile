@@ -17,6 +17,8 @@ import { purchaseRoutes, supplierRoutes } from './purchases.ts';
 import { returnRoutes } from './returns.ts';
 import { adminRoutes } from './staff.ts';
 import { stockRoutes } from './stock.ts';
+import { expenseRoutes } from './expenses.ts';
+import { reportRoutes } from './reports.ts';
 import { supplierReturnRoutes } from './supplier-returns.ts';
 import { versionRoutes } from './versions.ts';
 
@@ -48,6 +50,8 @@ export function buildApi(sql: Sql, config: ReturnType<typeof loadConfig>) {
   admin.route('/gst', gstRoutes(sql));
   admin.route('/returns', returnRoutes(sql));
   admin.route('/supplier-returns', supplierReturnRoutes(sql));
+  admin.route('/expenses', expenseRoutes(sql));
+  admin.route('/reports', reportRoutes(sql));
   app.route('/v1/admin', admin);
   app.route('/v1/app', appRoutes(sql, { trustProxy: config.TRUST_PROXY }));
   app.route('/v1/media', mediaRoutes(sql));

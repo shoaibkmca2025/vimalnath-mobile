@@ -33,7 +33,7 @@ export function financialYear(day: string) {
   return { label: `${String(start).slice(2)}-${String(start + 1).slice(2)}`, from: `${start}-04-01`, to: `${start + 1}-03-31`, start };
 }
 
-export type RangeChoice = 'month' | 'previous' | 'fy' | 'previousFy' | 'custom';
+export type RangeChoice = 'today' | 'yesterday' | 'week' | 'month' | 'previous' | 'quarter' | 'previousQuarter' | 'fy' | 'previousFy' | 'custom';
 export type Range = { from: string; to: string; label: string };
 
 const monthName = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' });
@@ -48,6 +48,20 @@ export const periodLabel = (period: string) => {
 /** The days a filter covers, inclusive. */
 export function rangeOf(choice: RangeChoice, today: string, custom?: { from: string; to: string }): Range {
   const [year, month] = today.split('-').map(Number) as [number, number];
+  const shift = (day: string, days: number) => new Date(Date.parse(day) + days * 86_400_000).toISOString().slice(0, 10);
+  if (choice === 'today') return { from: today, to: today, label: 'Today' };
+  if (choice === 'yesterday') return { from: shift(today, -1), to: shift(today, -1), label: 'Yesterday' };
+  if (choice === 'week') {
+    // Monday to Sunday.
+    const monday = shift(today, -((new Date(Date.parse(today)).getUTCDay() + 6) % 7));
+    return { from: monday, to: shift(monday, 6), label: 'This week' };
+  }
+  if (choice === 'quarter' || choice === 'previousQuarter') {
+    // Quarters of the financial year: Apr–Jun, Jul–Sep, Oct–Dec, Jan–Mar.
+    const first = Math.floor((month - 1) / 3) * 3 + 1 - (choice === 'previousQuarter' ? 3 : 0);
+    const [y, m] = first < 1 ? [year - 1, first + 12] : [year, first];
+    return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m + 2)}-${lastDay(y, m + 2)}`, label: `${MONTHS[m - 1]}–${MONTHS[m + 1]} ${y}` };
+  }
   if (choice === 'month') return { from: `${year}-${pad(month)}-01`, to: `${year}-${pad(month)}-${lastDay(year, month)}`, label: periodLabel(`${year}-${pad(month)}`) };
   if (choice === 'previous') {
     const [y, m] = month === 1 ? [year - 1, 12] : [year, month - 1];
@@ -351,4 +365,99 @@ export function monthlyTax(invoices: SalesInvoice[], bills: Purchase[], today: s
       .reduce((total, bill) => total + bill.tax, 0) - supplierCreditsIn(credits.supplierReturns ?? [], range).reduce((total, one) => total + (one.creditNoteTax ?? 0), 0);
     return { period, date, output: r2(Math.max(0, output)), itc: r2(Math.max(0, itc)) };
   });
+}
+
+// ---------- GSTR-1 working (prepared here, filed by the accountant on the GST portal) ----------
+
+/** Above this, an inter-state invoice to an unregistered buyer is B2C (Large), invoice by invoice (₹1 lakh since Aug 2024). */
+export const B2CL_LIMIT = 100_000;
+
+type RateRow = { rate: number; taxable: number; igst: number; cgst: number; sgst: number };
+/** A document's lines folded by GST rate: GSTR-1 reports each invoice or note once per rate. */
+const byRate = (items: { gstRate: number; taxable: number; igst: number; cgst: number; sgst: number }[]): RateRow[] => {
+  const rows = new Map<number, RateRow>();
+  for (const item of items) {
+    const row = rows.get(item.gstRate) ?? { rate: item.gstRate, taxable: 0, igst: 0, cgst: 0, sgst: 0 };
+    row.taxable = r2(row.taxable + item.taxable);
+    row.igst = r2(row.igst + item.igst);
+    row.cgst = r2(row.cgst + item.cgst);
+    row.sgst = r2(row.sgst + item.sgst);
+    rows.set(item.gstRate, row);
+  }
+  return [...rows.values()].sort((a, b) => a.rate - b.rate);
+};
+/** "27-Maharashtra", as the GST offline tool writes the place of supply. */
+export const posLabel = (code: string | undefined, state: string | undefined) => (code ? `${code}-${state ?? ''}` : '');
+
+export type Gstr1Doc = { gstin: string; name: string; number: string; date: string; value: number; pos: string } & RateRow;
+export type Gstr1 = {
+  b2b: Gstr1Doc[];
+  b2cl: Gstr1Doc[];
+  b2cs: ({ pos: string; type: 'INTRA' | 'INTER' } & RateRow)[];
+  cdnr: (Gstr1Doc & { invoice: string })[];
+  cdnur: (Gstr1Doc & { invoice: string })[];
+  docs: { nature: string; from: string; to: string; total: number; cancelled: number }[];
+  /** Posted invoices with no place of supply or rate: they can't be reported until fixed. */
+  problems: string[];
+};
+
+const natural = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true });
+
+/**
+ * The GSTR-1 sections for a period, from posted tax invoices and credit notes dated in it: B2B (buyer has a GSTIN),
+ * B2C Large (unregistered, inter-state, over ₹1 lakh), B2C Small (the rest, by place of supply and rate, net of their
+ * credit notes), credit notes to registered (CDNR) and B2C Large (CDNUR) buyers, and the documents issued.
+ */
+export function gstr1(invoices: SalesInvoice[], notes: CreditNote[], range: Range): Gstr1 {
+  const inPeriod = invoices.filter((invoice) => invoice.status !== 'draft' && invoice.number && inRange(invoice.invoiceDate, range));
+  const posted = inPeriod.filter((invoice) => invoice.status === 'posted');
+  const isLarge = (invoice: Pick<SalesInvoice, 'customerGstin' | 'interstate' | 'total'>) => !invoice.customerGstin && invoice.interstate && invoice.total > B2CL_LIMIT;
+  const result: Gstr1 = { b2b: [], b2cl: [], b2cs: [], cdnr: [], cdnur: [], docs: [], problems: [] };
+  const small = new Map<string, Gstr1['b2cs'][number]>();
+  const addSmall = (pos: string, interstate: boolean, row: RateRow, sign: 1 | -1) => {
+    const key = `${pos}|${row.rate}`;
+    const into = small.get(key) ?? { pos, type: interstate ? 'INTER' : 'INTRA', rate: row.rate, taxable: 0, igst: 0, cgst: 0, sgst: 0 };
+    into.taxable = r2(into.taxable + sign * row.taxable);
+    into.igst = r2(into.igst + sign * row.igst);
+    into.cgst = r2(into.cgst + sign * row.cgst);
+    into.sgst = r2(into.sgst + sign * row.sgst);
+    small.set(key, into);
+  };
+
+  for (const invoice of posted) {
+    if (!invoice.posCode) {
+      result.problems.push(`${invoice.number} has no place of supply.`);
+      continue;
+    }
+    const pos = posLabel(invoice.posCode, invoice.placeOfSupply);
+    for (const row of byRate(invoice.items)) {
+      const doc = { gstin: invoice.customerGstin ?? '', name: invoice.customerName, number: invoice.number!, date: invoice.invoiceDate, value: invoice.total, pos, ...row };
+      if (invoice.customerGstin) result.b2b.push(doc);
+      else if (isLarge(invoice)) result.b2cl.push(doc);
+      else addSmall(pos, invoice.interstate, row, 1);
+    }
+  }
+
+  const originals = new Map(invoices.map((invoice) => [invoice.id, invoice]));
+  for (const note of notes.filter((one) => one.status === 'posted' && inRange(one.noteDate, range))) {
+    const pos = posLabel(note.posCode, note.placeOfSupply);
+    const original = originals.get(note.invoiceId);
+    for (const row of byRate(note.items)) {
+      const doc = { gstin: note.customerGstin ?? '', name: note.customerName, number: note.number, date: note.noteDate, value: note.total, pos, invoice: note.invoiceNumber, ...row };
+      if (note.customerGstin) result.cdnr.push(doc);
+      else if (original && isLarge(original)) result.cdnur.push(doc);
+      else addSmall(pos, note.interstate, row, -1);
+    }
+  }
+  result.b2cs = [...small.values()].filter((row) => row.taxable !== 0).sort((a, b) => a.pos.localeCompare(b.pos) || a.rate - b.rate);
+
+  const series = (nature: string, numbers: string[], cancelled: number) => {
+    if (!numbers.length) return;
+    const sorted = [...numbers].sort(natural);
+    result.docs.push({ nature, from: sorted[0]!, to: sorted.at(-1)!, total: numbers.length, cancelled });
+  };
+  series('Invoices for outward supply', inPeriod.map((invoice) => invoice.number!), inPeriod.filter((invoice) => invoice.status === 'cancelled').length);
+  const notesIn = notes.filter((note) => inRange(note.noteDate, range));
+  series('Credit Note', notesIn.map((note) => note.number), notesIn.filter((note) => note.status === 'cancelled').length);
+  return result;
 }
