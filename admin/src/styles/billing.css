@@ -1,0 +1,557 @@
+/* ---------- Counter billing ---------- */
+
+.form-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 720px) {
+  .form-grid--3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.notice--info {
+  background: var(--info-soft);
+}
+
+.is-struck {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
+
+.table tr.is-muted > * {
+  color: var(--text-3);
+}
+
+/* The bill editor: a line's own inputs stay compact; a second row under the name for description and SKU. */
+.bill-editor td {
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+
+.bill-editor .input,
+.bill-editor .select {
+  padding: 0 var(--space-2);
+}
+
+.bill-editor .input--sub {
+  min-height: 30px;
+  font-size: var(--text-sm);
+}
+
+.bill-editor__charge td {
+  background: var(--surface-2);
+}
+
+.bill-editor__approval {
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.select--inline {
+  width: auto;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+
+/* Bill view: the stock and history lists sit under the document. */
+.tally__signature {
+  align-self: flex-end;
+  max-width: 160px;
+  object-fit: contain;
+}
+
+/* ---------- Bill templates: Modern and Compact ---------- */
+
+.bill {
+  --bill-accent: #1d4ed8;
+  --bill-rule: #d7dce3;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 28px 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  color: #111827;
+  font-size: 13px;
+  line-height: 1.45;
+  min-width: 720px;
+  position: relative;
+}
+
+.bill-paper--A5.bill {
+  max-width: 720px;
+  font-size: 12px;
+}
+
+.bill--void::after {
+  content: 'CANCELLED';
+  position: absolute;
+  inset: 40% 0 auto;
+  text-align: center;
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: rgb(190 18 60 / 0.14);
+  transform: rotate(-12deg);
+  pointer-events: none;
+}
+
+.bill__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 3px solid var(--bill-accent);
+}
+
+.bill__seller {
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+
+.bill__logo {
+  flex: none;
+  object-fit: contain;
+}
+
+.bill__shop {
+  display: block;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--bill-accent);
+}
+
+.bill__muted {
+  color: #4b5563;
+  font-size: 0.92em;
+}
+
+.bill__pre {
+  white-space: pre-line;
+}
+
+.bill__doc {
+  text-align: right;
+  flex: none;
+}
+
+.bill__title {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--bill-accent);
+}
+
+.bill__facts {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: end;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.bill__facts dt {
+  color: #4b5563;
+}
+
+.bill__facts dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.bill__parties {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+  padding: 14px 0;
+}
+
+.bill__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--bill-accent);
+}
+
+.bill__lines {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.bill__lines th {
+  padding: 8px;
+  background: color-mix(in srgb, var(--bill-accent) 10%, #fff);
+  color: #111827;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 1px solid var(--bill-accent);
+}
+
+.bill__lines td {
+  padding: 8px;
+  border-bottom: 1px solid var(--bill-rule);
+  vertical-align: top;
+}
+
+.bill__charge td {
+  background: #f8fafc;
+}
+
+.bill__n {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bill__foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 24px;
+  padding-top: 16px;
+}
+
+.bill__notes p {
+  margin: 0 0 10px;
+}
+
+.bill__hsn {
+  width: 100%;
+  margin-bottom: 10px;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.bill__hsn th,
+.bill__hsn td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--bill-rule);
+  text-align: left;
+}
+
+.bill__totals dl {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+}
+
+.bill__totals dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bill__totals .bill__grand {
+  padding: 8px 0;
+  margin-top: 4px;
+  border-top: 2px solid var(--bill-accent);
+  border-bottom: 2px solid var(--bill-accent);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--bill-accent);
+}
+
+.bill__strong {
+  font-weight: 700;
+}
+
+.bill__end {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.bill__sign {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 200px;
+}
+
+.bill__sign img {
+  max-width: 180px;
+  object-fit: contain;
+}
+
+.bill__sign-space {
+  height: 40px;
+}
+
+.bill__footer {
+  margin: 16px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--bill-rule);
+  text-align: center;
+  color: #4b5563;
+}
+
+.bill--compact {
+  padding: 18px 20px;
+  font-size: 12px;
+}
+
+.bill--compact .bill__lines th,
+.bill--compact .bill__lines td {
+  padding: 4px 6px;
+}
+
+.bill--compact .bill__head {
+  padding-bottom: 10px;
+}
+
+.bill--compact .bill__parties {
+  padding: 8px 0;
+}
+
+.bill--compact .bill__shop {
+  font-size: 16px;
+}
+
+/* ---------- Thermal receipt (80 mm) ---------- */
+
+.receipt {
+  width: 302px;
+  margin: 0 auto;
+  padding: 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+  color: #000;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.receipt__head {
+  text-align: center;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #000;
+}
+
+.receipt__head strong {
+  display: block;
+  font-size: 14px;
+}
+
+.receipt__title {
+  margin-top: 6px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.receipt__pairs {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 8px;
+  margin: 8px 0;
+}
+
+.receipt__pairs dd {
+  margin: 0;
+  text-align: right;
+}
+
+.receipt__lines {
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  border-top: 1px dashed #000;
+  border-bottom: 1px dashed #000;
+}
+
+.receipt__lines li + li {
+  margin-top: 6px;
+}
+
+.receipt__item {
+  font-weight: 700;
+}
+
+.receipt__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.receipt__muted {
+  color: #444;
+}
+
+.receipt__totals .receipt__grand {
+  padding: 4px 0;
+  border-top: 1px dashed #000;
+  border-bottom: 1px dashed #000;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.receipt__note {
+  margin: 8px 0 0;
+  text-align: center;
+  white-space: pre-line;
+}
+
+/* ---------- Invoice Settings ---------- */
+
+.settings-split {
+  display: grid;
+  grid-template-columns: minmax(0, 560px) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.settings-split__preview {
+  position: sticky;
+  top: calc(var(--topbar-height) + var(--space-5));
+  max-height: calc(100vh - var(--topbar-height) - var(--space-10));
+  overflow: auto;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}
+
+.settings-split__preview .tally,
+.settings-split__preview .bill {
+  min-width: 720px;
+  transform-origin: top left;
+}
+
+@media (max-width: 1280px) {
+  .settings-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-split__preview {
+    position: static;
+    max-height: none;
+  }
+}
+
+.swatch {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid var(--surface);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 1px var(--border-strong);
+  cursor: pointer;
+}
+
+.swatch[aria-checked='true'] {
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+.swatch--custom {
+  background: conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #a855f7, #ef4444);
+}
+
+.swatch--custom::-webkit-color-swatch-wrapper {
+  padding: 0;
+  opacity: 0;
+}
+
+/* ---------- Discount approvals ---------- */
+
+.approval__body {
+  display: flex;
+  gap: var(--space-4);
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.approval__main {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.approval__facts {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  grid-auto-flow: column;
+  grid-template-rows: auto auto;
+  justify-content: start;
+  gap: 0 var(--space-6);
+  margin: 0;
+}
+
+.approval__facts dt {
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+
+.approval__facts dd {
+  margin: 0;
+}
+
+.approval__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: none;
+}
+
+@media (max-width: 720px) {
+  .approval__body {
+    flex-direction: column;
+  }
+
+  .approval__actions {
+    flex-direction: row;
+  }
+
+  .approval__facts {
+    grid-auto-flow: row;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: none;
+    gap: 2px var(--space-3);
+  }
+}
+
+/* ---------- Printing a bill ---------- */
+
+@media print {
+  .main:has(.bill) .page-header,
+  .main:has(.receipt) .page-header {
+    display: none !important;
+  }
+
+  .bill,
+  .receipt {
+    min-width: 0;
+    max-width: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .receipt {
+    width: 100%;
+  }
+
+  .bill__lines tr,
+  .bill__foot,
+  .bill__end {
+    break-inside: avoid;
+  }
+
+  .bill {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* An A5 bill in the classic layout: the same Tally box, a little smaller. */
+  .bill-paper--A5 .tally {
+    font-size: 8.5px;
+  }
+}
