@@ -94,7 +94,7 @@ export const BUCKETS = ['available', 'held', 'damaged', 'defective'] as const;
 export type Bucket = (typeof BUCKETS)[number];
 const COLUMN: Record<Bucket, string> = { available: 'quantity', held: 'held', damaged: 'damaged', defective: 'defective' };
 
-type MoveRecord = { kind: string; reason?: string; note?: string; orderId?: number; purchaseId?: number; returnId?: number; supplierReturnId?: number; bucket?: Bucket; by: string };
+type MoveRecord = { kind: string; reason?: string; note?: string; orderId?: number; purchaseId?: number; returnId?: number; supplierReturnId?: number; invoiceId?: number; bucket?: Bucket; by: string };
 
 /**
  * Changes one item's quantity, in one of its stocks, and records why. The update locks the row, so two changes at once
@@ -108,7 +108,7 @@ export async function move(tx: TransactionSql, item: { productId: string; option
     update stock_items set ${column} = ${column} + ${change}, updated_at = now()
     where product_id = ${item.productId} and option_label = ${item.option} returning ${column}::float8 as balance`;
   if (!row) return null;
-  await tx`insert into stock_moves ${tx({ product_id: item.productId, option_label: item.option, change, balance: row.balance, kind: record.kind, reason: record.reason ?? '', note: record.note ?? '', order_id: record.orderId ?? null, purchase_id: record.purchaseId ?? null, return_id: record.returnId ?? null, supplier_return_id: record.supplierReturnId ?? null, bucket, by: record.by })}`;
+  await tx`insert into stock_moves ${tx({ product_id: item.productId, option_label: item.option, change, balance: row.balance, kind: record.kind, reason: record.reason ?? '', note: record.note ?? '', order_id: record.orderId ?? null, purchase_id: record.purchaseId ?? null, return_id: record.returnId ?? null, supplier_return_id: record.supplierReturnId ?? null, invoice_id: record.invoiceId ?? null, bucket, by: record.by })}`;
   return row.balance as number;
 }
 
@@ -251,9 +251,11 @@ export function stockRoutes(sql: Sql) {
       await sql`
         select m.id::text as id, m.product_id as "productId", m.option_label as option, m.change::float8 as change, m.balance::float8 as balance,
           m.kind, m.reason, m.note, m.order_id::text as "orderId", o.number as "orderNumber", m.purchase_id::text as "purchaseId", pu.number as "purchaseNumber",
-          m.bucket, m.return_id::text as "returnId", r.number as "returnNumber", m.supplier_return_id::text as "supplierReturnId", sr.number as "supplierReturnNumber", m.by, m.at
+          m.bucket, m.return_id::text as "returnId", r.number as "returnNumber", m.supplier_return_id::text as "supplierReturnId", sr.number as "supplierReturnNumber",
+          m.invoice_id::text as "invoiceId", si.number as "invoiceNumber", m.by, m.at
         from stock_moves m left join orders o on o.id = m.order_id left join purchases pu on pu.id = m.purchase_id
           left join sales_returns r on r.id = m.return_id left join supplier_returns sr on sr.id = m.supplier_return_id
+          left join sales_invoices si on si.id = m.invoice_id
         where ${productId === undefined ? sql`true` : sql`m.product_id = ${productId} and m.option_label = ${option}`}
         order by m.id desc limit 300`,
     );

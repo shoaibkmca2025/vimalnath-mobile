@@ -50,27 +50,54 @@ type Head = 'cgst' | 'sgst' | 'igst';
  * rounded to the rupee. Each rate's tax is shared over its lines by amount (the last line takes the rounding), so the
  * lines add up to the heads exactly, for the registers.
  */
-export function computeInvoice<T extends { qty: number; rate: number; discountPct: number; gstRate: number }>(items: T[], interstate: boolean) {
-  const lines = items.map((item) => ({ ...item, amount: r2(item.qty * item.rate * (1 - item.discountPct / 100)), cgst: 0, sgst: 0, igst: 0 }));
+export type Priced = { qty: number; rate: number; discountPct: number; gstRate: number; discountAmount?: number; lineType?: 'goods' | 'charge' };
+export type PriceOptions = {
+  /** Rates typed with GST in them: each line's value before GST is its amount ÷ (1 + rate). */
+  inclusive?: boolean;
+  /** A discount on the whole bill, before GST, shared over the goods lines by value. */
+  billDiscount?: number;
+};
+
+/**
+ * Counter bills add to that: a fixed discount on a line after its %, rates typed GST included, a discount on the whole
+ * bill (before GST, shared over the goods lines; the last line takes what rounding leaves), and charges such as transport,
+ * taxed like a line but never discounted. Without options it is exactly the invoice above.
+ */
+export function computeInvoice<T extends Priced>(items: T[], interstate: boolean, options: PriceOptions = {}) {
+  const lines = items.map((item) => {
+    const gross = Math.max(0, r2(r2(item.qty * item.rate * (1 - item.discountPct / 100)) - (item.discountAmount ?? 0)));
+    const amount = options.inclusive ? r2(gross / (1 + item.gstRate / 100)) : gross;
+    return { ...item, amount, billDiscount: 0, taxable: amount, cgst: 0, sgst: 0, igst: 0 };
+  });
+  const goods = lines.filter((line) => line.lineType !== 'charge');
+  const base = sum(goods.map((line) => line.amount));
+  const billDiscount = Math.min(r2(options.billDiscount ?? 0), base);
+  let unshared = billDiscount;
+  goods.forEach((line, index) => {
+    const share = index === goods.length - 1 ? unshared : r2(base ? (billDiscount * line.amount) / base : 0);
+    line.billDiscount = share;
+    line.taxable = r2(line.amount - share);
+    unshared = r2(unshared - share);
+  });
   const heads: Record<Head, number> = { cgst: 0, sgst: 0, igst: 0 };
   for (const rate of [...new Set(lines.map((line) => line.gstRate))]) {
     const group = lines.filter((line) => line.gstRate === rate);
-    const taxable = sum(group.map((line) => line.amount));
+    const taxable = sum(group.map((line) => line.taxable));
     const parts: [Head, number][] = interstate ? [['igst', r2((taxable * rate) / 100)]] : [['cgst', r2((taxable * rate) / 200)], ['sgst', r2((taxable * rate) / 200)]];
     for (const [head, total] of parts) {
       heads[head] = r2(heads[head] + total);
       let left = total;
       group.forEach((line, index) => {
-        const share = index === group.length - 1 ? left : r2(taxable ? (total * line.amount) / taxable : 0);
+        const share = index === group.length - 1 ? left : r2(taxable ? (total * line.taxable) / taxable : 0);
         line[head] = share;
         left = r2(left - share);
       });
     }
   }
-  const taxable = sum(lines.map((line) => line.amount));
+  const taxable = sum(lines.map((line) => line.taxable));
   const exact = r2(taxable + heads.cgst + heads.sgst + heads.igst);
   const roundOff = r2(Math.round(exact) - exact);
-  return { lines: lines.map((line) => ({ ...line, taxable: line.amount })), taxable, ...heads, roundOff, total: r2(exact + roundOff) };
+  return { lines, taxable, billDiscount, ...heads, roundOff, total: r2(exact + roundOff) };
 }
 
 export type GstSettings = {
@@ -162,15 +189,20 @@ const Settings = z.object({
 });
 
 const InvoiceItem = z.object({
-  productId: z.string().min(1).max(200),
+  /** Empty for an item typed in by hand, not from the catalogue (never taken from stock). */
+  productId: z.string().max(200).default(''),
   option: z.string().max(200).default(''),
   description: Text(300).min(1, 'Describe every line.'),
   detail: Text(200).default(''),
+  sku: Text(60).default(''),
   hsn: Text(8).regex(/^(\d{4}|\d{6}|\d{8})?$/, 'Enter the HSN code: 4, 6 or 8 digits.'),
   qty: z.number().positive('Enter a quantity above 0.').max(10_000_000),
-  unit: z.enum(UNITS, 'Choose a unit.'),
+  /** A unit from measurement_units: the stock units, PAIR, and the shop's own. */
+  unit: Text(20).min(1, 'Choose a unit.'),
   rate: Money('rate'),
   discountPct: z.number('Enter the discount as a number.').min(0, 'Enter 0% or more.').max(100, 'Enter 100% or less.').default(0),
+  discountAmount: Money('discount').default(0),
+  lineType: z.enum(['goods', 'charge']).default('goods'),
   gstRate: z.number().refine((rate) => (GST_RATES as readonly number[]).includes(rate), 'Choose a GST rate.'),
 });
 
@@ -210,8 +242,17 @@ const InvoiceDraft = z.object({
   notes: Text(1000).default(''),
   /** Left out: the saved details stay. */
   details: Details.optional(),
+  // Counter bills (billing.ts). Each left out keeps what's saved, so an order invoice's editor never touches them.
+  customerId: Id.nullable().optional(),
+  customerPhone: Text(40).optional(),
+  dueDate: Day.nullable().optional(),
+  pricesIncludeGst: z.boolean().optional(),
+  billDiscount: Money('bill discount').optional(),
+  billDiscountPct: z.number().min(0, 'Enter 0% or more.').max(100, 'Enter 100% or less.').nullable().optional(),
+  allowNegativeStock: z.boolean().optional(),
 });
 export type InvoiceDraft = z.output<typeof InvoiceDraft>;
+export const InvoiceDraftSchema = InvoiceDraft;
 
 /** Invoices in the admin's shape (admin/src/data/types.ts SalesInvoice). */
 export const invoices = (sql: Sql | TransactionSql, where = sql`true`) =>
@@ -223,17 +264,28 @@ export const invoices = (sql: Sql | TransactionSql, where = sql`true`) =>
       'sellerGstin', i.seller_gstin, 'taxable', i.taxable::float8, 'cgst', i.cgst::float8, 'sgst', i.sgst::float8, 'igst', i.igst::float8,
       'roundOff', i.round_off::float8, 'total', i.total::float8, 'notes', nullif(i.notes, ''), 'details', i.details,
       'previousBalance', i.previous_balance::float8,
+      'source', case when i.return_id is not null then 'replacement' when i.order_id is not null then 'order' else 'counter' end,
+      'customerPhone', nullif(i.customer_phone, ''), 'dueDate', i.due_date, 'pricesIncludeGst', i.prices_include_gst,
+      'billDiscount', i.bill_discount::float8, 'billDiscountPct', i.bill_discount_pct::float8, 'allowNegativeStock', i.allow_negative_stock,
+      'quotationId', i.quotation_id::text, 'quotationNumber', (select q.number from quotations q where q.id = i.quotation_id),
+      'duplicateOf', i.duplicate_of::text, 'version', i.version,
+      'reopenedBy', i.reopened_by, 'reopenedAt', i.reopened_at, 'reopenReason', nullif(i.reopen_reason, ''),
+      -- What's been paid: through the order for an order's invoice, on the bill itself for a counter bill.
+      'paid', case when i.return_id is not null then null
+        when i.order_id is not null then (select coalesce(sum(p.amount), 0) from order_payments p where p.order_id = i.order_id)::float8
+        else (select coalesce(sum(p.amount), 0) from invoice_payments p where p.invoice_id = i.id and p.voided_at is null)::float8 end,
       'returnId', i.return_id::text, 'returnNumber', (select r.number from sales_returns r where r.id = i.return_id),
       'createdBy', i.created_by, 'createdAt', i.created_at, 'postedBy', i.posted_by, 'postedAt', i.posted_at,
       'cancelledBy', i.cancelled_by, 'cancelledAt', i.cancelled_at, 'cancelReason', nullif(i.cancel_reason, ''),
-      'customerId', (select d.customer_id from app_devices d where d.id = o.device_id),
+      'customerId', coalesce(i.customer_id, (select d.customer_id from app_devices d where d.id = o.device_id)),
       'items', (select json_agg(json_build_object('productId', l.product_id, 'option', l.option_label, 'description', l.description,
-          'detail', l.detail, 'hsn', l.hsn, 'qty', l.qty::float8, 'unit', l.unit, 'rate', l.rate::float8, 'discountPct', l.discount_pct::float8,
+          'detail', l.detail, 'sku', l.sku, 'hsn', l.hsn, 'qty', l.qty::float8, 'unit', l.unit, 'rate', l.rate::float8, 'discountPct', l.discount_pct::float8,
+          'discountAmount', l.discount_amount::float8, 'lineType', l.line_type, 'billDiscount', l.bill_discount::float8,
           'amount', l.amount::float8, 'gstRate', l.gst_rate::float8, 'taxable', l.taxable::float8,
           'cgst', l.cgst::float8, 'sgst', l.sgst::float8, 'igst', l.igst::float8) order by l.position)
         from sales_invoice_items l where l.invoice_id = i.id)
     )) as invoice
-    from sales_invoices i join orders o on o.id = i.order_id
+    from sales_invoices i left join orders o on o.id = i.order_id
     where ${where}
     order by i.invoice_date desc, i.id desc`.then((rows) => rows.map((row) => row.invoice));
 
