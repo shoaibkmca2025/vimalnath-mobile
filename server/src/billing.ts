@@ -197,7 +197,10 @@ export const quotations = (sql: Sql | TransactionSql, where = sql`true`) =>
           'detail', l.detail, 'sku', l.sku, 'hsn', l.hsn, 'qty', l.qty::float8, 'unit', l.unit, 'rate', l.rate::float8,
           'discountPct', l.discount_pct::float8, 'discountAmount', l.discount_amount::float8, 'lineType', l.line_type,
           'amount', l.amount::float8, 'billDiscount', l.bill_discount::float8, 'gstRate', l.gst_rate::float8, 'taxable', l.taxable::float8,
-          'cgst', l.cgst::float8, 'sgst', l.sgst::float8, 'igst', l.igst::float8) order by l.position)
+          'cgst', l.cgst::float8, 'sgst', l.sgst::float8, 'igst', l.igst::float8,
+          'categoryId', l.category_id, 'categoryLabel', (select c.label from categories c where c.id = l.category_id),
+          'discountSource', l.discount_source, 'ruleType', l.rule_type, 'ruleMin', l.rule_min::float8, 'ruleMax', l.rule_max::float8,
+          'discountValue', l.discount_value::float8, 'effectivePct', l.effective_pct::float8) order by l.position)
         from quotation_items l where l.quotation_id = q.id)
     )) as quotation
     from quotations q where ${where}

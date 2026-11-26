@@ -342,6 +342,18 @@ export type InvoiceItem = {
   cgst: number;
   sgst: number;
   igst: number;
+  /** The discount rule the line was billed under, as it stood then (category-wise discounts). */
+  categoryId?: string;
+  categoryLabel?: string;
+  discountSource?: 'product' | 'category' | 'default';
+  ruleType?: 'percentage' | 'amount' | 'both';
+  ruleMin?: number;
+  ruleMax?: number;
+  /** Rupees off before GST: the line's own discounts and its share of the bill discount. */
+  discountValue?: number;
+  effectivePct?: number;
+  discountStatus?: 'ok' | 'pending' | 'approved' | 'rejected';
+  discountApprovalId?: string;
 };
 
 /** A GST tax invoice made from an order. Drafts have no number; posted ones are cancelled, never deleted. */
