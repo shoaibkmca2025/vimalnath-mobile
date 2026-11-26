@@ -284,7 +284,11 @@ export const invoices = (sql: Sql | TransactionSql, where = sql`true`) =>
           'detail', l.detail, 'sku', l.sku, 'hsn', l.hsn, 'qty', l.qty::float8, 'unit', l.unit, 'rate', l.rate::float8, 'discountPct', l.discount_pct::float8,
           'discountAmount', l.discount_amount::float8, 'lineType', l.line_type, 'billDiscount', l.bill_discount::float8,
           'amount', l.amount::float8, 'gstRate', l.gst_rate::float8, 'taxable', l.taxable::float8,
-          'cgst', l.cgst::float8, 'sgst', l.sgst::float8, 'igst', l.igst::float8) order by l.position)
+          'cgst', l.cgst::float8, 'sgst', l.sgst::float8, 'igst', l.igst::float8,
+          'categoryId', l.category_id, 'categoryLabel', (select c.label from categories c where c.id = l.category_id),
+          'discountSource', l.discount_source, 'ruleType', l.rule_type, 'ruleMin', l.rule_min::float8, 'ruleMax', l.rule_max::float8,
+          'discountValue', l.discount_value::float8, 'effectivePct', l.effective_pct::float8, 'discountStatus', l.discount_status,
+          'discountApprovalId', l.discount_approval_id::text) order by l.position)
         from sales_invoice_items l where l.invoice_id = i.id)
     )) as invoice
     from sales_invoices i left join orders o on o.id = i.order_id
