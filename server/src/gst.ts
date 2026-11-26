@@ -4,7 +4,7 @@ import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
 import { only, type Env } from './staff.ts';
-import { GST_RATES, UNITS } from './stock.ts';
+import { GST_RATES, move } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
 
 /**
@@ -289,12 +289,49 @@ export const invoices = (sql: Sql | TransactionSql, where = sql`true`) =>
     where ${where}
     order by i.invoice_date desc, i.id desc`.then((rows) => rows.map((row) => row.invoice));
 
-/** Saves a draft's header, lines and figures, worked out here from the lines. */
-export async function saveDraft(tx: TransactionSql, id: number, draft: InvoiceDraft) {
-  const own = stateCode((await gstSettings(tx)).gstin);
+/** A draft as callers give it: optional fields left out take their defaults. */
+export type InvoiceDraftInput = z.input<typeof InvoiceDraft>;
+
+/**
+ * Saves a draft's header, lines and figures, worked out here from the lines. Every unit must be one the shop bills in,
+ * and an item counted in stock is billed in its stock unit. A composition dealer's bills carry no GST (bills of supply).
+ */
+export async function saveDraft(tx: TransactionSql, id: number, input: InvoiceDraftInput) {
+  const draft = parse(InvoiceDraft, input);
+  const settings = await gstSettings(tx);
+  const own = stateCode(settings.gstin);
   const pos = stateCode(draft.customerGstin, draft.placeOfSupply);
   const interstate = Boolean(own && pos && own !== pos);
-  const figures = computeInvoice(draft.items, interstate);
+  const composition = settings.registrationType === 'composition';
+  const units = await tx`select code, label from measurement_units`;
+  const unitLabel = new Map(units.map((row) => [row.code as string, row.label as string]));
+  draft.items.forEach((item, index) => {
+    if (!unitLabel.has(item.unit)) throw new HTTPException(400, { message: `“${item.unit}” isn’t one of the shop’s units. Add it under Invoice Settings.`, cause: { field: `items.${index}.unit` } });
+  });
+  const ids = [...new Set(draft.items.filter((item) => item.productId && item.lineType === 'goods').map((item) => item.productId))];
+  if (ids.length) {
+    const counted = await tx`select product_id, option_label, unit from stock_items where product_id in ${tx(ids)}`;
+    const stockUnit = new Map(counted.map((row) => [`${row.product_id}\u0000${row.option_label}`, row.unit as string]));
+    draft.items.forEach((item, index) => {
+      const unit = item.lineType === 'goods' && item.productId ? stockUnit.get(`${item.productId}\u0000${item.option}`) : undefined;
+      if (unit && unit !== item.unit)
+        throw new HTTPException(400, { message: `${item.description} is counted in ${unitLabel.get(unit) ?? unit}: bill it in ${unitLabel.get(unit) ?? unit}.`, cause: { field: `items.${index}.unit` } });
+    });
+  }
+  const [saved] = await tx`select prices_include_gst, bill_discount::float8 as bill_discount from sales_invoices where id = ${id}`;
+  const inclusive = draft.pricesIncludeGst ?? Boolean(saved?.prices_include_gst);
+  const billDiscount = draft.billDiscount ?? Number(saved?.bill_discount ?? 0);
+  const figures = computeInvoice(composition ? draft.items.map((item) => ({ ...item, gstRate: 0 })) : draft.items, interstate, { inclusive, billDiscount });
+  if (billDiscount > figures.billDiscount + 0.001) throw new HTTPException(400, { message: `The bill discount is more than the goods (₹${figures.billDiscount + 0}).`, cause: { field: 'billDiscount' } });
+  const counter = {
+    ...(draft.customerId !== undefined ? { customer_id: draft.customerId } : {}),
+    ...(draft.customerPhone !== undefined ? { customer_phone: draft.customerPhone } : {}),
+    ...(draft.dueDate !== undefined ? { due_date: draft.dueDate } : {}),
+    ...(draft.pricesIncludeGst !== undefined ? { prices_include_gst: draft.pricesIncludeGst } : {}),
+    ...(draft.billDiscount !== undefined ? { bill_discount: figures.billDiscount } : {}),
+    ...(draft.billDiscountPct !== undefined ? { bill_discount_pct: draft.billDiscountPct } : {}),
+    ...(draft.allowNegativeStock !== undefined ? { allow_negative_stock: draft.allowNegativeStock } : {}),
+  };
   await tx`
     update sales_invoices set ${tx({
       invoice_date: draft.invoiceDate,
@@ -311,7 +348,8 @@ export async function saveDraft(tx: TransactionSql, id: number, draft: InvoiceDr
       round_off: figures.roundOff,
       total: figures.total,
       notes: draft.notes,
-    })}${draft.details ? tx`, details = ${tx.json(draft.details)}` : tx``} where id = ${id}`;
+      ...counter,
+    })}${draft.details ? tx`, details = ${tx.json(draft.details)}` : tx``}, version = version + 1 where id = ${id}`;
   await tx`delete from sales_invoice_items where invoice_id = ${id}`;
   await tx`
     insert into sales_invoice_items ${tx(
@@ -322,12 +360,16 @@ export async function saveDraft(tx: TransactionSql, id: number, draft: InvoiceDr
         option_label: line.option,
         description: line.description,
         detail: line.detail,
+        sku: line.sku,
         hsn: line.hsn,
         qty: line.qty,
         unit: line.unit,
         rate: line.rate,
         discount_pct: line.discountPct,
+        discount_amount: line.discountAmount,
+        line_type: line.lineType,
         amount: line.amount,
+        bill_discount: line.billDiscount,
         gst_rate: line.gstRate,
         taxable: line.taxable,
         cgst: line.cgst,
@@ -337,6 +379,142 @@ export async function saveDraft(tx: TransactionSql, id: number, draft: InvoiceDr
     )}`;
 }
 
+/**
+ * A counter bill's stock: each goods line from the catalogue that is counted takes its quantity from stock, once. It works
+ * out what the bill should have taken now (nothing once it's cancelled) less what it has taken, and moves only the
+ * difference, so finalizing it again after a correction never takes stock twice. Below zero only if `allowNegative`.
+ */
+export async function syncBillStock(tx: TransactionSql, id: number, by: string, options: { cancelled?: boolean; allowNegative?: boolean; reason: string }) {
+  const wanted = options.cancelled
+    ? []
+    : await tx`
+        select l.product_id, l.option_label, sum(l.qty)::float8 as qty from sales_invoice_items l
+        join stock_items s on s.product_id = l.product_id and s.option_label = l.option_label
+        where l.invoice_id = ${id} and l.line_type = 'goods' and l.product_id <> '' group by 1, 2`;
+  const taken = await tx`select product_id, option_label, sum(change)::float8 as net from stock_moves where invoice_id = ${id} and bucket = 'available' group by 1, 2`;
+  const key = (productId: string, option: string) => `${productId}\u0000${option}`;
+  const steps = new Map<string, { productId: string; option: string; change: number }>();
+  for (const row of wanted) steps.set(key(row.product_id, row.option_label), { productId: row.product_id, option: row.option_label, change: -row.qty });
+  for (const row of taken) {
+    const step = steps.get(key(row.product_id, row.option_label)) ?? { productId: row.product_id, option: row.option_label, change: 0 };
+    step.change = Math.round((step.change - row.net) * 1000) / 1000;
+    steps.set(key(row.product_id, row.option_label), step);
+  }
+  const moves = [...steps.values()].filter((step) => step.change !== 0).sort((a, b) => key(a.productId, a.option).localeCompare(key(b.productId, b.option)));
+  if (!moves.length) return [];
+  // The counted items locked first, in the same order everywhere, so two bills at once can't both take the last one.
+  const counted = await tx`
+    select s.product_id, s.option_label, s.quantity::float8 as quantity, s.unit, coalesce(nullif(p.name, ''), p.section, s.product_id) as name
+    from stock_items s left join products p on p.id = s.product_id
+    where (s.product_id, s.option_label) in ${tx(moves.map((step) => [step.productId, step.option]) as never)}
+    order by s.product_id, s.option_label for update of s`;
+  const have = new Map(counted.map((row) => [key(row.product_id, row.option_label), row]));
+  for (const step of moves) {
+    const row = have.get(key(step.productId, step.option));
+    if (step.change < 0 && row && row.quantity + step.change < 0 && !options.allowNegative)
+      throw new HTTPException(409, {
+        message: `Only ${Math.max(0, row.quantity)} ${row.unit} of ${row.name}${step.option ? ` · ${step.option}` : ''} in stock. Restock it, or allow negative stock for this bill.`,
+      });
+    await move(tx, { productId: step.productId, option: step.option }, step.change, { kind: step.change < 0 ? 'billed' : 'bill_reversed', invoiceId: id, reason: options.reason, by });
+  }
+  return moves;
+}
+
+/** What a customer still owes: their orders' bills and their counter bills, less what's paid on each. */
+export async function customerBalance(tx: Sql | TransactionSql, customerId: number, exceptInvoice = 0) {
+  const [row] = await tx`
+    with who as (select coalesce((select merged_into from customers where id = ${customerId}), ${customerId}) as id)
+    select (
+      coalesce((select sum(greatest(0, coalesce(o.bill_amount, o.total) - coalesce((select sum(p.amount) from order_payments p where p.order_id = o.id), 0)))
+        from orders o join app_devices d on d.id = o.device_id
+        where coalesce((select merged_into from customers where id = d.customer_id), d.customer_id) = (select id from who)
+          and o.status in ('placed', 'confirmed', 'packed', 'dispatched', 'delivered')), 0)
+      + coalesce((select sum(greatest(0, i.total - coalesce((select sum(p.amount) from invoice_payments p where p.invoice_id = i.id and p.voided_at is null), 0)))
+        from sales_invoices i
+        where i.order_id is null and i.return_id is null and i.status = 'posted' and i.id <> ${exceptInvoice}
+          and coalesce((select merged_into from customers where id = i.customer_id), i.customer_id) = (select id from who)), 0)
+    )::float8 as owed`;
+  return r2(row!.owed as number);
+}
+
+/**
+ * Posting: the next number in the financial year's series (a bill reopened to correct keeps the number it had), the
+ * seller's GSTIN and the buyer's balance before it. An order's invoice becomes the order's bill, so payments follow it; a
+ * counter bill takes its goods from stock.
+ */
+export async function postInvoice(tx: TransactionSql, id: number, by: string) {
+  const [invoice] = await tx`
+    select status, number, financial_year, order_id, return_id, customer_id, invoice_date, total::float8 as total, pos_code, allow_negative_stock
+    from sales_invoices where id = ${id} for update`;
+  if (!invoice) throw new HTTPException(404, { message: 'That invoice does not exist.' });
+  if (invoice.status !== 'draft') throw new HTTPException(409, { message: `Invoice ${invoice.number} is ${invoice.status}, so it can’t be posted again.` });
+  const settings = await gstSettings(tx);
+  const [billing] = await tx`select allow_negative_stock from gst_settings`;
+  if (!GSTIN.test(settings.gstin) || !settings.legalName) throw new HTTPException(400, { message: 'Fill in the shop’s GSTIN and legal name under GST Settings first.' });
+  const lines = await tx`select description, amount::float8 as amount, gst_rate::float8 as gst_rate, line_type from sales_invoice_items where invoice_id = ${id}`;
+  if (!lines.length) throw new HTTPException(400, { message: 'An invoice needs at least one line.' });
+  const unpriced = lines.find((line) => line.line_type === 'goods' && line.amount <= 0);
+  if (unpriced) throw new HTTPException(400, { message: `Enter the rate for ${unpriced.description}.` });
+  if (settings.registrationType === 'composition' && lines.some((line) => line.gst_rate > 0))
+    throw new HTTPException(400, { message: 'A composition dealer charges no GST: save the bill again to make it a bill of supply.' });
+  if (!invoice.pos_code) throw new HTTPException(400, { message: 'Choose the place of supply: the buyer’s state.' });
+  const counter = invoice.order_id === null && invoice.return_id === null;
+  let owed: number | null = null;
+  if (counter) {
+    const [{ paid }] = (await tx`select coalesce(sum(amount), 0)::float8 as paid from invoice_payments where invoice_id = ${id} and voided_at is null`) as unknown as [{ paid: number }];
+    if (paid > invoice.total) throw new HTTPException(400, { message: `₹${paid} has been received against this bill, more than its total. Void a payment or change the bill.` });
+    owed = invoice.customer_id ? await customerBalance(tx, invoice.customer_id, id) : null;
+  } else if (invoice.return_id === null) {
+    const [{ paid }] = (await tx`select coalesce(sum(amount), 0)::float8 as paid from order_payments where order_id = ${invoice.order_id}`) as unknown as [{ paid: number }];
+    if (paid > invoice.total) throw new HTTPException(400, { message: `₹${paid} has been paid on this order, more than the invoice. Remove a payment or change the invoice.` });
+    // What the buyer owed on their other orders just before this invoice, as the invoice prints it.
+    const [row] = await tx`
+      select coalesce(sum(greatest(0, coalesce(o.bill_amount, o.total) - coalesce((select sum(p.amount) from order_payments p where p.order_id = o.id), 0))), 0)::float8 as owed
+      from orders o join app_devices d on d.id = o.device_id
+      where coalesce((select merged_into from customers where id = d.customer_id), d.customer_id) =
+          (select coalesce((select merged_into from customers where id = d2.customer_id), d2.customer_id) from orders o2 join app_devices d2 on d2.id = o2.device_id where o2.id = ${invoice.order_id})
+        and o.id <> ${invoice.order_id} and o.status in ('placed', 'confirmed', 'packed', 'dispatched', 'delivered')`;
+    owed = r2(row!.owed as number);
+  }
+  let number = invoice.number as string | null;
+  let year = invoice.financial_year as string | null;
+  if (!number) {
+    year = financialYear(isoDay(new Date(invoice.invoice_date)));
+    const [next] = await tx`
+      insert into invoice_counters (series, financial_year, last_number) values ('invoice', ${year}, 1)
+      on conflict (series, financial_year) do update set last_number = invoice_counters.last_number + 1
+      returning last_number`;
+    number = invoiceNumber(settings.invoicePrefix, year, next!.last_number as number);
+  }
+  await tx`
+    update sales_invoices set status = 'posted', number = ${number}, financial_year = ${year}, seller_gstin = ${settings.gstin},
+      previous_balance = ${owed}, posted_by = ${by}, posted_at = now(), version = version + 1
+    where id = ${id}`;
+  if (invoice.order_id !== null && invoice.return_id === null) await tx`update orders set bill_amount = ${Math.round(invoice.total)} where id = ${invoice.order_id}`;
+  const moved = counter ? await syncBillStock(tx, id, by, { allowNegative: Boolean(invoice.allow_negative_stock || billing?.allow_negative_stock), reason: number }) : [];
+  return { number, moved };
+}
+
+/**
+ * A posted invoice is cancelled with a reason and keeps its number, so the series has no gaps. Not while a credit note
+ * stands against it; a counter bill gives its goods back to stock, and needs its payments voided (or refunded) first.
+ */
+export async function cancelInvoice(tx: TransactionSql, id: number, by: string, reason: string) {
+  const [invoice] = await tx`select status, number, order_id, return_id from sales_invoices where id = ${id} for update`;
+  if (!invoice) throw new HTTPException(404, { message: 'That invoice does not exist.' });
+  if (invoice.status !== 'posted') throw new HTTPException(409, { message: 'Only a posted invoice can be cancelled; a draft is deleted instead.' });
+  const [note] = await tx`select number from sales_credit_notes where invoice_id = ${id} and status = 'posted' limit 1`;
+  if (note) throw new HTTPException(409, { message: `Credit note ${note.number} is issued against this invoice. Cancel the credit note first.` });
+  const counter = invoice.order_id === null && invoice.return_id === null;
+  if (counter) {
+    const [paid] = await tx`select count(*)::int as count from invoice_payments where invoice_id = ${id} and voided_at is null`;
+    if (paid!.count) throw new HTTPException(409, { message: `${invoice.number} has payments. Void them (refund the customer) before cancelling it.` });
+  }
+  await tx`
+    update sales_invoices set status = 'cancelled', cancelled_by = ${by}, cancelled_at = now(), cancel_reason = ${reason}, version = version + 1
+    where id = ${id}`;
+  return counter ? await syncBillStock(tx, id, by, { cancelled: true, reason: invoice.number }) : [];
+}
 /** /v1/admin/gst. */
 export function gstRoutes(sql: Sql) {
   const routes = new Hono<Env>();
@@ -464,56 +642,17 @@ export function gstRoutes(sql: Sql) {
     return c.json({ removedInvoices: [String(id)] });
   });
 
-  // Posting gives the next number in the financial year's series, fixes the seller's GSTIN and the buyer's balance before
-  // it, and makes the order's bill the invoice total, so payments follow the invoice.
+  // Posting: the next number, the seller's GSTIN and the buyer's balance; the order's bill follows (postInvoice).
   routes.post('/invoices/:id/post', async (c) => {
     const id = parse(Id, c.req.param('id'));
-    const by = c.get('staff').name;
-    await sql.begin(async (tx) => {
-      await draftOnly(tx, id);
-      const settings = await gstSettings(tx);
-      if (!GSTIN.test(settings.gstin) || !settings.legalName) throw new HTTPException(400, { message: 'Fill in the shop’s GSTIN and legal name under GST Settings first.' });
-      if (settings.registrationType === 'composition') throw new HTTPException(400, { message: 'A composition dealer issues a bill of supply, not a tax invoice. Change the registration type under GST Settings if that’s wrong.' });
-      const [invoice] = await tx`select order_id, invoice_date, total::float8 as total, pos_code, return_id from sales_invoices where id = ${id}`;
-      const lines = await tx`select description, amount::float8 as amount from sales_invoice_items where invoice_id = ${id}`;
-      const unpriced = lines.find((line) => line.amount <= 0);
-      if (unpriced) throw new HTTPException(400, { message: `Enter the rate for ${unpriced.description}.` });
-      if (!invoice!.pos_code) throw new HTTPException(400, { message: 'Choose the place of supply: the buyer’s state.' });
-      // A replacement's invoice is settled through its return, not the order's payments.
-      const replacement = invoice!.return_id !== null;
-      const [{ paid }] = (await tx`select coalesce(sum(amount), 0)::float8 as paid from order_payments where order_id = ${invoice!.order_id}`) as unknown as [{ paid: number }];
-      if (!replacement && paid > invoice!.total) throw new HTTPException(400, { message: `₹${paid} has been paid on this order, more than the invoice. Remove a payment or change the invoice.` });
-      // What the buyer owed on their other orders just before this invoice, as the invoice prints it.
-      const [{ owed }] = (await tx`
-        select coalesce(sum(greatest(0, coalesce(o.bill_amount, o.total) - coalesce((select sum(p.amount) from order_payments p where p.order_id = o.id), 0))), 0)::float8 as owed
-        from orders o join app_devices d on d.id = o.device_id
-        where coalesce((select merged_into from customers where id = d.customer_id), d.customer_id) =
-            (select coalesce((select merged_into from customers where id = d2.customer_id), d2.customer_id) from orders o2 join app_devices d2 on d2.id = o2.device_id where o2.id = ${invoice!.order_id})
-          and o.id <> ${invoice!.order_id} and o.status in ('placed', 'confirmed', 'packed', 'dispatched', 'delivered')`) as unknown as [{ owed: number }];
-      const year = financialYear(isoDay(new Date(invoice!.invoice_date)));
-      const [counter] = await tx`
-        insert into invoice_counters (series, financial_year, last_number) values ('invoice', ${year}, 1)
-        on conflict (series, financial_year) do update set last_number = invoice_counters.last_number + 1
-        returning last_number`;
-      const number = invoiceNumber(settings.invoicePrefix, year, counter!.last_number as number);
-      await tx`
-        update sales_invoices set status = 'posted', number = ${number}, financial_year = ${year}, seller_gstin = ${settings.gstin},
-          previous_balance = ${r2(owed)}, posted_by = ${by}, posted_at = now()
-        where id = ${id}`;
-      if (!replacement) await tx`update orders set bill_amount = ${Math.round(invoice!.total)} where id = ${invoice!.order_id}`;
-    });
+    await sql.begin((tx) => postInvoice(tx, id, c.get('staff').name));
     return c.json({ invoices: await invoices(sql, sql`i.id = ${id}`) });
   });
 
-  // A posted invoice is cancelled with a reason and keeps its number, so the series has no gaps.
+  // A posted invoice is cancelled with a reason and keeps its number (cancelInvoice).
   routes.post('/invoices/:id/cancel', jsonBody(z.object({ reason: Text(300).min(1, 'Give the reason for cancelling.') })), async (c) => {
     const id = parse(Id, c.req.param('id'));
-    const [note] = await sql`select number from sales_credit_notes where invoice_id = ${id} and status = 'posted' limit 1`;
-    if (note) throw new HTTPException(409, { message: `Credit note ${note.number} is issued against this invoice. Cancel the credit note first.` });
-    const [row] = await sql`
-      update sales_invoices set status = 'cancelled', cancelled_by = ${c.get('staff').name}, cancelled_at = now(), cancel_reason = ${c.req.valid('json').reason}
-      where id = ${id} and status = 'posted' returning id`;
-    if (!row) throw new HTTPException(409, { message: 'Only a posted invoice can be cancelled; a draft is deleted instead.' });
+    await sql.begin((tx) => cancelInvoice(tx, id, c.get('staff').name, c.req.valid('json').reason));
     return c.json({ invoices: await invoices(sql, sql`i.id = ${id}`) });
   });
 
