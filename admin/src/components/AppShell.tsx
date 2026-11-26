@@ -1,6 +1,11 @@
 import {
   ArchiveIcon,
   ArrowUUpLeftIcon,
+  CashRegisterIcon,
+  FilePlusIcon,
+  NotePencilIcon,
+  PercentIcon,
+  SealPercentIcon,
   ArrowsLeftRightIcon,
   ChartBarIcon,
   ChartLineUpIcon,
@@ -54,6 +59,7 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { PageMetaContext, type PageMeta } from '@/components/pageMeta';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ThemeSwitch } from '@/components/ThemeSwitch';
+import { useApprovalCount } from '@/data/approvalCount';
 import { creditDaysOf, isOverdue } from '@/data/payments';
 import { useNewFeedback } from '@/data/feedback';
 import { useReturnCounts } from '@/data/returnCounts';
@@ -125,6 +131,23 @@ export function AppShell() {
     ] as NavItem[],
   };
 
+  // Counter billing: Owners and Sales bill; the Accountant reads the bills and handles their money.
+  const bills = session?.role === 'owner' || session?.role === 'sales' || accountant;
+  const makesBills = session?.role === 'owner' || session?.role === 'sales';
+  const pendingApprovals = useApprovalCount(bills);
+  const billingGroup = {
+    title: 'Billing',
+    items: [
+      { to: '/billing', label: 'Billing', icon: CashRegisterIcon, end: true },
+      ...(makesBills ? [{ to: '/billing/new', label: 'New Bill', icon: FilePlusIcon }] : []),
+      { to: '/billing/quotations', label: 'Quotations', icon: NotePencilIcon },
+      { to: '/billing/approvals', label: 'Discount Approvals', icon: SealPercentIcon, count: pendingApprovals, alert: true, alertLabel: 'waiting for approval' },
+      { to: '/billing/discounts', label: 'Discount Management', icon: PercentIcon },
+      { to: '/billing/discount-report', label: 'Discount Report', icon: ChartBarIcon },
+      ...(session?.role === 'owner' ? [{ to: '/billing/settings', label: 'Invoice Settings', icon: SlidersHorizontalIcon }] : []),
+    ] as NavItem[],
+  };
+
   const groups: { title: string; items: NavItem[] }[] = inventoryOnly
     ? [
         { title: 'Inventory', items: [{ ...inventoryItem, label: 'Orders to Pack' }, stockItem, { to: '/returns/list', label: 'Returned Goods', icon: ArrowUUpLeftIcon, count: returnCounts.receive + returnCounts.inspect, alert: true, alertLabel: 'goods to receive or check' }] },
@@ -143,6 +166,7 @@ export function AppShell() {
         ...(seesFeedback ? [{ to: '/feedback', label: 'Feedback', icon: ChatsCircleIcon, count: newFeedback, alert: true, alertLabel: 'new' }] : []),
       ],
     },
+    ...(bills ? [billingGroup] : []),
     ...(seesReturns ? [returnsGroup] : []),
     // The Owner and the Accountant; GST Settings, the shop's registration, stays the Owner's.
     ...(money
@@ -277,9 +301,12 @@ export function AppShell() {
     ? ['/inventory', '/stock', '/settings', '/returns/list', '/returns/'].some((path) => location.pathname.startsWith(path)) && !['/returns/settings', '/returns/reports', '/returns/refunds', '/returns/new'].some((path) => location.pathname.startsWith(path))
     : accountant
       ? // The Accountant's pages; anything else typed in or linked to goes to the dashboard.
-        location.pathname === '/' || (under(['/orders', '/customers', '/payments', '/purchases', '/suppliers', '/supplier-returns', '/expenses', '/reports', '/gst', '/returns', '/activity', '/settings']) && !under(['/gst/settings', '/returns/settings', '/returns/new']))
-      : // The books are the Owner's and the Accountant's.
-        money || !under(['/gst', '/purchases', '/suppliers', '/supplier-returns', '/expenses', '/reports']);
+        location.pathname === '/' ||
+        (under(['/orders', '/customers', '/payments', '/purchases', '/suppliers', '/supplier-returns', '/expenses', '/reports', '/gst', '/returns', '/billing', '/activity', '/settings']) &&
+          !under(['/gst/settings', '/returns/settings', '/returns/new', '/billing/new', '/billing/settings']) &&
+          !/^\/billing\/(quotations\/)?[^/]+\/edit$/.test(location.pathname))
+      : // The books are the Owner's and the Accountant's; bills, the Owner's and Sales'.
+        (money || !under(['/gst', '/purchases', '/suppliers', '/supplier-returns', '/expenses', '/reports'])) && (bills || !under(['/billing']));
 
   const signOut = async () => {
     await endSession();
