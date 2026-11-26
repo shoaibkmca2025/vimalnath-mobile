@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
+import { actorOf, assessDiscounts, checkBeforePosting, measure, type Actor } from './discounts.ts';
 import { only, type Env } from './staff.ts';
 import { GST_RATES, move } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
@@ -297,7 +298,7 @@ export type InvoiceDraftInput = z.input<typeof InvoiceDraft>;
  * Saves a draft's header, lines and figures, worked out here from the lines. Every unit must be one the shop bills in,
  * and an item counted in stock is billed in its stock unit. A composition dealer's bills carry no GST (bills of supply).
  */
-export async function saveDraft(tx: TransactionSql, id: number, input: InvoiceDraftInput) {
+export async function saveDraft(tx: TransactionSql, id: number, input: InvoiceDraftInput, actor?: Actor) {
   const draft = parse(InvoiceDraft, input);
   const settings = await gstSettings(tx);
   const own = stateCode(settings.gstin);
@@ -324,6 +325,17 @@ export async function saveDraft(tx: TransactionSql, id: number, input: InvoiceDr
   const billDiscount = draft.billDiscount ?? Number(saved?.bill_discount ?? 0);
   const figures = computeInvoice(composition ? draft.items.map((item) => ({ ...item, gstRate: 0 })) : draft.items, interstate, { inclusive, billDiscount });
   if (billDiscount > figures.billDiscount + 0.001) throw new HTTPException(400, { message: `The bill discount is more than the goods (₹${figures.billDiscount + 0}).`, cause: { field: 'billDiscount' } });
+  // Each line's whole discount against its rule and the saver's authority (server/src/discounts.ts).
+  const discounts = await assessDiscounts(tx, figures.lines, { day: draft.invoiceDate, inclusive, actor, invoiceId: id });
+  const refused = discounts.findIndex((line) => line.problem);
+  if (actor && refused >= 0) {
+    // Blame the bill discount when the line's own discount keeps to its rule and only its share of the bill's tips it over.
+    const line = figures.lines[refused]!;
+    const own = measure({ ...line, taxable: line.amount }, inclusive);
+    const max = discounts[refused]!.ruleMax;
+    const field = line.billDiscount > 0 && discounts[refused]!.ruleType !== 'amount' && max !== null && own.effectivePct <= max + 0.005 ? 'billDiscount' : `items.${refused}.discountPct`;
+    throw new HTTPException(400, { message: discounts[refused]!.problem!, cause: { field } });
+  }
   const counter = {
     ...(draft.customerId !== undefined ? { customer_id: draft.customerId } : {}),
     ...(draft.customerPhone !== undefined ? { customer_phone: draft.customerPhone } : {}),
@@ -376,6 +388,17 @@ export async function saveDraft(tx: TransactionSql, id: number, input: InvoiceDr
         cgst: line.cgst,
         sgst: line.sgst,
         igst: line.igst,
+        category_id: discounts[position]!.categoryId,
+        discount_rule_id: discounts[position]!.ruleId,
+        discount_source: discounts[position]!.source,
+        rule_type: discounts[position]!.ruleType,
+        rule_min: discounts[position]!.ruleMin,
+        rule_max: discounts[position]!.ruleMax,
+        discount_value: discounts[position]!.value,
+        effective_pct: discounts[position]!.effectivePct,
+        discount_status: discounts[position]!.status,
+        discount_approval_id: discounts[position]!.approvalId,
+        discount_by: discounts[position]!.by,
       })),
     )}`;
 }
@@ -459,6 +482,8 @@ export async function postInvoice(tx: TransactionSql, id: number, by: string) {
   if (settings.registrationType === 'composition' && lines.some((line) => line.gst_rate > 0))
     throw new HTTPException(400, { message: 'A composition dealer charges no GST: save the bill again to make it a bill of supply.' });
   if (!invoice.pos_code) throw new HTTPException(400, { message: 'Choose the place of supply: the buyer’s state.' });
+  // Discounts within their rules on the bill's day, and none still waiting for approval.
+  await checkBeforePosting(tx, id);
   const counter = invoice.order_id === null && invoice.return_id === null;
   let owed: number | null = null;
   if (counter) {
@@ -629,7 +654,7 @@ export function gstRoutes(sql: Sql) {
     const id = parse(Id, c.req.param('id'));
     await sql.begin(async (tx) => {
       await draftOnly(tx, id);
-      await saveDraft(tx, id, c.req.valid('json'));
+      await saveDraft(tx, id, c.req.valid('json'), await actorOf(tx, c.get('staff')));
     });
     return c.json({ invoices: await invoices(sql, sql`i.id = ${id}`) });
   });

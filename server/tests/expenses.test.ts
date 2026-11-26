@@ -124,7 +124,7 @@ test('reports: profit and loss from real records, and the cash and bank books fr
   await send('/v1/admin/expenses', 'POST', { ...rent, amount: 9999 }, accountant.headers); // Waiting for approval: not counted.
 
   const pl = await json(await send(`/v1/admin/reports/profit-loss?${period}`, 'GET', undefined, accountant.headers));
-  assert.deepEqual(pl.sales, { orders: 1, bills: 3000, gst: 0, withoutInvoice: 1, uncostedLines: 0 });
+  assert.deepEqual(pl.sales, { orders: 1, counterBills: 0, bills: 3000, gst: 0, withoutInvoice: 1, uncostedLines: 0 });
   assert.equal(pl.netSales, 3000);
   assert.deepEqual(pl.openingStock, { value: 0, unpriced: 0 });
   assert.deepEqual(pl.purchases, { count: 1, value: 5000 }, 'before GST, which is claimed back');

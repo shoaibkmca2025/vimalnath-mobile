@@ -20,6 +20,7 @@ import {
   stateCode,
   type InvoiceDraftInput,
 } from './gst.ts';
+import { actorOf, assessDiscounts, type Actor } from './discounts.ts';
 import { only, type Env, type Role } from './staff.ts';
 import { stockItems } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
@@ -144,7 +145,7 @@ const counterOnly = (row: { order_id: number | null; return_id: number | null; n
 };
 
 /** A new counter bill draft, with its lines; returns its id. */
-async function createBill(tx: TransactionSql, input: InvoiceDraftInput, by: string, extra: { duplicateOf?: number; quotationId?: number } = {}) {
+async function createBill(tx: TransactionSql, input: InvoiceDraftInput, by: string, actor: Actor, extra: { duplicateOf?: number; quotationId?: number } = {}) {
   const [row] = await tx`
     insert into sales_invoices ${tx({
       order_id: null,
@@ -154,7 +155,7 @@ async function createBill(tx: TransactionSql, input: InvoiceDraftInput, by: stri
       duplicate_of: extra.duplicateOf ?? null,
       quotation_id: extra.quotationId ?? null,
     })} returning id`;
-  await saveDraft(tx, row!.id as number, input);
+  await saveDraft(tx, row!.id as number, input, actor);
   return row!.id as number;
 }
 
@@ -217,6 +218,10 @@ async function saveQuotation(tx: TransactionSql, id: number, input: z.output<typ
     inclusive: input.pricesIncludeGst ?? false,
     billDiscount: input.billDiscount ?? 0,
   });
+  // The same discount limits as a bill; approval waits until it becomes one.
+  const discounts = await assessDiscounts(tx, figures.lines, { day: input.invoiceDate, inclusive: input.pricesIncludeGst ?? false });
+  const refused = discounts.findIndex((line) => line.problem);
+  if (refused >= 0) throw new HTTPException(400, { message: discounts[refused]!.problem!, cause: { field: `items.${refused}.discountPct` } });
   await tx`
     update quotations set ${tx({
       quote_date: input.invoiceDate,
@@ -265,6 +270,14 @@ async function saveQuotation(tx: TransactionSql, id: number, input: z.output<typ
         cgst: line.cgst,
         sgst: line.sgst,
         igst: line.igst,
+        category_id: discounts[position]!.categoryId,
+        discount_rule_id: discounts[position]!.ruleId,
+        discount_source: discounts[position]!.source,
+        rule_type: discounts[position]!.ruleType,
+        rule_min: discounts[position]!.ruleMin,
+        rule_max: discounts[position]!.ruleMax,
+        discount_value: discounts[position]!.value,
+        effective_pct: discounts[position]!.effectivePct,
       })),
     )}`;
 }
@@ -429,7 +442,7 @@ export function billingRoutes(sql: Sql) {
   routes.post('/invoices', makers, jsonBody(Bill), async (c) => {
     const by = c.get('staff').name;
     const id = await sql.begin(async (tx) => {
-      const id = await createBill(tx, await withPlace(tx, c.req.valid('json')), by);
+      const id = await createBill(tx, await withPlace(tx, c.req.valid('json')), by, await actorOf(tx, c.get('staff')));
       await event(tx, id, 'created', by);
       return id;
     });
@@ -449,7 +462,7 @@ export function billingRoutes(sql: Sql) {
       if (row.number && financialYear(input.invoiceDate) !== row.financial_year)
         throw new HTTPException(400, { message: `${row.number} is numbered in 20${row.financial_year}: its date stays in that financial year.`, cause: { field: 'invoiceDate' } });
       const before = await snapshot(tx, id);
-      await saveDraft(tx, id, await withPlace(tx, input));
+      await saveDraft(tx, id, await withPlace(tx, input), await actorOf(tx, c.get('staff')));
       await event(tx, id, 'edited', by, { before, after: await snapshot(tx, id) });
     });
     return c.json(await answer(id));
@@ -547,6 +560,7 @@ export function billingRoutes(sql: Sql) {
           billDiscountPct: source.bill_discount_pct === null ? null : Number(source.bill_discount_pct),
         },
         by,
+        await actorOf(tx, c.get('staff')),
         { duplicateOf: id },
       );
       await event(tx, copy, 'duplicated', by, { note: `Copied from ${source.number ?? 'a draft'}` });
@@ -684,6 +698,7 @@ export function billingRoutes(sql: Sql) {
           billDiscountPct: quote!.bill_discount_pct === null ? null : Number(quote!.bill_discount_pct),
         },
         by,
+        await actorOf(tx, c.get('staff')),
         { quotationId: id },
       );
       await tx`update quotations set status = 'converted', invoice_id = ${invoiceId}, version = version + 1, updated_at = now() where id = ${id}`;

@@ -8,6 +8,7 @@ import { calculatorRoutes } from './calculators.ts';
 import { catalogueRoutes } from './catalogue.ts';
 import type { loadConfig } from './config.ts';
 import { customerRoutes } from './customers.ts';
+import { discountRoutes } from './discounts.ts';
 import { feedbackAdminRoutes } from './feedback.ts';
 import { gstRoutes } from './gst.ts';
 import { contentRoutes } from './content.ts';
@@ -50,6 +51,7 @@ export function buildApi(sql: Sql, config: ReturnType<typeof loadConfig>) {
   admin.route('/feedback', feedbackAdminRoutes(sql));
   admin.route('/gst', gstRoutes(sql));
   admin.route('/billing', billingRoutes(sql));
+  admin.route('/discounts', discountRoutes(sql));
   admin.route('/returns', returnRoutes(sql));
   admin.route('/supplier-returns', supplierReturnRoutes(sql));
   admin.route('/expenses', expenseRoutes(sql));

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { PRINT_UNIT, computeInvoice, invoiceAmount, invoiceDay, invoiceHsnTable, invoiceTaxRows } from '@/data/gst';
+import { computeInvoice, printUnit, invoiceAmount, invoiceDay, invoiceHsnTable, invoiceTaxRows } from '@/data/gst';
 import { GSTIN, codeOfState, stateOfGstin } from '@/data/india';
 import { r2 } from '@/data/purchases';
 import type { GstSettings, Order, SalesInvoice, StockItem } from '@/data/types';
@@ -103,7 +103,7 @@ export function InvoiceDocument({ invoice, settings, company, estimate = false }
   const taxRows = invoiceTaxRows(invoice.items, invoice.interstate);
   const hsnRows = invoiceHsnTable(invoice.items);
   const units = [...new Set(invoice.items.map((item) => item.unit))];
-  const totalQty = units.length === 1 ? `${Math.round(invoice.items.reduce((sum, item) => sum + item.qty, 0) * 1000) / 1000} ${PRINT_UNIT[units[0]!]}` : '';
+  const totalQty = units.length === 1 ? `${Math.round(invoice.items.reduce((sum, item) => sum + item.qty, 0) * 1000) / 1000} ${printUnit(units[0]!)}` : '';
   const shipGstin = details.shipGstin || '';
   const shipState = details.shipState || invoice.placeOfSupply || '';
   const shipCode = GSTIN.test(shipGstin) ? shipGstin.slice(0, 2) : codeOfState(shipState);
@@ -231,11 +231,11 @@ export function InvoiceDocument({ invoice, settings, company, estimate = false }
                   <td>{item.hsn}</td>
                   <td className="tally__n">
                     <strong>
-                      {item.qty} {PRINT_UNIT[item.unit]}
+                      {item.qty} {printUnit(item.unit)}
                     </strong>
                   </td>
                   <td className="tally__n">{invoiceAmount(item.rate)}</td>
-                  <td>{PRINT_UNIT[item.unit]}</td>
+                  <td>{printUnit(item.unit)}</td>
                   <td className="tally__n">{item.discountPct ? `${item.discountPct} %` : ''}</td>
                   <td className="tally__n">
                     <strong>{invoiceAmount(item.amount)}</strong>

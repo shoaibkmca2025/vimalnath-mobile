@@ -173,7 +173,7 @@ test('stock: never below zero unless allowed; a correction moves only what chang
   invoice = (await ok(owner, `/billing/invoices/${invoice.id}/finalize`, { version: invoice.version })).invoices[0]!;
   assert.deepEqual([invoice.number, invoice.reopenReason, await stock('BM')], [number, 'Customer took one more', 1]);
   // Finalizing twice from the same screen is refused, and moves nothing.
-  assert.equal((await send(`/billing/invoices/${invoice.id}/finalize`, 'POST', { version: invoice.version - 1 }, owner)).status, 409);
+  assert.equal((await send(`/billing/invoices/${invoice.id}/finalize`, 'POST', { version: invoice.version! - 1 }, owner)).status, 409);
   assert.equal(await stock('BM'), 1);
 
   // Cancelled: all four back.
