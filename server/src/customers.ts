@@ -30,7 +30,8 @@ export function customerRoutes(sql: Sql) {
       c.gstin, c.legal_name as "legalName", c.billing_address as "billingAddress", c.state, c.pincode, c.credit_limit as "creditLimit",
       -- Contact details come from the customer's apps: each one from the newest profile that gives it, so a second
       -- phone that left the business name blank doesn't hide the one the first phone sent.
-      coalesce((select d.phone from app_devices d where d.customer_id = c.id and d.phone <> '' order by d.profile_updated_at desc nulls last limit 1), '') as phone,
+      -- A customer billed at the counter has their phone on the record itself; otherwise their app's.
+      coalesce(nullif(c.phone, ''), (select d.phone from app_devices d where d.customer_id = c.id and d.phone <> '' order by d.profile_updated_at desc nulls last limit 1), '') as phone,
       coalesce((select d.business from app_devices d where d.customer_id = c.id and d.business <> '' order by d.profile_updated_at desc nulls last limit 1), '') as business,
       coalesce((select d.email from app_devices d where d.customer_id = c.id and d.email <> '' order by d.profile_updated_at desc nulls last limit 1), '') as email,
       coalesce((select d.city from app_devices d where d.customer_id = c.id and d.city <> '' order by d.profile_updated_at desc nulls last limit 1), '') as city,

@@ -245,7 +245,8 @@ const InvoiceDraft = z.object({
   // Counter bills (billing.ts). Each left out keeps what's saved, so an order invoice's editor never touches them.
   customerId: Id.nullable().optional(),
   customerPhone: Text(40).optional(),
-  dueDate: Day.nullable().optional(),
+  // A due date is usually ahead, so not capped at today.
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick the due date.').refine((day) => !Number.isNaN(Date.parse(day)) && isoDay(new Date(day)) === day, 'Pick the due date.').nullable().optional(),
   pricesIncludeGst: z.boolean().optional(),
   billDiscount: Money('bill discount').optional(),
   billDiscountPct: z.number().min(0, 'Enter 0% or more.').max(100, 'Enter 100% or less.').nullable().optional(),
@@ -406,7 +407,7 @@ export async function syncBillStock(tx: TransactionSql, id: number, by: string, 
   const counted = await tx`
     select s.product_id, s.option_label, s.quantity::float8 as quantity, s.unit, coalesce(nullif(p.name, ''), p.section, s.product_id) as name
     from stock_items s left join products p on p.id = s.product_id
-    where (s.product_id, s.option_label) in ${tx(moves.map((step) => [step.productId, step.option]) as never)}
+    where exists (select 1 from jsonb_to_recordset(${tx.json(moves.map((step) => ({ p: step.productId, o: step.option })))}) as k(p text, o text) where k.p = s.product_id and k.o = s.option_label)
     order by s.product_id, s.option_label for update of s`;
   const have = new Map(counted.map((row) => [key(row.product_id, row.option_label), row]));
   for (const step of moves) {
@@ -637,6 +638,8 @@ export function gstRoutes(sql: Sql) {
     const id = parse(Id, c.req.param('id'));
     await sql.begin(async (tx) => {
       await draftOnly(tx, id);
+      const [numbered] = await tx`select number from sales_invoices where id = ${id} and number is not null`;
+      if (numbered) throw new HTTPException(409, { message: `${numbered.number} was posted before and keeps its number. Post it again, or cancel it.` });
       await tx`delete from sales_invoices where id = ${id}`;
     });
     return c.json({ removedInvoices: [String(id)] });

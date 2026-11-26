@@ -122,6 +122,8 @@ const mediaUses = (sql: Sql) => sql<{ id: string | null; label: string; link: st
     union all select value, 'Company logo', '/settings' from settings where key = 'logo'
     union all select attachment, 'Purchase bill ' || number, '/purchases/' || id from purchases
     union all select attachment, 'GST challan ' || coalesce(nullif(challan, ''), period), '/gst/payments' from gst_payments
+    union all select invoice_logo, 'Bill logo', '/billing/settings' from gst_settings
+    union all select signature, 'Bill signature', '/billing/settings' from gst_settings
     union all select unnest(attachments), 'Return ' || number, '/returns/' || id from sales_returns
     union all select unnest(attachments), 'Supplier return ' || number, '/supplier-returns/' || id from supplier_returns
   ) used where url like '/v1/media/%'`;

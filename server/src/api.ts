@@ -3,6 +3,7 @@ import type { Sql } from 'postgres';
 import { activityRoutes } from './activity.ts';
 import { createApp } from './app.ts';
 import { appRoutes, appUserAdminRoutes } from './app-users.ts';
+import { billingRoutes } from './billing.ts';
 import { calculatorRoutes } from './calculators.ts';
 import { catalogueRoutes } from './catalogue.ts';
 import type { loadConfig } from './config.ts';
@@ -48,6 +49,7 @@ export function buildApi(sql: Sql, config: ReturnType<typeof loadConfig>) {
   admin.route('/suppliers', supplierRoutes(sql));
   admin.route('/feedback', feedbackAdminRoutes(sql));
   admin.route('/gst', gstRoutes(sql));
+  admin.route('/billing', billingRoutes(sql));
   admin.route('/returns', returnRoutes(sql));
   admin.route('/supplier-returns', supplierReturnRoutes(sql));
   admin.route('/expenses', expenseRoutes(sql));

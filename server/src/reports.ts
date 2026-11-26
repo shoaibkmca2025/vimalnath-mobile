@@ -84,7 +84,12 @@ export function reportRoutes(sql: Sql) {
       stockValue(start(from)),
       stockValue(after(to)),
     ]);
-    const s = sales[0]!;
+    // Counter bills posted in the period, as their own sales; their goods left stock as they were billed.
+    const [counter] = await sql`
+      select count(*)::int as count, coalesce(sum(total), 0)::float8 as total, coalesce(sum(cgst + sgst + igst), 0)::float8 as gst
+      from sales_invoices where order_id is null and return_id is null and status = 'posted' and invoice_date between ${from}::date and ${to}::date`;
+    const delivered = sales[0]! as unknown as { orders: number; bills: number; gst: number; withoutInvoice: number; uncostedLines: number };
+    const s = { ...delivered, bills: delivered.bills + (counter!.total as number), gst: delivered.gst + (counter!.gst as number) };
     const netSales = r2(s.bills - s.gst - returns[0]!.value);
     const netPurchases = r2(purchases[0]!.value - purchaseReturns[0]!.value);
     const costOfGoods = r2(opening.value + netPurchases - closing.value);
@@ -94,7 +99,7 @@ export function reportRoutes(sql: Sql) {
     return c.json({
       from,
       to,
-      sales: { orders: s.orders, bills: r2(s.bills), gst: r2(s.gst), withoutInvoice: s.withoutInvoice, uncostedLines: s.uncostedLines },
+      sales: { orders: s.orders, counterBills: counter!.count, bills: r2(s.bills), gst: r2(s.gst), withoutInvoice: s.withoutInvoice, uncostedLines: s.uncostedLines },
       returns: { count: returns[0]!.count, value: r2(returns[0]!.value) },
       netSales,
       openingStock: opening,
@@ -118,6 +123,10 @@ export function reportRoutes(sql: Sql) {
         select to_char(day, 'YYYY-MM-DD') as day, kind, ref, party, method, "in"::float8 as "in", "out"::float8 as "out", link from (
           select p.paid_on as day, 'Customer payment' as kind, o.number as ref, o.customer as party, p.method, p.amount::numeric as "in", 0::numeric as "out", '/orders/' || o.id as link, 1 as sort, p.id as id
           from order_payments p join orders o on o.id = p.order_id where p.method in ('cash', 'upi', 'bank', 'cheque')
+          union all
+          select p.paid_on, 'Bill payment', coalesce(i.number, 'Advance'), i.customer_name, case p.method when 'card' then 'bank' else p.method end,
+            p.amount, 0, '/billing/' || i.id, 1, p.id
+          from invoice_payments p join sales_invoices i on i.id = p.invoice_id where p.voided_at is null
           union all
           select coalesce(t.paid_on, (t.completed_at at time zone 'Asia/Kolkata')::date), case t.direction when 'out' then 'Refund to customer' else 'Paid by customer (exchange)' end,
             r.number, r.customer_name, case t.method when 'original' then 'bank' else t.method end,
