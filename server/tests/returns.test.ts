@@ -5,6 +5,7 @@ import type postgres from 'postgres';
 
 import type { CreditNote, Order, SalesReturn, SupplierReturn } from '../../admin/src/data/types.ts';
 import { createApp } from '../src/app.ts';
+import { billingRoutes } from '../src/billing.ts';
 import { financialYear, gstRoutes } from '../src/gst.ts';
 import { importSeed } from '../src/import-data.ts';
 import { migrate } from '../src/migrate.ts';
@@ -38,6 +39,7 @@ testDatabase('returns', async (client) => {
   admin.route('/suppliers', supplierRoutes(sql));
   admin.route('/gst', gstRoutes(sql));
   admin.route('/returns', returnRoutes(sql));
+  admin.route('/billing', billingRoutes(sql));
   admin.route('/supplier-returns', supplierReturnRoutes(sql));
   app.route('/v1/admin', admin);
 });
@@ -435,4 +437,70 @@ test('the Accountant: GST, purchases, suppliers, supplier returns, refunds and c
   for (const path of ['/v1/admin/gst/settings', '/v1/admin/gst/invoices', '/v1/admin/purchases', '/v1/admin/suppliers', '/v1/admin/supplier-returns', '/v1/admin/returns/credit-notes']) {
     assert.equal((await send(path, 'GET', undefined, sales)).status, 403, path);
   }
+});
+
+test('return from a counter bill: its goods (never its charges) come back at the bill’s price; the credit note gives back its tax and shows on the bill', { skip }, async () => {
+  const owner = await staff('owner');
+  await send('/v1/admin/gst/settings', 'PUT', { legalName: 'Vimalnath Sales Corporation', gstin: '27AAPFU0939F1ZV', address: 'Nashik', registrationType: 'regular', invoicePrefix: 'VSC', terms: '' }, owner);
+  await setStock(SSS, 10);
+  // A walk-in bill: 2 SSS at ₹1,500 less 10% (₹2,700 before GST) and ₹300 transport; finalized, so stock goes to 8.
+  const made = await (
+    await send(
+      '/v1/admin/billing/invoices',
+      'POST',
+      {
+        invoiceDate: today,
+        customerName: 'Walk-in customer',
+        customerPhone: '98220 11111',
+        items: [
+          { ...SSS, description: 'TGH-55 SSS', qty: 2, unit: 'pcs', rate: 1500, discountPct: 10, gstRate: 18 },
+          { description: 'Transportation charges', hsn: '996511', qty: 1, unit: 'pcs', rate: 300, gstRate: 18, lineType: 'charge' },
+        ],
+      },
+      owner,
+    )
+  ).json();
+  const finalized = await (await send(`/v1/admin/billing/invoices/${made.invoices[0].id}/finalize`, 'POST', { version: made.invoices[0].version }, owner)).json();
+  const bill = finalized.invoices[0];
+  assert.deepEqual([bill.status, bill.taxable, bill.total], ['posted', 3000, 3540]);
+  assert.equal((await stock(SSS)).available, 8);
+
+  // The return form finds it by its number, and offers only the goods line.
+  const found = await (await send(`/v1/admin/returns/orders?q=${encodeURIComponent(bill.number)}`, 'GET', undefined, owner)).json();
+  assert.deepEqual(
+    found.map((one: { kind: string; id: string }) => [one.kind, one.id]),
+    [['bill', bill.id]],
+  );
+  const source = await (await send(`/v1/admin/returns/bills/${bill.id}`, 'GET', undefined, owner)).json();
+  assert.deepEqual(
+    source.lines.map((line: { position: number; rate: number; returnable: number }) => [line.position, line.rate, line.returnable]),
+    [[0, 1350, 2]],
+  );
+  // An order and a bill at once, or neither, is refused.
+  const both = await answer(await send('/v1/admin/returns', 'POST', { kind: 'refund', orderId: 1, invoiceId: Number(bill.id), returnDate: today, reason: 'damaged', items: [{ source: 'invoice', sourcePosition: 0, qty: 1, condition: 'good' }] }, owner));
+  assert.match(both.error.message, /Choose the order or bill/);
+
+  let ret = (await step(owner, '', { kind: 'refund', invoiceId: Number(bill.id), returnDate: today, reason: 'damaged', items: [{ source: 'invoice', sourcePosition: 0, qty: 2, condition: 'good' }] })).returns[0]!;
+  assert.deepEqual([ret.orderId, ret.orderNumber, ret.invoiceNumber, ret.customerName, ret.customerPhone, ret.returnValue], [undefined, bill.number, bill.number, 'Walk-in customer', '98220 11111', 3186]);
+  assert.deepEqual(
+    ret.items.map((item) => [item.taxable, item.cgst, item.sgst]),
+    [[2700, 243, 243]],
+  );
+  // Editing keeps it with its bill.
+  const moved = await answer(await send(`/v1/admin/returns/${ret.id}`, 'PUT', { kind: 'refund', orderId: 1, returnDate: today, reason: 'damaged', items: [], version: ret.version }, owner));
+  assert.ok(moved.error);
+
+  ret = (await step(owner, `/${ret.id}/status`, { to: 'approved', version: ret.version })).returns[0]!;
+  ret = (await step(owner, `/${ret.id}/receive`, { version: ret.version })).returns[0]!;
+  assert.match(ret.creditNote!.number, /^CN-/);
+  assert.deepEqual([ret.creditNote!.taxable, ret.creditNote!.cgst, ret.creditNote!.sgst, ret.creditNote!.total], [2700, 243, 243, 3186]);
+  // Nothing more comes back; the bill shows the credit note and can't be cancelled or reopened while it stands.
+  const again = await (await send(`/v1/admin/returns/bills/${bill.id}`, 'GET', undefined, owner)).json();
+  assert.equal(again.lines[0].returnable, 0);
+  const detail = await (await send(`/v1/admin/billing/invoices/${bill.id}`, 'GET', undefined, owner)).json();
+  assert.match(detail.events.at(-1).note, new RegExp(`Credit note ${ret.creditNote!.number}`));
+  const reopen = await answer(await send(`/v1/admin/billing/invoices/${bill.id}/reopen`, 'POST', { version: detail.invoice.version, reason: 'test' }, owner));
+  assert.match(reopen.error.message, /Credit note CN-.* stands against/);
+  const list = (await (await send('/v1/admin/returns', 'GET', undefined, owner)).json()) as SalesReturn[];
+  assert.equal(list.find((one) => one.id === ret.id)?.fromBill, true);
 });

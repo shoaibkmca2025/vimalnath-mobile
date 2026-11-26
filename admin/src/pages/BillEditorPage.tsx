@@ -514,7 +514,7 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
                   {draft.rows.map((row, index) => {
                     const verdict = verdicts[index]!;
                     const line = figures.lines[index]!;
-                    const error = shown(`description-${row.key}`) ?? shown(`qty-${row.key}`) ?? shown(`rate-${row.key}`) ?? shown(`discount-${row.key}`) ?? (failure?.field === `items.${index}.discountPct` || failure?.field === `items.${index}.unit` ? failure.message : null);
+                    const error = shown(`description-${row.key}`) ?? shown(`qty-${row.key}`) ?? shown(`rate-${row.key}`) ?? errors[`discount-${row.key}`] ?? (failure?.field === `items.${index}.discountPct` || failure?.field === `items.${index}.unit` ? failure.message : null);
                     const type = verdict.rule?.enabled === false ? 'none' : (verdict.rule?.type ?? 'both');
                     const category = row.categoryId ? db.categories.find((one) => one.id === row.categoryId)?.label : undefined;
                     return (
@@ -527,13 +527,13 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
                             value={row.description}
                             onChange={(event) => setRow(row.key, { description: event.target.value })}
                             placeholder={row.lineType === 'charge' ? 'Charge, e.g. Transportation' : 'Product name or code'}
-                            style={{ minWidth: 220, fontWeight: 600 }}
+                            style={{ minWidth: 180, fontWeight: 600 }}
                             maxLength={300}
                           />
                           {row.lineType === 'goods' && (
                             <div className="row" style={{ gap: 6, marginTop: 4, flexWrap: 'nowrap' }}>
                               <input className="input input--sub" aria-label={`Description of item ${index + 1}`} value={row.detail} onChange={(event) => setRow(row.key, { detail: event.target.value })} placeholder="Description" maxLength={200} />
-                              <input className="input input--sub" aria-label={`SKU of item ${index + 1}`} value={row.sku} onChange={(event) => setRow(row.key, { sku: event.target.value })} placeholder="SKU" maxLength={60} style={{ width: 96 }} />
+                              <input className="input input--sub" aria-label={`SKU of item ${index + 1}`} value={row.sku} onChange={(event) => setRow(row.key, { sku: event.target.value })} placeholder="SKU" maxLength={60} style={{ width: 84 }} />
                             </div>
                           )}
                           <div className="cell-sub">
@@ -546,13 +546,13 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
                           )}
                         </td>
                         <td>
-                          <input className="input" aria-label={`HSN of item ${index + 1}`} inputMode="numeric" value={row.hsn} onChange={(event) => setRow(row.key, { hsn: event.target.value })} style={{ width: 92 }} maxLength={8} />
+                          <input className="input" aria-label={`HSN of item ${index + 1}`} inputMode="numeric" value={row.hsn} onChange={(event) => setRow(row.key, { hsn: event.target.value })} style={{ width: 84 }} maxLength={8} />
                         </td>
                         <td>
-                          <input id={`qty-${row.key}`} className="input" aria-label={`Quantity of item ${index + 1}`} inputMode="decimal" value={row.qty} onChange={(event) => setRow(row.key, { qty: event.target.value })} style={{ width: 72 }} />
+                          <input id={`qty-${row.key}`} className="input" aria-label={`Quantity of item ${index + 1}`} inputMode="decimal" value={row.qty} onChange={(event) => setRow(row.key, { qty: event.target.value })} style={{ width: 60 }} />
                         </td>
                         <td>
-                          <select className="select" aria-label={`Unit of item ${index + 1}`} value={row.unit} disabled={Boolean(row.stockUnit)} onChange={(event) => setRow(row.key, { unit: event.target.value })} style={{ width: 96 }}>
+                          <select className="select" aria-label={`Unit of item ${index + 1}`} value={row.unit} disabled={Boolean(row.stockUnit)} onChange={(event) => setRow(row.key, { unit: event.target.value })} style={{ width: 84 }}>
                             {unitOptions.map((option) => (
                               <option key={option.value} value={option.value}>
                                 {option.label}
@@ -561,7 +561,7 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
                           </select>
                         </td>
                         <td>
-                          <input id={`rate-${row.key}`} className="input" aria-label={`Rate of item ${index + 1}`} inputMode="decimal" value={row.rate} onChange={(event) => setRow(row.key, { rate: event.target.value })} style={{ width: 100 }} />
+                          <input id={`rate-${row.key}`} className="input" aria-label={`Rate of item ${index + 1}`} inputMode="decimal" value={row.rate} onChange={(event) => setRow(row.key, { rate: event.target.value })} style={{ width: 90 }} />
                         </td>
                         <td>
                           {row.lineType === 'charge' ? (
@@ -575,19 +575,19 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
                                   <input className="input" aria-label={`Discount % on item ${index + 1}`} inputMode="decimal" placeholder="%" value={row.discountPct} onChange={(event) => setRow(row.key, { discountPct: event.target.value })} style={{ width: 64 }} />
                                 )}
                                 {type !== 'percentage' && (
-                                  <input className="input" aria-label={`Discount in rupees on item ${index + 1}`} inputMode="decimal" placeholder="₹" value={row.discountAmount} onChange={(event) => setRow(row.key, { discountAmount: event.target.value })} style={{ width: 80 }} />
+                                  <input className="input" aria-label={`Discount in rupees on item ${index + 1}`} inputMode="decimal" placeholder="₹" value={row.discountAmount} onChange={(event) => setRow(row.key, { discountAmount: event.target.value })} style={{ width: 72 }} />
                                 )}
                               </div>
                               <div className={`cell-sub${verdict.problem ? ' money-late' : ''}`}>
                                 {rangeOf(verdict.rule)}
-                                {verdict.measured.value > 0 && ` · ${formatMoney(verdict.measured.value)} off`}
+                                {verdict.measured.value > 0 && <div>{formatMoney(verdict.measured.value)} off</div>}
                               </div>
                               {verdict.limit !== null && <div className="cell-sub bill-editor__approval">Needs approval (your limit {verdict.rule?.type === 'amount' ? formatMoney(verdict.limit) : `${verdict.limit}%`})</div>}
                             </>
                           )}
                         </td>
                         <td>
-                          <select className="select" aria-label={`GST rate of item ${index + 1}`} value={composition ? '0' : row.gstRate} disabled={composition} onChange={(event) => setRow(row.key, { gstRate: event.target.value })} style={{ width: 78 }}>
+                          <select className="select" aria-label={`GST rate of item ${index + 1}`} value={composition ? '0' : row.gstRate} disabled={composition} onChange={(event) => setRow(row.key, { gstRate: event.target.value })} style={{ width: 72 }}>
                             {GST_RATES.map((rate) => (
                               <option key={rate} value={String(rate)}>
                                 {rate}%

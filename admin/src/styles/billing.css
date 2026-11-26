@@ -24,9 +24,18 @@
 }
 
 /* The bill editor: a line's own inputs stay compact; a second row under the name for description and SKU. */
+.bill-editor th,
 .bill-editor td {
-  padding-top: var(--space-3);
-  padding-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-2);
+}
+
+.bill-editor th:first-child,
+.bill-editor td:first-child {
+  padding-left: var(--space-4);
+}
+
+.bill-editor td:nth-child(6) {
+  min-width: 132px;
 }
 
 .bill-editor .input,

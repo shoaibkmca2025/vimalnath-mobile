@@ -236,7 +236,7 @@ export default function BillPage() {
               </Button>
             )}
             {invoice.status === 'posted' && (owner || role === 'accountant') && (
-              <ButtonLink variant="plain" icon={ReceiptIcon} to={`/returns/new?invoice=${invoice.id}`}>
+              <ButtonLink variant="plain" icon={ReceiptIcon} to={`/returns/new?invoiceId=${invoice.id}`}>
                 Credit Note
               </ButtonLink>
             )}

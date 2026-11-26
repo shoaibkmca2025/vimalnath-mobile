@@ -147,7 +147,16 @@ function ReturnView({ detail, settings, onChanged }: { detail: Detail; settings:
         crumbs={[{ label: ret.kind === 'replacement' ? 'Product Replacements' : 'Customer Returns', to: ret.kind === 'replacement' ? '/returns/replacements' : '/returns/list' }]}
         description={
           <>
-            <ReturnStatusBadge status={ret.status} /> · {ret.customerName} · order <Link to={`/orders/${ret.orderId}`}>{ret.orderNumber}</Link>
+            <ReturnStatusBadge status={ret.status} /> · {ret.customerName} ·{' '}
+            {ret.orderId ? (
+              <>
+                order <Link to={`/orders/${ret.orderId}`}>{ret.orderNumber}</Link>
+              </>
+            ) : (
+              <>
+                counter bill <Link to={`/billing/${ret.invoiceId}`}>{ret.orderNumber}</Link>
+              </>
+            )}
             {ret.invoiceNumber && (
               <>
                 {' '}

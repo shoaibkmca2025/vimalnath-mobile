@@ -591,9 +591,11 @@ export type SalesReturn = {
   id: string;
   number: string;
   kind: ReturnKind;
-  orderId: string;
+  /** Missing for a return from a counter bill; orderNumber is then the bill's number. */
+  orderId?: string;
   orderNumber: string;
-  /** The order's posted tax invoice, when there was one. */
+  fromBill?: boolean;
+  /** The order's posted tax invoice, when there was one (the bill itself, for a counter bill's return). */
   invoiceId?: string;
   invoiceNumber?: string;
   invoiceDate?: string;
@@ -690,7 +692,8 @@ export type ReturnSource = {
     eligible: boolean;
   }[];
 };
-export type ReturnableOrder = { id: string; number: string; customer: string; phone?: string; placedAt: string; bill: number; invoiceNumber?: string | null; deliveredAt?: string | null };
+/** A delivered order, or a finalized counter bill (kind 'bill', its id the invoice's), to start a return from. */
+export type ReturnableOrder = { kind?: 'order' | 'bill'; id: string; number: string; customer: string; phone?: string; placedAt: string; bill: number; invoiceNumber?: string | null; deliveredAt?: string | null };
 
 /** A GST credit note against a posted tax invoice, for goods returned. */
 export type CreditNote = {

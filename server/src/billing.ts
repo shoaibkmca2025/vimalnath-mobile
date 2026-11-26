@@ -33,6 +33,7 @@ import { jsonBody, parse } from './validate.ts';
  */
 
 const METHODS = ['cash', 'upi', 'bank', 'cheque', 'card'] as const;
+const METHOD_LABEL: Record<(typeof METHODS)[number], string> = { cash: 'cash', upi: 'UPI', bank: 'bank transfer', cheque: 'cheque', card: 'card' };
 const DAY = 86_400_000;
 const MEDIA = /^\/v1\/media\/[a-f0-9]{24}\.webp$/;
 const Id = z.coerce.number().int().positive().max(2147483647);
@@ -598,7 +599,7 @@ export function billingRoutes(sql: Sql) {
         throw new HTTPException(400, { message: `That’s more than the bill still owes (${rupees(r2(row.total - paid))}).`, cause: { field: 'amount' } });
       await tx`insert into invoice_payments ${tx({ invoice_id: id, amount: payment.amount, method: payment.method, paid_on: payment.paidOn, reference: payment.reference, note: payment.note, by })}`;
       await tx`update sales_invoices set version = version + 1 where id = ${id}`;
-      await event(tx, id, 'payment', by, { note: `${rupees(payment.amount)} by ${payment.method}${payment.reference ? ` · ${payment.reference}` : ''}${row.status === 'draft' ? ' (advance)' : ''}` });
+      await event(tx, id, 'payment', by, { note: `${rupees(payment.amount)} by ${METHOD_LABEL[payment.method]}${payment.reference ? ` · ${payment.reference}` : ''}${row.status === 'draft' ? ' (advance)' : ''}` });
     });
     return c.json(await answer(id), 201);
   });
