@@ -1,6 +1,6 @@
 import { CheckCircleIcon, CopyIcon, PercentIcon, PrinterIcon, ReceiptIcon, TrashIcon, WarningCircleIcon, XCircleIcon } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, Navigate, useNavigate, useParams } from 'react-router';
 
 import { Badge } from '@/components/Badge';
 import { Button, ButtonLink } from '@/components/Button';
@@ -121,6 +121,8 @@ export default function InvoicePage() {
         </Card>
       </>
     );
+  // Counter bills have their own page: payments, discounts and stock.
+  if (invoice.source === 'counter') return <Navigate to={`/billing/${invoice.id}`} replace />;
   return invoice.status === 'draft' ? <DraftEditor key={invoice.id} invoice={invoice} settings={data.settings} onSaved={keepInvoices} /> : <PostedInvoice invoice={invoice} settings={data.settings} onSaved={keepInvoices} />;
 }
 

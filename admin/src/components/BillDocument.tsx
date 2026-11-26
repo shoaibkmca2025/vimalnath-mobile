@@ -19,10 +19,6 @@ type Props = {
   paper?: BillingSettings['paperSize'];
 };
 
-/** What CSS @page wants for each paper size. */
-export const PAGE_SIZE: Record<BillingSettings['paperSize'], string> = { A4: 'A4 portrait', A5: 'A5 portrait', thermal: '80mm auto' };
-export const PAGE_MARGIN: Record<BillingSettings['paperSize'], string> = { A4: '10mm', A5: '7mm', thermal: '3mm' };
-
 /**
  * A counter bill (or quotation) in the template chosen under Invoice Settings: classic is the shop's Tally layout;
  * modern and compact are lighter, in the theme colour; thermal paper always gets the till-roll receipt.

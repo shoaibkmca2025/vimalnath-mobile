@@ -1,12 +1,18 @@
 import { localDay } from './payments.ts';
 import { r2 } from './purchases.ts';
-import type { BillPaymentMethod, DiscountLevel, DiscountRule, Quotation, QuotationStatus, SalesInvoice } from './types';
+import type { BillingSettings, BillPaymentMethod, DiscountLevel, DiscountRule, Quotation, QuotationStatus, SalesInvoice } from './types';
 
 /**
  * Custom billing and category-wise discounts on the admin's side: what a bill owes, where it stands, and each line's
  * discount against its rule, worked out as the server does (server/src/discounts.ts) so the editor shows the same verdict
  * before saving. The server checks again on every save and before finalizing.
  */
+
+/** What CSS @page wants for each paper size in Invoice Settings. */
+export const PAGE_SIZE: Record<BillingSettings['paperSize'], string> = { A4: 'A4 portrait', A5: 'A5 portrait', thermal: '80mm auto' };
+export const PAGE_MARGIN: Record<BillingSettings['paperSize'], string> = { A4: '10mm', A5: '7mm', thermal: '3mm' };
+/** The @page rule for printing a bill on that paper. */
+export const pageRule = (paper: BillingSettings['paperSize']) => `@page { size: ${PAGE_SIZE[paper]}; margin: ${PAGE_MARGIN[paper]}; }`;
 
 export const BILL_METHODS: Record<BillPaymentMethod, string> = { cash: 'Cash', upi: 'UPI', bank: 'Bank transfer', cheque: 'Cheque', card: 'Card' };
 
@@ -137,6 +143,25 @@ export function judge(rule: DiscountRule | null, line: Priced & { discountAmount
 export function discountsOf(invoice: { items: Priced[]; pricesIncludeGst?: boolean }) {
   const lines = invoice.items.map((item) => (item.lineType === 'charge' ? null : measure(item, Boolean(invoice.pricesIncludeGst))));
   return { lines, total: r2(lines.reduce((sum, line) => sum + (line?.value ?? 0), 0)) };
+}
+
+export type DiscountGroup = { key: string; label: string; lines: number; bills: number; base: number; discount: number; pct: number };
+
+/** Discount report lines grouped (by category, product, staff member or day), largest discount first. */
+export function discountGroups<T extends { invoiceId: string; base: number; discount: number }>(lines: T[], keyOf: (line: T) => string, labelOf: (line: T) => string = keyOf) {
+  const groups = new Map<string, DiscountGroup & { invoices: Set<string> }>();
+  for (const line of lines) {
+    const key = keyOf(line);
+    const group = groups.get(key) ?? { key, label: labelOf(line), lines: 0, bills: 0, base: 0, discount: 0, pct: 0, invoices: new Set<string>() };
+    group.lines += 1;
+    group.invoices.add(line.invoiceId);
+    group.base = r2(group.base + line.base);
+    group.discount = r2(group.discount + line.discount);
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .map(({ invoices, ...group }) => ({ ...group, bills: invoices.size, pct: group.base ? Math.round((group.discount / group.base) * 10000) / 100 : 0 }))
+    .sort((a, b) => b.discount - a.discount || a.label.localeCompare(b.label));
 }
 
 /** The discount a new line starts with: the rule's suggested one. */

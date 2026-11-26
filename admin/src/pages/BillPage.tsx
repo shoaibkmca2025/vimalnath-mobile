@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 
 import { Badge } from '@/components/Badge';
-import { BillDocument, PAGE_MARGIN, PAGE_SIZE } from '@/components/BillDocument';
+import { BillDocument } from '@/components/BillDocument';
 import { Button, ButtonLink } from '@/components/Button';
 import { Card, CardHeader } from '@/components/Card';
 import { ConfirmDialog } from '@/components/Dialog';
@@ -26,7 +26,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Segmented, SelectField, TextField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/useToast';
-import { BILL_METHODS, DISCOUNT_TYPE, PAY_STATUS, balanceOf, discountsOf } from '@/data/billing';
+import { BILL_METHODS, DISCOUNT_TYPE, PAY_STATUS, balanceOf, discountsOf, pageRule } from '@/data/billing';
 import { INVOICE_STATUS, invoiceDay, printUnit } from '@/data/gst';
 import { whatsappLink } from '@/data/orders';
 import { localDay } from '@/data/payments';
@@ -179,7 +179,7 @@ export default function BillPage() {
   const statusBadge = invoice.status === 'draft' && invoice.number ? 'Reopened' : INVOICE_STATUS[invoice.status].label;
   return (
     <>
-      <style>{`@page { size: ${PAGE_SIZE[paper]}; margin: ${PAGE_MARGIN[paper]}; }`}</style>
+      <style>{pageRule(paper)}</style>
       <PageHeader
         title={invoice.number ? `Invoice ${invoice.number}` : 'Draft bill'}
         crumbs={[{ label: 'Billing', to: '/billing' }]}
