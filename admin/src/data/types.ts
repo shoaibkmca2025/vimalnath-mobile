@@ -191,7 +191,9 @@ export type StockMove = {
     | 'replacement_reversed'
     | 'written_off'
     | 'supplier_return'
-    | 'supplier_return_reversed';
+    | 'supplier_return_reversed'
+    | 'billed'
+    | 'bill_reversed';
   /** Which stock it moved; missing for what can be sold. */
   bucket?: StockBucket;
   returnId?: string | null;
@@ -204,6 +206,9 @@ export type StockMove = {
   orderNumber?: string | null;
   purchaseId?: string | null;
   purchaseNumber?: string | null;
+  /** A counter bill's goods going out, or coming back when it's corrected or cancelled. */
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
   by: string;
   at: string;
 };

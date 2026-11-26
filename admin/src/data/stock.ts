@@ -43,6 +43,8 @@ export const MOVE_LABEL: Record<StockMove['kind'], string> = {
   written_off: 'Written off',
   supplier_return: 'Sent back to supplier',
   supplier_return_reversed: 'Supplier return cancelled',
+  billed: 'Billed at the counter',
+  bill_reversed: 'Bill corrected or cancelled',
 };
 
 /** The stock a move changed, when it isn't what can be sold. */
