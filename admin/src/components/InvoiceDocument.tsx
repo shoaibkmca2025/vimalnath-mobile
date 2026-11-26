@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { discountsOf } from '@/data/billing';
 import { computeInvoice, printUnit, invoiceAmount, invoiceDay, invoiceHsnTable, invoiceTaxRows } from '@/data/gst';
 import { GSTIN, codeOfState, stateOfGstin } from '@/data/india';
 import { r2 } from '@/data/purchases';
@@ -8,6 +9,11 @@ import { rupeesInWords } from '@/lib/words';
 
 /** The shop's own details from its general settings: what a bill prints when the GST settings aren't to hand. */
 export type Company = { companyName: string; address: string; phone: string; email: string; logo: string };
+
+/** How a counter bill looks, from Invoice Settings: its heading, logo, signature and footer. */
+export type BillLook = { heading?: string; footer?: string; logo?: string | null; signature?: string | null };
+/** A quotation printed in the same layout: its own number and validity instead of the invoice's. */
+export type QuoteInfo = { validUntil?: string };
 
 export const Pair = ({ label, value }: { label: string; value: ReactNode }) => (
   <>
@@ -90,35 +96,59 @@ export function estimateOf(order: Order, stock: StockItem[]): SalesInvoice {
 
 /**
  * A tax invoice laid out as the shop's Tally invoices are, the same on screen and on paper. With `estimate`, the same
- * bill for an order not invoiced yet: titled ESTIMATE, with no invoice number or balance. Without the GST settings
- * (only Owners read them), the seller's details come from the shop's general settings.
+ * bill for an order not invoiced yet: titled ESTIMATE, with no invoice number or balance; with `quote`, a quotation.
+ * Without the GST settings (only Owners read them), the seller's details come from the shop's general settings.
+ * Counter bills add a bill discount and charges (as ledger lines, the way Tally prints them), rates typed with GST, and
+ * what has been received against the bill.
  */
-export function InvoiceDocument({ invoice, settings, company, estimate = false }: { invoice: SalesInvoice; settings: GstSettings | null; company: Company; estimate?: boolean }) {
+export function InvoiceDocument({
+  invoice,
+  settings,
+  company,
+  estimate = false,
+  look,
+  quote,
+}: {
+  invoice: SalesInvoice;
+  settings: GstSettings | null;
+  company: Company;
+  estimate?: boolean;
+  look?: BillLook;
+  quote?: QuoteInfo;
+}) {
   const cancelled = invoice.status === 'cancelled';
   const details = invoice.details ?? {};
+  const goods = invoice.items.filter((item) => item.lineType !== 'charge');
+  const charges = invoice.items.filter((item) => item.lineType === 'charge');
+  const inclusive = Boolean(invoice.pricesIncludeGst);
+  const discount = discountsOf(invoice).total;
+  const counter = invoice.source === 'counter' && !estimate && !quote;
+  const paid = counter && !cancelled ? (invoice.paid ?? 0) : 0;
   const tax = r2(invoice.cgst + invoice.sgst + invoice.igst);
   const legalName = settings?.legalName || company.companyName;
   const sellerGstin = invoice.sellerGstin ?? settings?.gstin ?? '';
   const sellerState = stateOfGstin(sellerGstin);
   const taxRows = invoiceTaxRows(invoice.items, invoice.interstate);
   const hsnRows = invoiceHsnTable(invoice.items);
-  const units = [...new Set(invoice.items.map((item) => item.unit))];
-  const totalQty = units.length === 1 ? `${Math.round(invoice.items.reduce((sum, item) => sum + item.qty, 0) * 1000) / 1000} ${printUnit(units[0]!)}` : '';
+  const units = [...new Set(goods.map((item) => item.unit))];
+  const totalQty = units.length === 1 ? `${Math.round(goods.reduce((sum, item) => sum + item.qty, 0) * 1000) / 1000} ${printUnit(units[0]!)}` : '';
   const shipGstin = details.shipGstin || '';
   const shipState = details.shipState || invoice.placeOfSupply || '';
   const shipCode = GSTIN.test(shipGstin) ? shipGstin.slice(0, 2) : codeOfState(shipState);
-  const previous = estimate ? undefined : invoice.previousBalance;
+  const previous = estimate || quote ? undefined : invoice.previousBalance;
   const phone = settings?.phone || company.phone;
   const email = settings?.email || company.email;
-  const title = estimate ? 'ESTIMATE' : cancelled ? 'TAX INVOICE (CANCELLED)' : 'TAX INVOICE';
+  const heading = look?.heading || (settings?.registrationType === 'composition' ? 'BILL OF SUPPLY' : 'TAX INVOICE');
+  const title = quote ? 'QUOTATION' : estimate ? 'ESTIMATE' : cancelled ? `${heading} (CANCELLED)` : counter && invoice.status === 'draft' ? `${heading} (DRAFT)` : heading;
+  const logo = look?.logo || company.logo;
 
   const refs: [string, string | undefined][] = [
-    estimate ? ['Order No.', invoice.orderNumber] : ['Invoice No.', invoice.number ?? ''],
+    quote ? ['Quotation No.', invoice.number] : estimate ? ['Order No.', invoice.orderNumber] : ['Invoice No.', invoice.number ?? (counter ? 'Draft' : '')],
     ['Dated', invoiceDay(invoice.invoiceDate)],
-    ['Delivery Note', details.deliveryNote],
-    ['Mode/Terms of Payment', details.paymentTerms],
+    quote ? ['Valid Until', printedDay(quote.validUntil)] : ['Delivery Note', details.deliveryNote],
+    ['Mode/Terms of Payment', details.paymentTerms || (counter && invoice.dueDate ? `Credit, due ${invoiceDay(invoice.dueDate)}` : undefined)],
     ['Reference No. & Date.', details.reference],
-    ['Other References', details.otherReferences],
+    ['Other References', details.otherReferences || (invoice.quotationNumber ? `Quotation ${invoice.quotationNumber}` : undefined)],
     ['Buyer’s Order No.', details.buyerOrderNo],
     ['Dated', printedDay(details.buyerOrderDate)],
     ['Dispatch Doc No.', details.dispatchDocNo],
@@ -129,13 +159,13 @@ export function InvoiceDocument({ invoice, settings, company, estimate = false }
 
   return (
     <div className="tally-scroll">
-      <article className="tally" aria-label={estimate ? `Estimate for order ${invoice.orderNumber}` : `Tax invoice ${invoice.number}`}>
+      <article className="tally" aria-label={quote ? `Quotation ${invoice.number}` : estimate ? `Estimate for order ${invoice.orderNumber}` : `Tax invoice ${invoice.number ?? '(draft)'}`}>
         <h2 className="tally__title">{title}</h2>
         <div className="tally__box">
           <div className="tally__top">
             <div className="tally__parties">
               <section className="tally__cell tally__seller">
-                {company.logo && <img className="tally__logo" src={company.logo} alt="" width={64} height={64} />}
+                {logo && <img className="tally__logo" src={logo} alt="" width={64} height={64} />}
                 <div className="tally__party">
                   <strong className="tally__name">{legalName}</strong>
                   {settings?.tradeName && settings.tradeName.toLowerCase() !== legalName.toLowerCase() && <div>{settings.tradeName}</div>}
@@ -173,7 +203,7 @@ export function InvoiceDocument({ invoice, settings, company, estimate = false }
                 state={invoice.placeOfSupply}
                 code={invoice.posCode}
                 contact={details.buyerContact}
-                phone={details.buyerPhone}
+                phone={details.buyerPhone || invoice.customerPhone}
                 email={details.buyerEmail}
               />
             </div>
@@ -221,7 +251,7 @@ export function InvoiceDocument({ invoice, settings, company, estimate = false }
               </tr>
             </thead>
             <tbody>
-              {invoice.items.map((item, index) => (
+              {goods.map((item, index) => (
                 <tr key={index}>
                   <td className="tally__c">{index + 1}</td>
                   <td>
@@ -234,9 +264,46 @@ export function InvoiceDocument({ invoice, settings, company, estimate = false }
                       {item.qty} {printUnit(item.unit)}
                     </strong>
                   </td>
-                  <td className="tally__n">{invoiceAmount(item.rate)}</td>
+                  <td className="tally__n">
+                    {/* A rate typed with GST prints as the rate before it, so qty × rate still makes the amount. */}
+                    {invoiceAmount(inclusive ? r2(item.rate / (1 + item.gstRate / 100)) : item.rate)}
+                    {inclusive && <div className="tally__detail">Incl. tax {invoiceAmount(item.rate)}</div>}
+                  </td>
                   <td>{printUnit(item.unit)}</td>
-                  <td className="tally__n">{item.discountPct ? `${item.discountPct} %` : ''}</td>
+                  <td className="tally__n">
+                    {item.discountPct ? `${item.discountPct} %` : ''}
+                    {item.discountAmount ? <div>₹{invoiceAmount(item.discountAmount)}</div> : null}
+                  </td>
+                  <td className="tally__n">
+                    <strong>{invoiceAmount(item.amount)}</strong>
+                  </td>
+                </tr>
+              ))}
+              {(invoice.billDiscount ?? 0) > 0 && (
+                <tr>
+                  <td />
+                  <td className="tally__ledger">
+                    <span className="tally__less">Less :</span>
+                    <strong>Discount</strong>
+                  </td>
+                  <td />
+                  <td />
+                  <td className="tally__n">{invoice.billDiscountPct ? `${invoice.billDiscountPct} %` : ''}</td>
+                  <td />
+                  <td />
+                  <td className="tally__n">
+                    <strong>(-){invoiceAmount(invoice.billDiscount ?? 0)}</strong>
+                  </td>
+                </tr>
+              )}
+              {charges.map((item, index) => (
+                <tr key={`charge-${index}`}>
+                  <td />
+                  <td className="tally__ledger">
+                    <strong>{item.description}</strong>
+                  </td>
+                  <td>{item.hsn}</td>
+                  {blanks(4)}
                   <td className="tally__n">
                     <strong>{invoiceAmount(item.amount)}</strong>
                   </td>
@@ -302,10 +369,13 @@ export function InvoiceDocument({ invoice, settings, company, estimate = false }
               <em>E. &amp; O.E</em>
             </div>
             <strong>{rupeesInWords(invoice.total)}</strong>
-            {previous !== null && previous !== undefined && (
+            {((previous !== null && previous !== undefined) || discount > 0 || paid > 0) && (
               <dl className="tally__balance">
-                <Pair label="Previous Balance :" value={<strong>{balance(previous)}</strong>} />
-                <Pair label="Current Balance :" value={<strong>{balance(r2(previous + invoice.total))}</strong>} />
+                {discount > 0 && <Pair label="Total Discount :" value={<strong>{invoiceAmount(discount)}</strong>} />}
+                {paid > 0 && <Pair label="Received :" value={<strong>{invoiceAmount(paid)}</strong>} />}
+                {paid > 0 && <Pair label="Balance Due :" value={<strong>{invoiceAmount(Math.max(0, r2(invoice.total - paid)))}</strong>} />}
+                {previous !== null && previous !== undefined && <Pair label="Previous Balance :" value={<strong>{balance(previous)}</strong>} />}
+                {previous !== null && previous !== undefined && <Pair label="Current Balance :" value={<strong>{balance(r2(previous + invoice.total - paid))}</strong>} />}
               </dl>
             )}
           </div>
@@ -406,7 +476,11 @@ export function InvoiceDocument({ invoice, settings, company, estimate = false }
               <div className="tally__declaration">
                 <span className="tally__label tally__label--rule">Declaration</span>
                 <div className="tally__address">
-                  {estimate ? 'This is an estimate, not a tax invoice. Rates and taxes are as on its date; the tax invoice follows.' : settings?.declaration}
+                  {quote
+                    ? `This is a quotation, not a tax invoice. Rates and taxes are as on its date${quote.validUntil ? `, valid until ${invoiceDay(quote.validUntil)}` : ''}.`
+                    : estimate
+                      ? 'This is an estimate, not a tax invoice. Rates and taxes are as on its date; the tax invoice follows.'
+                      : settings?.declaration}
                 </div>
                 {settings?.terms && <div className="tally__address">{settings.terms}</div>}
               </div>
@@ -424,13 +498,15 @@ export function InvoiceDocument({ invoice, settings, company, estimate = false }
               )}
               <div className="tally__sign">
                 <strong>for {legalName}</strong>
+                {look?.signature && <img className="tally__signature" src={look.signature} alt="" height={40} />}
                 <span>Authorised Signatory</span>
               </div>
             </div>
           </div>
         </div>
         {settings?.jurisdiction && <p className="tally__after">{settings.jurisdiction}</p>}
-        <p className="tally__after">{estimate ? 'This is a Computer Generated Estimate' : 'This is a Computer Generated Invoice'}</p>
+        {look?.footer && <p className="tally__after">{look.footer}</p>}
+        <p className="tally__after">{quote ? 'This is a Computer Generated Quotation' : estimate ? 'This is a Computer Generated Estimate' : 'This is a Computer Generated Invoice'}</p>
       </article>
     </div>
   );

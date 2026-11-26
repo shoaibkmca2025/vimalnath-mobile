@@ -130,5 +130,14 @@ export function judge(rule: DiscountRule | null, line: Priced & { discountAmount
   return { problem: null, limit: measured.effectivePct > limit + EPS ? limit : null };
 }
 
+/**
+ * A bill's discounts before GST, line by line (its % and ₹ off and its share of the bill discount) and in all. Worked
+ * out from the lines, so a bill made before discount rules existed shows the same.
+ */
+export function discountsOf(invoice: { items: Priced[]; pricesIncludeGst?: boolean }) {
+  const lines = invoice.items.map((item) => (item.lineType === 'charge' ? null : measure(item, Boolean(invoice.pricesIncludeGst))));
+  return { lines, total: r2(lines.reduce((sum, line) => sum + (line?.value ?? 0), 0)) };
+}
+
 /** The discount a new line starts with: the rule's suggested one. */
 export const suggested = (rule: DiscountRule | null) => (!rule || !rule.enabled ? { pct: 0, amount: 0 } : rule.type === 'amount' ? { pct: 0, amount: rule.defaultAmount } : { pct: rule.defaultPct, amount: 0 });
