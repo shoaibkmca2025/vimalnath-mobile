@@ -488,7 +488,7 @@ export function billingRoutes(sql: Sql) {
 
   // An Owner opens a posted bill again to correct it: it keeps its number, the reason is recorded, and finalizing it
   // again moves only the stock that changed. After the month's GSTR-1 is filed, a credit note is the way instead.
-  routes.post('/invoices/:id/reopen', owners, jsonBody(z.object({ version: Version, reason: Text(300).min(1, 'Say why it’s being corrected.') })), async (c) => {
+  routes.post('/invoices/:id/reopen', owners, jsonBody(z.object({ version: Version, reason: z.string('Say why it’s being corrected.').trim().min(1, 'Say why it’s being corrected.').max(300) })), async (c) => {
     const id = parse(Id, c.req.param('id'));
     const { version, reason } = c.req.valid('json');
     const by = c.get('staff').name;
@@ -504,7 +504,7 @@ export function billingRoutes(sql: Sql) {
     return c.json(await answer(id));
   });
 
-  routes.post('/invoices/:id/cancel', only('owner', 'accountant'), jsonBody(z.object({ version: Version, reason: Text(300).min(1, 'Give the reason for cancelling.') })), async (c) => {
+  routes.post('/invoices/:id/cancel', only('owner', 'accountant'), jsonBody(z.object({ version: Version, reason: z.string('Give the reason for cancelling.').trim().min(1, 'Give the reason for cancelling.').max(300) })), async (c) => {
     const id = parse(Id, c.req.param('id'));
     const { version, reason } = c.req.valid('json');
     const by = c.get('staff').name;
@@ -587,7 +587,7 @@ export function billingRoutes(sql: Sql) {
   });
 
   // A payment entered by mistake, or refunded, is voided with a reason; it stays on record.
-  routes.post('/payments/:paymentId/void', only('owner', 'accountant'), jsonBody(z.object({ reason: Text(300).min(1, 'Say why it’s voided.') })), async (c) => {
+  routes.post('/payments/:paymentId/void', only('owner', 'accountant'), jsonBody(z.object({ reason: z.string('Say why it’s voided.').trim().min(1, 'Say why it’s voided.').max(300) })), async (c) => {
     const paymentId = parse(Id, c.req.param('paymentId'));
     const by = c.get('staff').name;
     const id = await sql.begin(async (tx) => {

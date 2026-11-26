@@ -195,7 +195,7 @@ const InvoiceItem = z.object({
   description: Text(300).min(1, 'Describe every line.'),
   detail: Text(200).default(''),
   sku: Text(60).default(''),
-  hsn: Text(8).regex(/^(\d{4}|\d{6}|\d{8})?$/, 'Enter the HSN code: 4, 6 or 8 digits.'),
+  hsn: Text(8).regex(/^(\d{4}|\d{6}|\d{8})?$/, 'Enter the HSN code: 4, 6 or 8 digits.').default(''),
   qty: z.number().positive('Enter a quantity above 0.').max(10_000_000),
   /** A unit from measurement_units: the stock units, PAIR, and the shop's own. */
   unit: Text(20).min(1, 'Choose a unit.'),
