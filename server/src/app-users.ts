@@ -188,6 +188,8 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
   app.post('/notifications/delete', jsonBody(InboxIds), async (c) => c.json(await remove(sql, mine(c), c.req.valid('json').ids)));
   app.get('/notifications/preferences', async (c) => c.json(await preferencesOf(sql, mine(c))));
   app.put('/notifications/preferences', jsonBody(PreferencesInput), async (c) => c.json(await savePreferences(sql, mine(c), c.req.valid('json'))));
+  // The same as POST: the app's request helper sends GET and POST only.
+  app.post('/notifications/preferences', jsonBody(PreferencesInput), async (c) => c.json(await savePreferences(sql, mine(c), c.req.valid('json'))));
 
   app.post('/orders', jsonBody(OrderEvent), async (c) => {
     const { eventId, order } = c.req.valid('json');

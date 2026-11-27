@@ -49,7 +49,23 @@ export type SyncStatus = {
   unread: number;
 };
 /** One row of the Notifications screen. A tap opens the order it is about, if any. */
-export type AppNotification = { id: string; event: string; title: string; body: string; data: { orderId?: string; shopOrderId?: string }; createdAt: string; read: boolean };
+export type NotificationCategory = 'orders' | 'payments' | 'inventory' | 'billing' | 'returns' | 'customers' | 'announcements' | 'system';
+export type AppNotification = {
+  id: string;
+  event: string;
+  category: NotificationCategory;
+  title: string;
+  body: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  data: { orderId?: string; shopOrderId?: string };
+  createdAt: string;
+  read: boolean;
+};
+export type NotificationPage = { notifications: AppNotification[]; next: string | null; unread: number };
+export type NotificationQuery = { filter?: 'all' | 'unread' | 'read'; category?: NotificationCategory; q?: string; before?: string };
+/** On or off per category, and how the phone alerts: what Settings → Notifications changes. */
+export type NotificationPreferences = Record<'orders_enabled' | 'payments_enabled' | 'billing_enabled' | 'returns_enabled' | 'announcements_enabled' | 'sound_enabled' | 'vibration_enabled', boolean>;
 type Profile = { name: string; business: string; phone: string; email: string; city: string };
 type Activity = { type: 'price_view' | 'catalogue_view'; productId?: string; productName?: string; optionIndex?: number; optionLabel?: string; price?: number };
 type QueueEvent = { eventId: string; path: 'orders' | 'profile' | 'activity'; body: Record<string, unknown> };
@@ -415,16 +431,50 @@ export async function sendFeedback(feedback: Feedback): Promise<void> {
 }
 
 /** The Notifications screen's list, newest first (up to 100). */
-export async function fetchNotifications(): Promise<AppNotification[]> {
+async function linked() {
   await initializeAdminSync();
   if (!connection.enabled) throw new Error('Log in first.');
-  return (await request<{ notifications: AppNotification[] }>({ ...connection }, 'notifications')).notifications;
+  return { ...connection };
 }
 
-/** Seen: clears the bell here and on the shop's side. */
-export async function markNotificationsRead(): Promise<void> {
-  await request({ ...connection }, 'notifications/read', {});
-  publish({ unread: 0 });
+/** A page of the Notification Center, newest first; the unread count comes with it and updates the bell and the icon. */
+export async function fetchNotifications(query: NotificationQuery = {}): Promise<NotificationPage> {
+  // Built by hand: React Native's URLSearchParams is incomplete.
+  const params = Object.entries(query)
+    .filter((entry): entry is [string, string] => Boolean(entry[1]))
+    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+    .join('&');
+  const page = await request<NotificationPage>(await linked(), `notifications${params ? `?${params}` : ''}`);
+  publish({ unread: page.unread });
+  return page;
+}
+
+/** Read: one or some (ids), or all of them (no ids). The count is the server's, so every phone agrees. */
+export async function markNotificationsRead(ids?: string[]): Promise<number> {
+  const { unread } = await request<{ unread: number }>(await linked(), ids ? 'notifications/read' : 'notifications/read-all', ids ? { ids: ids.map(Number) } : {});
+  publish({ unread });
+  return unread;
+}
+
+export async function deleteNotifications(ids: string[]): Promise<number> {
+  const { unread } = await request<{ unread: number }>(await linked(), 'notifications/delete', { ids: ids.map(Number) });
+  publish({ unread });
+  return unread;
+}
+
+/** The unread count from the server: after a push arrives, and when the app comes back. Never a count kept here. */
+export async function refreshUnread(): Promise<void> {
+  if (!connection.enabled) return;
+  const { unread } = await request<{ unread: number }>({ ...connection }, 'notifications/unread');
+  publish({ unread });
+}
+
+export async function fetchNotificationPreferences(): Promise<NotificationPreferences> {
+  return request<NotificationPreferences>(await linked(), 'notifications/preferences');
+}
+
+export async function saveNotificationPreferences(changes: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
+  return request<NotificationPreferences>(await linked(), 'notifications/preferences', changes);
 }
 
 export function useUnreadNotifications() {
