@@ -61,7 +61,7 @@ test('a linked phone gets everything the app shows, then only the version while 
   const first = await download();
   assert.match(first.version, /^[0-9a-f]{16}$/);
   const content = first.content!;
-  assert.deepEqual(Object.keys(content), ['stock', 'products', 'categories', 'catalogPages', 'priceLists', 'cutlist', 'sections', 'banners', 'videoSections', 'moreApps', 'settings']);
+  assert.deepEqual(Object.keys(content), ['stock', 'gstRates', 'products', 'categories', 'catalogPages', 'priceLists', 'cutlist', 'sections', 'banners', 'videoSections', 'moreApps', 'settings']);
   assert.deepEqual(
     content.products!,
     seed.products.map(({ visible: _, ...product }) => ({ ...product, options: product.options.map(({ code, ...option }) => (code ? { label: option.label, code, mrp: option.mrp } : option)) })),

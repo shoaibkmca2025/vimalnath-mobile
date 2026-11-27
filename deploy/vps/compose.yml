@@ -4,15 +4,17 @@
 name: vimalnath
 services:
   db:
-    image: postgres:17-alpine
+    # The same major version as Neon, which the data came from.
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: vimalnath
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: vimalnath
     # No ports: only the API reaches it, inside Docker's network.
+    # From 18 the image keeps its data in a versioned folder under /var/lib/postgresql.
     volumes:
-      - db:/var/lib/postgresql/data
+      - db:/var/lib/postgresql
     healthcheck:
       test: pg_isready -U vimalnath -d vimalnath
       interval: 5s
@@ -41,6 +43,9 @@ services:
       context: ../..
       dockerfile: admin/Dockerfile
     restart: unless-stopped
+    # Caddy sends /v1 to the API itself, so the admin's own server only serves its files (and needn't wait for the API).
+    volumes:
+      - ../../nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
   app:
     build:

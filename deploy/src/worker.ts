@@ -1,10 +1,9 @@
 /**
- * The admin on Cloudflare (free plan): the built admin is served as static files, and /v1/* is passed to the API on
- * Render. One address for both keeps the sign-in cookie first-party, and the app's phones use this address too.
+ * The old admin address on Cloudflare (free plan). The admin now lives on the VPS: its pages forward there, and /v1/* is
+ * passed to the VPS API, because app installs from before the move still call this address.
  */
 type Env = {
-  ASSETS: Fetcher;
-  /** The API's own address, e.g. https://vimalnath-api.onrender.com (admin.jsonc). */
+  /** The admin and API on the VPS, e.g. https://admin.94-103-163-234.sslip.io (admin.jsonc). */
   API_ORIGIN: string;
   /** Shared with the API (its PROXY_SECRET): the API refuses calls without it. Set with `wrangler secret put`. */
   PROXY_SECRET: string;
@@ -13,7 +12,8 @@ type Env = {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (!url.pathname.startsWith('/v1/')) return env.ASSETS.fetch(request);
+    // The admin itself lives on the VPS now; 302, not 301, so browsers don't remember it if the address changes again.
+    if (!url.pathname.startsWith('/v1/')) return Response.redirect(`${env.API_ORIGIN}${url.pathname}${url.search}`, 302);
     // The API trusts these only because the secret proves they came from here: who the visitor is (rate limits and
     // sign-in lockouts), and that it came over https. Anything a visitor sent under these names is replaced.
     const headers = new Headers(request.headers);

@@ -1,16 +1,13 @@
-// The admin, with /v1 passed to the API on Render: `npm run deploy:admin` from this folder. Free plan.
+// The old admin address, kept for old links and the app installs that call it: /v1 is passed to the API on the VPS,
+// every page forwards to the admin on the VPS (deploy/vps), so nothing here goes stale. `npm run deploy:admin`. Free plan.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "vimalnath-admin",
   "main": "src/worker.ts",
   "compatibility_date": "2026-11-01",
-  "assets": {
-    "directory": "../admin/dist",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/v1/*"]
-  },
-  "vars": { "API_ORIGIN": "https://br-steep-morning-bi42869c-api.compute.c-5.ap-southeast-1.aws.neon.tech" },
+  // The API is an ordinary public address (the VPS); fetch it as any visitor would, not as a Cloudflare-internal call (error 1042).
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "vars": { "API_ORIGIN": "https://admin.94-103-163-234.sslip.io" },
   // An earlier Containers attempt registered an `Api` Durable Object class (it never ran or stored anything); v2 removes it.
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Api"] },

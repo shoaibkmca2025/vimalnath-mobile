@@ -1,0 +1,98 @@
+# Every push and pull request: the server, admin and app checks. A push to main that passes them all goes live on
+# the VPS (deploy/vps/deploy.sh): built first, switched only if it built, put back by itself if it isn't healthy.
+name: CI/CD
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch replaces checks still running for an older one.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    services:
+      db:
+        # The same Postgres as the VPS.
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: vimalnath
+          POSTGRES_PASSWORD: local-only
+          POSTGRES_DB: vimalnath
+        ports:
+          - 5433:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          DATABASE_URL: postgres://vimalnath:local-only@127.0.0.1:5433/vimalnath
+
+  admin:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+      - run: npm ci
+      - run: npm test
+      # Type-checks too (tsc -b).
+      - run: npm run build
+
+  app:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+
+  deploy:
+    needs: [server, admin, app]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    # One deploy at a time, in order; a deploy is never cut off halfway.
+    concurrency:
+      group: deploy-vps
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to the VPS
+        env:
+          # The private half of the deploy key (Settings › Secrets and variables › Actions). On the VPS that key can
+          # only hand over the code and run deploy/vps/deploy.sh, nothing else.
+          DEPLOY_KEY: ${{ secrets.VPS_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          # The VPS's own key, so the code only ever goes to the real server.
+          echo '[94.103.163.234]:22234 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILDxdmAXHRPTzYQ1H9hFiByX6kBL/DpYGulDfEzlVI2o' > ~/.ssh/known_hosts
+          git archive --format=tar.gz --add-virtual-file=REVISION:"$GITHUB_SHA" HEAD |
+            ssh -i ~/.ssh/deploy -p 22234 -o BatchMode=yes -o StrictHostKeyChecking=yes root@94.103.163.234
