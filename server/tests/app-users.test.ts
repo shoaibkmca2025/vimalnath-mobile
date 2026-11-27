@@ -172,7 +172,7 @@ test('register: one account per mobile number, however it is typed; the token op
   assert.deepEqual(await reason(await send('/v1/app/register', 'POST', { name: ' ', phone: '9000000001', password: 'long enough' })), [400, 'Enter your name.']);
 });
 
-test('login: the right password gives this phone its own token, and the account's other phones stay signed in; 5 wrong tries lock it; unknown numbers get the same answer', { skip }, async () => {
+test('login: the right password gives this phone its own token, and the account’s other phones stay signed in; 5 wrong tries lock it; unknown numbers get the same answer', { skip }, async () => {
   const { id, phone, mobile } = await customer();
   const res = await logIn(`0${mobile}`, PHONE_PASSWORD);
   assert.equal(res.status, 200);
@@ -188,7 +188,7 @@ test('login: the right password gives this phone its own token, and the account'
   assert.deepEqual(await reason(await logIn(mobile, PHONE_PASSWORD)), [401, wrong]);
 });
 
-test('logout: this phone's token stops working and it stops getting notifications; the account's other phone carries on', { skip }, async () => {
+test('logout: this phone’s token stops working and it stops getting notifications; the account’s other phone carries on', { skip }, async () => {
   const { id, phone, mobile } = await customer();
   const fcm = `fcm-${id}:${'A'.repeat(140)}`;
   assert.equal((await phone('/push-token', { token: 'ExponentPushToken[logout]' })).status, 200);

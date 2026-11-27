@@ -93,7 +93,7 @@ test('staff moving an order on queues a push for a phone that takes notification
   // A phone without a push address (the web app) has it on its Notifications screen, and nothing is sent.
   const quiet = await phoneWithOrder(owner);
   await send('/v1/admin/orders/status', 'POST', { ids: [quiet.id], status: 'dispatched' }, owner);
-  assert.deepEqual(await queued(quiet.id), []);
+  assert.equal((await queued(quiet.id)).length, 0);
   assert.deepEqual((await sql`select n.event from notifications n join orders o on o.device_id = n.account_id where o.id = ${quiet.id} order by n.id`).map((row) => row.event), ['received', 'dispatched']);
 });
 
