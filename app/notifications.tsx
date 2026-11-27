@@ -268,7 +268,7 @@ function PhoneAlerts({ access, onChange }: { access: NotificationAccess; onChang
                 : 'On iPhone, add this app to your Home Screen (tap Share, then Add to Home Screen) and open it from there.'}
           </Text>
           {access === 'ask' && <Button label="Turn On Notifications" size="medium" onPress={() => void turnOn()} loading={busy} style={styles.alertsButton} />}
-          {access === 'off' && Platform.OS !== 'web' && <Button label="Open Phone Settings" size="medium" variant="secondary" onPress={() => void Linking.openSettings()} style={styles.alertsButton} />}
+          {access === 'off' && Platform.OS !== 'web' && <Button label="Open Phone Settings" size="medium" variant="gray" onPress={() => void Linking.openSettings()} style={styles.alertsButton} />}
         </View>
       </View>
     </InsetGroup>
