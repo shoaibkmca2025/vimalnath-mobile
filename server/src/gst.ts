@@ -4,6 +4,7 @@ import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
 import { actorOf, assessDiscounts, checkBeforePosting, measure, type Actor } from './discounts.ts';
+import { accountsOfCustomer, notifyCustomer, notifyStaff, rupees } from './notify.ts';
 import { only, type Env } from './staff.ts';
 import { GST_RATES, move } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
@@ -522,7 +523,33 @@ export async function postInvoice(tx: TransactionSql, id: number, by: string) {
     where id = ${id}`;
   if (invoice.order_id !== null && invoice.return_id === null) await tx`update orders set bill_amount = ${Math.round(invoice.total)} where id = ${invoice.order_id}`;
   const moved = counter ? await syncBillStock(tx, id, by, { allowNegative: Boolean(invoice.allow_negative_stock || billing?.allow_negative_stock), reason: number }) : [];
+  await announceInvoice(tx, id, by, Boolean(invoice.number));
   return { number, moved };
+}
+
+/**
+ * A posted invoice reaches its buyer's app (an order's account, or a counter bill buyer's accounts): new, or corrected
+ * after reopening. A counter bill also reaches the Owner and Accountant, except whoever made it.
+ */
+async function announceInvoice(tx: TransactionSql, id: number, by: string, again: boolean) {
+  const [bill] = await tx`
+    select i.id, i.number, i.total::float8 as total, i.version, i.customer_name, i.order_id, i.return_id, i.customer_id,
+      o.device_id, o.client_order_id, o.source
+    from sales_invoices i left join orders o on o.id = i.order_id where i.id = ${id}`;
+  if (!bill) return;
+  const values = { number: bill.number, total: rupees(bill.total), customer: bill.customer_name, by };
+  const event = again ? 'invoice_updated' : 'invoice_created';
+  const key = `invoice:${id}:${bill.version}`;
+  if (bill.order_id !== null) {
+    const data: Record<string, string> = bill.client_order_id && bill.source !== 'admin' ? { orderId: bill.client_order_id } : { shopOrderId: String(bill.order_id) };
+    const link = { entityType: 'invoice', entityId: id, data };
+    await notifyCustomer(tx, bill.device_id, event, values, link, key);
+    return;
+  }
+  if (bill.return_id === null) {
+    for (const account of await accountsOfCustomer(tx, bill.customer_id)) await notifyCustomer(tx, account, event, values, { entityType: 'invoice', entityId: id }, key);
+    await notifyStaff(tx, again ? 'bill_updated' : 'bill_finalized', values, { entityType: 'invoice', entityId: id, data: { to: `/billing/${id}` } }, { roles: ['accountant'], except: { name: by } }, key);
+  }
 }
 
 /**

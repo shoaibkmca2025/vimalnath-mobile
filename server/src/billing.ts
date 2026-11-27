@@ -597,8 +597,19 @@ export function billingRoutes(sql: Sql) {
       const [{ paid }] = (await tx`select coalesce(sum(amount), 0)::float8 as paid from invoice_payments where invoice_id = ${id} and voided_at is null`) as unknown as [{ paid: number }];
       if (r2(paid + payment.amount) > row.total)
         throw new HTTPException(400, { message: `That’s more than the bill still owes (${rupees(r2(row.total - paid))}).`, cause: { field: 'amount' } });
-      await tx`insert into invoice_payments ${tx({ invoice_id: id, amount: payment.amount, method: payment.method, paid_on: payment.paidOn, reference: payment.reference, note: payment.note, by })}`;
+      const [saved] = await tx`insert into invoice_payments ${tx({ invoice_id: id, amount: payment.amount, method: payment.method, paid_on: payment.paidOn, reference: payment.reference, note: payment.note, by })} returning id`;
       await tx`update sales_invoices set version = version + 1 where id = ${id}`;
+      // The buyer's app hears what came in (and when it's paid in full); the Owner and Accountant hear it too.
+      const left = r2(row.total - paid - payment.amount);
+      const name = row.number ?? `${row.customer_name}’s bill`;
+      const values = { amount: rupees(payment.amount), number: name, balance: left > 0 ? `${rupees(left)} is still to pay.` : 'It’s paid in full.', total: rupees(row.total), customer: row.customer_name, by };
+      const link = { entityType: 'invoice', entityId: id, data: { to: `/billing/${id}` } };
+      for (const account of await accountsOfCustomer(tx, row.customer_id)) {
+        await notifyCustomer(tx, account, 'payment_received', values, { entityType: 'invoice', entityId: id }, `payment_received:bill:${saved!.id}`);
+        if (left <= 0 && row.status === 'posted') await notifyCustomer(tx, account, 'invoice_paid', values, { entityType: 'invoice', entityId: id }, `invoice_paid:bill:${id}`);
+      }
+      await notifyStaff(tx, 'payment_recorded', values, link, { roles: ['accountant'], except: { id: c.get('staff').id } }, `payment_recorded:bill:${saved!.id}`);
+      if (left <= 0 && row.status === 'posted') await notifyStaff(tx, 'bill_paid', values, link, { roles: ['accountant'], except: { id: c.get('staff').id } }, `bill_paid:${id}`);
       await event(tx, id, 'payment', by, { note: `${rupees(payment.amount)} by ${METHOD_LABEL[payment.method]}${payment.reference ? ` · ${payment.reference}` : ''}${row.status === 'draft' ? ' (advance)' : ''}` });
     });
     return c.json(await answer(id), 201);

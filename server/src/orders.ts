@@ -3,7 +3,8 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
-import { queueOrderEvent } from './notifications.ts';
+import { orderLink, queueOrderEvent } from './notifications.ts';
+import { notifyCustomer, notifyStaff, rupees as inr } from './notify.ts';
 import { storeCredit } from './returns.ts';
 import { only, type Env } from './staff.ts';
 import { moveStockForOrders } from './stock.ts';
@@ -153,13 +154,22 @@ const phoneOrders = (sql: Sql, deviceId: number) => sql`
 export async function respondToRequest(sql: Sql, deviceId: number, orderId: number, decision: 'confirm' | 'decline') {
   const status = decision === 'confirm' ? 'confirmed' : 'declined';
   await sql.begin(async (tx) => {
-    const [order] = await tx`select status from orders where id = ${orderId} and device_id = ${deviceId} for update`;
+    const [order] = await tx`select status, number, customer from orders where id = ${orderId} and device_id = ${deviceId} for update`;
     if (!order) throw new HTTPException(404, { message: 'That order is not on this connection.' });
     // Pressed twice, or on two phones: the same answer again is fine.
     if (order.status === status) return;
     if (order.status !== 'requested') throw new HTTPException(409, { message: order.status === 'cancelled' ? 'The shop has cancelled this order.' : 'This order has already been answered.' });
     await tx`update orders set status = ${status} where id = ${orderId}`;
     await tx`insert into order_events ${tx({ order_id: orderId, status, by: 'App' })}`;
+    // The office hears the answer (a confirmed one goes on to the inventory team).
+    await notifyStaff(
+      tx,
+      'request_answered',
+      { customer: order.customer, answer: status, number: order.number },
+      { entityType: 'order', entityId: orderId, data: { to: `/orders/${orderId}` } },
+      { roles: ['sales'] },
+      `request_answered:${orderId}`,
+    );
   });
 }
 
@@ -309,6 +319,8 @@ export function orderAdminRoutes(sql: Sql) {
         returning id`;
       await tx`insert into order_lines ${tx(lines.map((line) => ({ order_id: row!.id, ...line })))}`;
       await tx`insert into order_events ${tx({ order_id: row!.id, status: 'requested', by })}`;
+      // The customer's phone: a new order from the shop to confirm.
+      await queueOrderEvent(tx, row!.id as number, 'requested');
       return row!.id as number;
     });
     return c.json({ orders: await orders(sql`o.id = ${id}`) }, 201);
@@ -361,7 +373,7 @@ export function orderAdminRoutes(sql: Sql) {
   // saved or none. An order can't be paid past its bill, and only orders in progress or delivered take payments.
   admin.post('/payments', money, jsonBody(z.object({ payments: z.array(Payment).min(1, 'Enter a payment.').max(200) })), async (c) => {
     const { payments } = c.req.valid('json');
-    const by = c.get('staff').name;
+    const { name: by, id: staffId } = c.get('staff');
     const ids = [...new Set(payments.map((payment) => payment.orderId))];
     await sql.begin(async (tx) => {
       // Locked, in id order, so two people recording payments at once can't both take an order past its bill.
@@ -398,7 +410,27 @@ export function orderAdminRoutes(sql: Sql) {
           if (amount > available) throw new HTTPException(400, { message: `The customer has ${rupees(available)} of store credit, less than ${rupees(amount)}.`, cause: { field: 'payments' } });
         }
       }
-      await tx`insert into order_payments ${tx(payments.map((payment) => ({ order_id: payment.orderId, amount: payment.amount, method: payment.method, paid_on: payment.paidOn, note: payment.note, by })))}`;
+      const saved = await tx`insert into order_payments ${tx(payments.map((payment) => ({ order_id: payment.orderId, amount: payment.amount, method: payment.method, paid_on: payment.paidOn, note: payment.note, by })))} returning id, order_id`;
+      // Each order's customer hears what came in and what's left (or that it's paid); the Accountant and Owner hear it too.
+      const details = await tx`
+        select o.id, o.number, o.customer, o.device_id, o.client_order_id, o.source, coalesce(o.bill_amount, o.total) as bill
+        from orders o where o.id in ${tx(ids)}`;
+      for (const order of details) {
+        const received = payments.filter((payment) => payment.orderId === order.id).reduce((sum, payment) => sum + payment.amount, 0);
+        const left = order.bill - (paid.get(order.id) ?? 0);
+        const key = saved.filter((row) => row.order_id === order.id).map((row) => row.id).join(',');
+        const link = orderLink(order as unknown as Parameters<typeof orderLink>[0]);
+        await notifyCustomer(tx, order.device_id, 'payment_received', { amount: inr(received), number: order.number, balance: left > 0 ? `${inr(left)} is still to pay.` : 'It’s paid in full.' }, link, `payment_received:order:${key}`, order.id);
+        if (left <= 0) await notifyCustomer(tx, order.device_id, 'invoice_paid', { number: order.number, total: inr(order.bill) }, link, `invoice_paid:order:${order.id}:${order.bill}`, order.id);
+        await notifyStaff(
+          tx,
+          'payment_recorded',
+          { by, amount: inr(received), customer: order.customer, number: order.number },
+          { entityType: 'order', entityId: order.id, data: { to: `/orders/${order.id}` } },
+          { roles: ['accountant'], except: { id: staffId } },
+          `payment_recorded:order:${key}`,
+        );
+      }
     });
     return c.json({ orders: await orders(sql`o.id in ${sql(ids)}`) }, 201);
   });
@@ -423,7 +455,7 @@ export function orderAdminRoutes(sql: Sql) {
     const id = parse(OrderIds.element, c.req.param('id'));
     const { terms, bill } = c.req.valid('json');
     await sql.begin(async (tx) => {
-      const [order] = await tx`select total from orders where id = ${id} for update`;
+      const [order] = await tx`select id, number, total, coalesce(bill_amount, total) as bill, device_id, client_order_id, source from orders where id = ${id} for update`;
       if (!order) throw new HTTPException(404, { message: 'That order does not exist.' });
       // A posted tax invoice fixes the bill; changing it means cancelling the invoice (or a credit note).
       const [invoice] = await tx`select number from sales_invoices where order_id = ${id} and status = 'posted' and return_id is null`;
@@ -431,6 +463,9 @@ export function orderAdminRoutes(sql: Sql) {
       const [{ paid }] = (await tx`select coalesce(sum(amount), 0)::float8 as paid from order_payments where order_id = ${id}`) as unknown as [{ paid: number }];
       if ((bill ?? order.total) < paid) throw new HTTPException(400, { message: `${rupees(paid)} has been paid already, so the bill can’t be less. Remove a payment first.`, cause: { field: 'bill' } });
       await tx`update orders set payment_terms = ${terms}, bill_amount = ${bill === order.total ? null : bill} where id = ${id}`;
+      // A new bill amount reaches the customer (the same amount again tells nobody).
+      if ((bill ?? order.total) !== order.bill)
+        await notifyCustomer(tx, order.device_id, 'order_updated', { number: order.number, total: inr(bill ?? order.total) }, orderLink(order as unknown as Parameters<typeof orderLink>[0]), `order_updated:${id}:${bill ?? order.total}`, id);
     });
     return c.json({ orders: await orders(sql`o.id = ${id}`) });
   });
