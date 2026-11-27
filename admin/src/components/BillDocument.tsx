@@ -337,22 +337,29 @@ function ThermalBill({ invoice, settings, company, quote }: Omit<Props, 'templat
         )}
       </dl>
       <ol className="receipt__lines">
-        {invoice.items.map((item, index) => (
-          <li key={index}>
-            <div className="receipt__item">{item.description}</div>
-            <div className="receipt__row">
-              <span>{item.lineType === 'charge' ? `HSN ${item.hsn}` : `${item.qty} ${printUnit(item.unit)} × ${invoiceAmount(item.rate)}`}</span>
-              <span>{invoiceAmount(item.amount)}</span>
-            </div>
-            {(discounts.lines[index]?.value ?? 0) > 0 && (
-              <div className="receipt__row receipt__muted">
-                <span>Discount {discountText(item)}</span>
-                <span>−{invoiceAmount(discounts.lines[index]!.value)}</span>
+        {invoice.items.map((item, index) => {
+          // qty × rate, then the line's own discount, so each line adds up; the bill discount comes off in the totals.
+          const charge = item.lineType === 'charge';
+          const gross = r2(item.qty * item.rate);
+          const own = charge ? 0 : r2(gross - Math.max(0, r2(r2(gross * (1 - item.discountPct / 100)) - (item.discountAmount ?? 0))));
+          return (
+            <li key={index}>
+              <div className="receipt__item">{item.description}</div>
+              <div className="receipt__row">
+                <span>{charge ? `HSN ${item.hsn}` : `${item.qty} ${printUnit(item.unit)} × ${invoiceAmount(item.rate)}`}</span>
+                <span>{invoiceAmount(charge ? item.amount : gross)}</span>
               </div>
-            )}
-          </li>
-        ))}
+              {own > 0 && (
+                <div className="receipt__row receipt__muted">
+                  <span>Discount {discountText(item)}</span>
+                  <span>−{invoiceAmount(own)}</span>
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ol>
+      {invoice.pricesIncludeGst && <p className="receipt__note">Rates include GST.</p>}
       <dl className="receipt__pairs receipt__totals">
         {(invoice.billDiscount ?? 0) > 0 && (
           <>
