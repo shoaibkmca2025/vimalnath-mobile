@@ -4,6 +4,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql } from 'postgres';
 import { z } from 'zod';
 
+import { AddressInput, addressesOf, Gstin, makeDefault, removeAddress, saveAddress, State, STATES } from './addresses.ts';
 import { clientOf } from './app.ts';
 import { readCalculators } from './calculators.ts';
 import { readCatalogue } from './catalogue.ts';
@@ -26,10 +27,50 @@ const AppUserId = z.coerce.number().int().positive().max(2147483647);
 // A mobile number is the login: its last 10 digits, however it's typed ("+91 98200 12345", "09820012345").
 const Mobile = z.string().max(40).transform((value) => value.replace(/\D/g, '').slice(-10)).refine((digits) => digits.length === 10, 'Enter your 10-digit mobile number.');
 const Password = z.string().min(8, 'Use at least 8 characters.').max(200, 'Use 200 characters or fewer.');
-const Register = z.object({ name: z.string().trim().min(1, 'Enter your name.').max(100, 'Use 100 characters or fewer.'), business: Text, city: Text, email: Text, phone: Mobile, password: Password });
+/**
+ * A new account: the person, their shop (name, GSTIN, address) and a password. The shop's details are optional here so
+ * apps from before checkout can still register; the app asks for them, and checkout collects what's missing.
+ */
+const Register = z.object({
+  name: z.string().trim().min(1, 'Enter your name.').max(100, 'Use 100 characters or fewer.'),
+  business: Text,
+  city: Text,
+  email: Text,
+  phone: Mobile,
+  password: Password,
+  gstin: Gstin,
+  addressLine: z.string().trim().max(300, 'Use 300 characters or fewer.').default(''),
+  area: z.string().trim().max(120, 'Use 120 characters or fewer.').default(''),
+  landmark: z.string().trim().max(120, 'Use 120 characters or fewer.').default(''),
+  state: z.union([State, z.literal('')]).default(''),
+  pincode: z
+    .string()
+    .trim()
+    .regex(/^(\d{6})?$/, 'Enter the 6-digit PIN code.')
+    .default(''),
+});
+/** The account's profile in the app's shape (login, GET /profile). */
+const PROFILE = (sql: Sql) => sql`name, business, phone, email, city, gstin, address_line as "addressLine", area, landmark, state, pincode`;
 const LogIn = z.object({ phone: Mobile, password: z.string().min(1, 'Enter your password.').max(200) });
 
-const ProfileEvent = z.object({ eventId: EventId, profile: z.object({ name: Text, business: Text, phone: Text, email: Text, city: Text }) });
+// Queued from the phone, so cut to size rather than refused; the shop's address fields are optional for older apps.
+const ProfileEvent = z.object({
+  eventId: EventId,
+  profile: z.object({
+    name: Text,
+    business: Text,
+    phone: Text,
+    email: Text,
+    city: Text,
+    gstin: z.string().max(40).optional().transform((value) => value?.trim().toUpperCase().slice(0, 15)),
+    addressLine: z.string().max(5000).optional().transform((value) => value?.trim().slice(0, 300)),
+    area: z.string().max(5000).optional().transform((value) => value?.trim().slice(0, 120)),
+    landmark: z.string().max(5000).optional().transform((value) => value?.trim().slice(0, 120)),
+    state: z.string().max(100).optional().transform((value) => (value && STATES.includes(value.trim()) ? value.trim() : undefined)),
+    pincode: z.string().max(40).optional().transform((value) => (value && /^\d{6}$/.test(value.trim()) ? value.trim() : undefined)),
+  }),
+});
+const COLUMN: Record<string, string> = { addressLine: 'address_line' };
 const OrderEvent = z.object({ eventId: EventId, order: AppOrder });
 const ActivityEvent = z.object({
   eventId: EventId,
@@ -47,15 +88,20 @@ const ActivityEvent = z.object({
  * switched off, stay in the admin.
  */
 export async function appContent(sql: Sql) {
-  const [{ products, categories, catalogues, catalogPages }, { cutlist, sections }, { banners, videoSections, moreApps, settings }, stock] = await Promise.all([
+  const [{ products, categories, catalogues, catalogPages }, { cutlist, sections }, { banners, videoSections, moreApps, settings }, stock, rates] = await Promise.all([
     readCatalogue(sql),
     readCalculators(sql),
     readContent(sql),
     appStock(sql),
+    sql`select product_id, option_label, gst_rate::float8 as rate from stock_items where gst_rate is not null order by product_id, option_label`,
   ]);
+  // Each item's GST rate, so checkout can show the GST inside the prices (the prices are MRP, GST included).
+  const gstRates: Record<string, Record<string, number>> = {};
+  for (const row of rates) (gstRates[row.product_id as string] ??= {})[row.option_label as string] = row.rate as number;
   return {
     // Out or low, by product and option: the app marks them and won't add an item that's out to the cart.
     stock,
+    gstRates,
     products: products.filter((product) => product.visible).map(({ visible: _, ...product }) => product),
     categories: categories.filter((category) => category.visible).map(({ visible: _, ...category }) => category),
     catalogPages,
@@ -90,15 +136,18 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
   // Declared before the token check below, so they work without one.
   // Several phones per account: logging in on another phone starts a session there and leaves the others signed in.
   app.post('/register', jsonBody(Register), async (c) => {
-    const { name, business, city, email, phone, password } = c.req.valid('json');
+    const { name, business, city, email, phone, password, gstin, addressLine, area, landmark, state, pincode } = c.req.valid('json');
     const token = newToken();
     const passwordHash = await hashPassword(password);
     try {
       const id = await sql.begin(async (tx) => {
         // A new account is an app user; it becomes a customer with its first order (see ensureCustomer in orders.ts).
         const [device] = await tx`
-          insert into app_devices ${tx({ label: name, name, business, city, email, phone, login: phone, password_hash: passwordHash, token_hash: sha256(token), profile_updated_at: new Date() })}
+          insert into app_devices ${tx({ label: name, name, business, city, email, phone, login: phone, password_hash: passwordHash, token_hash: sha256(token), profile_updated_at: new Date(), gstin, address_line: addressLine, area, landmark, state, pincode })}
           returning id`;
+        // The shop's address starts the address book, as the default for delivery.
+        if (addressLine && city && state && pincode)
+          await tx`insert into customer_addresses ${tx({ account_id: device!.id, address_type: 'shop', label: business, receiver_name: name, contact_number: phone, address_line: addressLine, area, landmark, city, state, pincode, is_default: true })}`;
         await startSession(tx as unknown as Sql, device!.id as number, token);
         // The office hears about a new account in its notification center.
         await notifyStaff(
@@ -121,7 +170,7 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
   app.post('/login', jsonBody(LogIn), async (c) => {
     const { phone: login, password } = c.req.valid('json');
     const client = clientOf(c, trustProxy);
-    const [row] = await sql`select id, blocked, password_hash, name, business, phone, email, city from app_devices where login = ${login}`;
+    const [row] = await sql`select id, blocked, password_hash, ${PROFILE(sql)} from app_devices where login = ${login}`;
     const attempts = row ? await countAttempt(sql, `app:${login}`, client) : 0;
     const matches = await passwordMatches(password, row?.password_hash ?? (await dummyHash));
     // One message for every failure, so it can't be used to find out which numbers have accounts.
@@ -134,7 +183,11 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
       await startSession(tx as unknown as Sql, row.id as number, token);
       await tx`delete from sign_in_attempts where email = ${`app:${login}`} and client = ${client}`;
     });
-    return c.json({ token, customerId: String(row.id), profile: { name: row.name, business: row.business, phone: row.phone, email: row.email, city: row.city } });
+    return c.json({
+      token,
+      customerId: String(row.id),
+      profile: { name: row.name, business: row.business, phone: row.phone, email: row.email, city: row.city, gstin: row.gstin, addressLine: row.addressLine, area: row.area, landmark: row.landmark, state: row.state, pincode: row.pincode },
+    });
   });
 
   app.use(async (c, next) => {
@@ -243,16 +296,42 @@ export function appRoutes(sql: Sql, { trustProxy = false }: { trustProxy?: boole
     return c.json({ received: true });
   });
 
+  // The account's own details and address book, for checkout and the profile screens.
+  app.get('/profile', async (c) => {
+    const [profile] = await sql`select ${PROFILE(sql)} from app_devices where id = ${c.get('deviceId')}`;
+    return c.json({ profile, addresses: await addressesOf(sql, c.get('deviceId')) });
+  });
+  app.get('/addresses', async (c) => c.json({ addresses: await addressesOf(sql, c.get('deviceId')) }));
+  app.post('/addresses', jsonBody(AddressInput), async (c) => {
+    const id = await saveAddress(sql, c.get('deviceId'), c.req.valid('json'));
+    return c.json({ id, addresses: await addressesOf(sql, c.get('deviceId')) }, 201);
+  });
+  app.post('/addresses/:id', jsonBody(AddressInput), async (c) => {
+    const id = await saveAddress(sql, c.get('deviceId'), c.req.valid('json'), parse(AppUserId, c.req.param('id')));
+    return c.json({ id, addresses: await addressesOf(sql, c.get('deviceId')) });
+  });
+  app.post('/addresses/:id/delete', async (c) => {
+    await removeAddress(sql, c.get('deviceId'), parse(AppUserId, c.req.param('id')));
+    return c.json({ addresses: await addressesOf(sql, c.get('deviceId')) });
+  });
+  app.post('/addresses/:id/default', async (c) => {
+    await makeDefault(sql, c.get('deviceId'), parse(AppUserId, c.req.param('id')));
+    return c.json({ addresses: await addressesOf(sql, c.get('deviceId')) });
+  });
+
   // The shop's public key, which the web app needs to ask its browser for a push subscription.
   app.get('/push-key', async (c) => c.json({ publicKey: (await webPushKeys(sql)).publicKey }));
 
   app.post('/profile', jsonBody(ProfileEvent), async (c) => {
-    const { eventId, profile } = c.req.valid('json');
+    const { eventId, profile: sent } = c.req.valid('json');
+    // Fields an older app doesn't send (or sends unusable) stay as they are.
+    const profile = Object.fromEntries(Object.entries(sent).filter(([, value]) => value !== undefined)) as Record<string, string>;
+    const columns = Object.fromEntries(Object.entries(profile).map(([key, value]) => [COLUMN[key] ?? key, value]));
     await sql.begin(async (tx) => {
-      const [before] = await tx`select name, business, phone, email, city from app_devices where id = ${c.get('deviceId')} for update`;
-      await tx`update app_devices set ${tx(profile)}, profile_updated_at = now() where id = ${c.get('deviceId')}`;
+      const [before] = await tx`select ${PROFILE(tx as unknown as Sql)} from app_devices where id = ${c.get('deviceId')} for update`;
+      await tx`update app_devices set ${tx(columns)}, profile_updated_at = now() where id = ${c.get('deviceId')}`;
       // What changed, for the office (a resend changes nothing, so tells nobody).
-      const LABEL: Record<string, string> = { name: 'name', business: 'business', phone: 'mobile', email: 'email', city: 'city' };
+      const LABEL: Record<string, string> = { name: 'name', business: 'shop name', phone: 'mobile', email: 'email', city: 'city', gstin: 'GSTIN', addressLine: 'address', area: 'area', landmark: 'landmark', state: 'state', pincode: 'PIN code' };
       const changed = Object.entries(profile).filter(([key, value]) => before && before[key] !== value).map(([key, value]) => `${LABEL[key]} ${value || '(removed)'}`);
       if (changed.length)
         await notifyStaff(
