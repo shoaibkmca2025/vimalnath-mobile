@@ -23,6 +23,23 @@
   color: var(--text-3);
 }
 
+/* A row's own name (th scope="row") reads as the row's first cell, not as a column heading. */
+.table tbody th,
+.table tfoot th {
+  position: static;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 600;
+  text-align: left;
+}
+
+.table tfoot td,
+.table tfoot th {
+  padding: 10px var(--space-4);
+  border-top: 1px solid var(--border-strong);
+}
+
 /* The bill editor: a line's own inputs stay compact; a second row under the name for description and SKU. */
 .bill-editor th,
 .bill-editor td {
@@ -395,6 +412,14 @@
   color: #444;
 }
 
+.receipt__totals {
+  column-gap: 0;
+}
+
+.receipt__totals dd {
+  padding-left: 8px;
+}
+
 .receipt__totals .receipt__grand {
   padding: 4px 0;
   border-top: 1px dashed #000;
@@ -428,10 +453,21 @@
   background: var(--surface-sunken);
 }
 
-.settings-split__preview .tally,
-.settings-split__preview .bill {
-  min-width: 720px;
-  transform-origin: top left;
+.settings-split__preview {
+  overflow-x: hidden;
+}
+
+.settings-split__page {
+  margin: 0 auto;
+}
+
+.settings-split__page .tally,
+.settings-split__page .bill {
+  min-width: 0;
+}
+
+.settings-split__page .tally-scroll {
+  overflow: visible;
 }
 
 @media (max-width: 1280px) {

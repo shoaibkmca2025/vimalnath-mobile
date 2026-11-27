@@ -1,5 +1,5 @@
 import { PlusIcon, ReceiptIcon, TrashIcon } from '@phosphor-icons/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { BillDocument } from '@/components/BillDocument';
@@ -272,11 +272,34 @@ function SettingsForm({ setup, onSaved }: { setup: BillingSetup; onSaved: (setup
             </Button>
           </div>
         </div>
-        <div className="settings-split__preview" aria-label="Preview">
+        <FitPreview width={previewSettings.paperSize === 'thermal' ? 320 : previewSettings.paperSize === 'A5' ? 760 : 1000}>
           <BillDocument invoice={example} settings={previewSettings} company={db.settings} />
-        </div>
+        </FitPreview>
       </div>
     </form>
+  );
+}
+
+/** The sample bill scaled down to the pane's width, as a page is in a print preview: the whole design at a glance. */
+function FitPreview({ width, children }: { width: number; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const pane = ref.current;
+    if (!pane) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const room = entry!.contentRect.width;
+      setScale(Math.min(1, Math.max(0.3, room / width)));
+    });
+    observer.observe(pane);
+    return () => observer.disconnect();
+  }, [width]);
+  return (
+    <div ref={ref} className="settings-split__preview" aria-label="Preview">
+      <div className="settings-split__page" style={{ width, zoom: scale }}>
+        {children}
+      </div>
+    </div>
   );
 }
 

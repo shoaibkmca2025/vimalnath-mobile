@@ -40,6 +40,8 @@ type Row = {
   discountAmount: string;
   gstRate: string;
   lineType: 'goods' | 'charge';
+  /** The discount an approver already allowed on this line; the same discount needs no new approval. */
+  approved: { pct: number; amount: number; effective: number } | null;
 };
 type Draft = {
   invoiceDate: string;
@@ -151,6 +153,7 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
       discountAmount: item.discountAmount ? String(item.discountAmount) : '',
       gstRate: String(item.gstRate),
       lineType: item.lineType ?? 'goods',
+      approved: item.discountStatus === 'approved' ? { pct: item.discountPct, amount: item.discountAmount ?? 0, effective: item.effectivePct ?? 0 } : null,
     });
     return {
       invoiceDate: day,
@@ -204,7 +207,12 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
     const rule = row.lineType === 'goods' ? ruleFor(rules, discounts.productRules, { productId: row.productId, option: row.option, categoryId: row.categoryId }) : null;
     const line = { ...priced[index]!, taxable: figures.lines[index]!.taxable };
     const measured = measure(line, draft.pricesIncludeGst);
-    return { rule, measured, ...judge(rule, line, measured, discounts.me) };
+    const verdict = judge(rule, line, measured, discounts.me);
+    // As the server decides: an approval stands while the line keeps exactly the discount that was approved.
+    const kept = Boolean(
+      row.approved && Math.abs(row.approved.pct - line.discountPct) < 0.005 && Math.abs(row.approved.amount - line.discountAmount) < 0.005 && Math.abs(row.approved.effective - measured.effectivePct) < 0.01,
+    );
+    return { rule, measured, ...verdict, approved: verdict.limit !== null && kept, waiting: verdict.limit !== null && !kept };
   });
   const totalDiscount = r2(verdicts.reduce((sum, verdict) => sum + verdict.measured.value, 0));
 
@@ -226,7 +234,7 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
   };
   const firstError = Object.entries(errors).find(([, message]) => message);
   const shown = (key: string) => (touched ? errors[key] : null) ?? (failure?.field === key ? failure.message : null);
-  const needsApproval = verdicts.filter((verdict) => verdict.limit !== null).length;
+  const needsApproval = verdicts.filter((verdict) => verdict.waiting).length;
 
   // ---------- Adding lines ----------
   const focus = (key: string) => requestAnimationFrame(() => document.getElementById(key)?.focus());
@@ -257,6 +265,7 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
           discountAmount: start.amount ? String(start.amount) : '',
           gstRate: String(picked.stock?.gstRate ?? 18),
           lineType: 'goods',
+          approved: null,
         },
       ],
     }));
@@ -285,6 +294,7 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
           discountAmount: '',
           gstRate: '18',
           lineType,
+          approved: null,
         },
       ],
     }));
@@ -330,6 +340,8 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
         toast({ tone: 'error', message: firstError[1]! });
         return;
       }
+      // A discount waiting for approval: the bill is saved as a draft, and finalized once it's approved.
+      if (finalize && needsApproval) finalize = false;
       setSaving(finalize ? 'finalize' : 'save');
       try {
         if (mode === 'quotation') {
@@ -582,7 +594,8 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
                                 {rangeOf(verdict.rule)}
                                 {verdict.measured.value > 0 && <div>{formatMoney(verdict.measured.value)} off</div>}
                               </div>
-                              {verdict.limit !== null && <div className="cell-sub bill-editor__approval">Needs approval (your limit {verdict.rule?.type === 'amount' ? formatMoney(verdict.limit) : `${verdict.limit}%`})</div>}
+                              {verdict.approved && <div className="cell-sub">Approved</div>}
+                              {verdict.waiting && verdict.limit !== null && <div className="cell-sub bill-editor__approval">Needs approval (your limit {verdict.rule?.type === 'amount' ? formatMoney(verdict.limit) : `${verdict.limit}%`})</div>}
                             </>
                           )}
                         </td>
@@ -716,7 +729,7 @@ function Editor({ mode, invoice, quote, setup, discounts, title, crumbs }: { mod
                 </p>
               )}
               {mode === 'invoice' && (
-                <Button variant="primary" block icon={CheckCircleIcon} loading={saving === 'finalize'} disabled={saving !== null} onClick={() => save(true)} aria-keyshortcuts="Control+Enter">
+                <Button variant="primary" block icon={CheckCircleIcon} loading={saving === 'finalize'} disabled={saving !== null || needsApproval > 0} onClick={() => save(true)} aria-keyshortcuts="Control+Enter">
                   Finalize Invoice
                 </Button>
               )}

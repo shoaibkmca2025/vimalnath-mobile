@@ -135,7 +135,7 @@ export default function DiscountReportPage() {
               {shown.length ? (
                 <>
                   {by !== 'day' && (
-                    <div className="card__body" style={{ paddingTop: 0 }}>
+                    <div className="card__body">
                       <BarList label={`Discount by ${BY_LABEL[by].toLowerCase()}`} rows={shown.map((group) => ({ key: group.key, label: group.label, value: group.discount, detail: `${group.pct}% of ${formatMoney(group.base)}` }))} format={formatMoney} />
                     </div>
                   )}

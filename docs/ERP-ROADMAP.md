@@ -48,8 +48,8 @@ The existing stack stays. New modules follow the patterns already in place:
 | GST | Credit notes for returns (Sales Register tab, GSTR-3B and HSN net of them) | ✅ |
 | GST | GSTR-1 working (B2B, B2C Large and Small, CDNR, CDNUR, documents issued; CSV per section in the offline tool's columns) | ✅ |
 | GST | GSTR-2B matching, debit notes | ⬜ Phase 3 |
+| Billing | Billing (dashboard and every bill), New Bill, Quotations, Discount Approvals (red count), Discount Management, Discount Report, Invoice Settings (Owner) | ✅ |
 | Returns & Replacements | Returns Dashboard, Customer Returns, Product Replacements, Refund Management, Return Requests, Supplier Returns, Return Reports, Return Settings | ✅ |
-| Sales | Quotations | ⬜ Phase 3 |
 | Sales | Feedback from the app | ✅ |
 | Purchases | Purchases, Suppliers | ✅ |
 | Purchases | Expenses (Accountant enters, Owner approves; bill upload; GST and seller GSTIN; cancelled, never deleted once approved) | ✅ |
@@ -70,6 +70,8 @@ New tables, by phase:
 | 3 (part ✅) | `gst_settings`, `sales_invoices`, `sales_invoice_items`, `invoice_counters`, `gst_payments`, purchases' `itc_*` columns, customers' GST columns; next: `credit_notes`,, `invoice_items`, `quotations`, `quotation_items`, `credit_notes`, `returns`, `return_items`, `invoice_numbers` (per type, per financial year); `customers` gains GSTIN, addresses, state, credit limit, opening balance |
 | Returns (✅) | `return_settings`, `sales_returns`, `sales_return_items`, `replacement_items`, `return_events` (status history and audit log), `refund_transactions`, `sales_credit_notes`, `supplier_returns`, `supplier_return_items`, `supplier_return_events`; `stock_items` gains `held`, `damaged`, `defective`; `stock_moves` gains `bucket`, `return_id`, `supplier_return_id`; `sales_invoices` gains `return_id`; `order_payments` gains `refund_id` and the methods `return` and `store_credit` (migration 025) |
 | 4 (✅) | `expenses`, `book_openings` (migration 027); reports read the existing tables (`server/src/reports.ts`) |
+| Billing (✅) | `measurement_units`, `invoice_payments`, `invoice_events` (audit with before and after), `quotations`, `quotation_items`; `sales_invoices.order_id` optional (counter bills) with customer, due date, GST-inclusive rates, bill discount, version; lines gain SKU, ₹ discount, charge lines; `stock_moves.invoice_id`; Invoice Settings columns on `gst_settings` (migration 029) |
+| Discounts (✅) | `discount_rules` (default, category, product), `discount_approvals`, `discount_events`; staff discount level and limit; each bill and quotation line keeps the rule it was billed under (migration 030). Returns from counter bills: `sales_returns.order_id` optional (migration 031) |
 | 5 | `permissions` (per role), `notifications` for staff, barcode labels |
 
 Key relations: a purchase belongs to a supplier and has items pointing at a stock item (product + option); a stock move points at the order or purchase that caused it; a supplier payment points at a supplier and, usually, one purchase.
@@ -84,9 +86,29 @@ Key relations: a purchase belongs to a supplier and has items pointing at a stoc
 - **GST invoice** (Phase 3): draft → posted (numbered per financial year) → cancelled or credit note. CGST + SGST inside the state, IGST outside, from the customer's state.
   Printed in the shop's own Tally format (their invoice VSC-26-27-412): rate before GST less a discount per line, GST on the total at each rate (CGST and SGST at half the rate each), rounded to the rupee; numbers `VSC-26-27-413` carry on from the last Tally number set in GST Settings; ship-to and bill-to with contacts, the reference boxes, the buyer's previous and current balance, an HSN/SAC tax table, amounts in words ("INR … Only"), bank details, declaration and jurisdiction.
 
+## 5b. Counter billing and discounts (built)
+
+**Bills** (`server/src/billing.ts`, `/v1/admin/billing`; Owners and Sales make them, the Accountant reads them and voids payments). A counter bill is a tax invoice without an order, in the same VSC series as order invoices.
+
+- **Lines**: products from stock (billed in their stock unit), items typed by hand (any unit, including the shop's own from Invoice Settings), and charges (transport, packing: taxed, never discounted or taken from stock). A rate can be changed on the bill without touching the product's price.
+- **Figures** (`computeInvoice`, the same on the server and in the editor): qty × rate less the line's % and ₹ discounts; rates typed with GST are taken back to before it; the bill discount is shared over the goods by value; GST at each rate (CGST + SGST, or IGST for another state; none for a composition dealer); rounded to the rupee. Grand total = taxable + GST + round off; balance = total − payments.
+- **Steps**: draft (saved with Ctrl+S, deletable while it has no number) → **finalize** (Ctrl+Enter: the next number, the goods out of stock, refused below zero unless allowed for the bill or in Invoice Settings) → reopened by an Owner to correct it (keeps its number; finalizing again moves only the stock that changed) → cancelled (Owner or Accountant, after any payments are voided; the goods go back). Every action carries the bill's `version` and is logged with before and after.
+- **Money**: advances on a draft and part payments (cash, UPI, bank, cheque, card), never past the total; a payment entered by mistake is voided with a reason and stays on record. The cash book counts them.
+- **Print**: Classic (the Tally layout), Modern, Compact, or a thermal 80 mm receipt; A4 or A5; logo, signature, heading, footer and colour from Invoice Settings; PDF from the print dialog; WhatsApp sends a summary with the balance and bank details.
+- **Quotations**: QTN-26-27-1, their own series; draft → sent → accepted → **converted** to a draft bill dated today (checked again before finalizing), or expired / cancelled.
+- **Credit note**: from a finalized counter bill, a return (as for an order) gives the goods back and issues the GST credit note; the bill shows it in its history and can't be reopened or cancelled while it stands.
+
+**Discounts** (`server/src/discounts.ts`, `/v1/admin/discounts`). Each goods line's rule: its product's own (while product overrides are on), else its category's, else the default policy, only between the rule's dates. A rule sets the lowest and highest discount (% or ₹ off each unit), the suggested one, and what billing staff may give alone. The discount counted is the whole of it before GST, the line's share of the bill discount included.
+
+- Outside the range: shown on the line as it's typed, refused on saving and again before finalizing.
+- Above the giver's authority (billing staff: the rule's staff limit; a manager: their own limit, never past the rule's maximum; Owners and discount admins: the rule's maximum): saving asks for approval; the bill can't be finalized until an Owner or discount admin approves it (Discount Approvals); a refusal needs a reason. Changing the discount asks again.
+- Each finalized line keeps the rule's values, its source, the discount and its approval, so later rule changes don't change old bills. The Discount Report groups finalized bills by category, product, staff member or day, with the approval history and rule changes.
+
+Tests: `server/tests/billing.test.ts`, `server/tests/discounts.test.ts`, the counter-bill return in `server/tests/returns.test.ts`, and `admin/tests/billing.test.ts` (the editor's figures match the server's).
+
 ## 5a. Returns & Replacements (built)
 
-**Customer returns** (`server/src/returns.ts`, `/v1/admin/returns`). A return comes from a delivered order and copies each line as it was sold: from the posted tax invoice when there is one (rate before GST, HSN, the line's own CGST/SGST/IGST, a whole line giving back exactly its tax), otherwise at the price billed. Only what was sold less what other returns (not rejected or cancelled) already take can come back.
+**Customer returns** (`server/src/returns.ts`, `/v1/admin/returns`). A return comes from a delivered order, or from a finalized counter bill, and copies each line as it was sold: from the posted tax invoice when there is one (rate before GST, HSN, the line's own CGST/SGST/IGST, a whole line giving back exactly its tax), otherwise at the price billed. Only what was sold less what other returns (not rejected or cancelled) already take can come back.
 
 - Steps: Pending → Under Review → Approved / Rejected → Product Received → Quality Checked → Refund Processed / Replacement Completed → Closed; Cancelled before or after receipt (after receipt it is a reversal: its stock moves are undone and its credit note cancelled; not once money has been paid).
 - Every step locks the return and carries its `version`: an action from an out-of-date screen is refused with who changed it, so two people can't act at once and a repeated approval moves nothing twice.
@@ -106,7 +128,7 @@ Tests: `server/tests/returns.test.ts` (the real-world cases: one item of several
 | --- | --- | --- |
 | 1. Core | Sign-in, dashboard, products and categories, stock and stock ledger, customers, customer payments | ✅ |
 | 2. Purchases | Suppliers (profile, ledger, outstanding), purchase bills with items, freight, discount and GST, receive goods → stock in, supplier payments, bill attachment, dashboard purchase cards | ✅ |
-| 3. Billing and GST | Done: GST settings, customer GST details, tax invoices from orders (CGST/SGST or IGST by place of supply, numbered per financial year, print, cancel), purchase tax split and input tax credit review, registers, HSN summary, GSTR-3B working with the legal set-off order, GST payments. Credit notes with returns are done (Phase 4 below). Also done: GSTR-1 working with CSV per section, customer credit limits (migration 028; warned on the customer and their open orders). Next: GSTR-2B upload and matching, debit notes. Quotations are Order Requests (sent to the customer's app, confirmed into an order, printed as an estimate) | 🔨 |
+| 3. Billing and GST | Done: GST settings, customer GST details, tax invoices from orders (CGST/SGST or IGST by place of supply, numbered per financial year, print, cancel), purchase tax split and input tax credit review, registers, HSN summary, GSTR-3B working with the legal set-off order, GST payments. Credit notes with returns are done (Phase 4 below). Also done: GSTR-1 working with CSV per section, customer credit limits (migration 028; warned on the customer and their open orders). Counter billing with quotations, payments, templates and category-wise discounts is built (5b above). Next: GSTR-2B upload and matching, debit notes | 🔨 |
 | Returns & Replacements | Customer returns and exchanges with approval, receipt, quality check and restocking rules, refunds and store credit, GST credit notes, supplier returns, dashboard, reports, settings and permissions | ✅ |
 | 4. Accounts and reports | Expenses, cash and bank book, sales, purchase, stock and GST reports, profit and loss, CSV (opens in Excel) and print (save as PDF); date filters for today, yesterday, this week, month, quarter and financial year | ✅ |
 | 5. Advanced | Barcodes and QR labels, barcode billing, Accountant and Manager roles with permissions, staff notifications, stock ageing, customer-specific prices | ⬜ |

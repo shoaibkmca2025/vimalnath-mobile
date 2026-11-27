@@ -288,7 +288,7 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
                 action={
                   !existing && (
                     <Button size="sm" variant="plain" onClick={() => setParams(draft.kind === 'replacement' ? { kind: 'replacement' } : {}, { replace: true })}>
-                      Change Order
+                      {fromBill ? 'Change Bill' : 'Change Order'}
                     </Button>
                   )
                 }
