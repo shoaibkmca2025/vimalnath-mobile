@@ -21,6 +21,7 @@ import {
   type InvoiceDraftInput,
 } from './gst.ts';
 import { actorOf, assessDiscounts, type Actor } from './discounts.ts';
+import { accountsOfCustomer, notifyCustomer, notifyStaff } from './notify.ts';
 import { only, type Env, type Role } from './staff.ts';
 import { stockItems } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
@@ -131,8 +132,8 @@ async function snapshot(tx: TransactionSql, id: number) {
 
 /** Locks a counter bill for a change, refusing one decided on an out-of-date screen or one that isn't a counter bill. */
 async function lockBill(tx: TransactionSql, id: number, version?: number) {
-  type Locked = { id: number; number: string | null; status: string; version: number; order_id: number | null; return_id: number | null; customer_id: number | null; total: number; financial_year: string | null };
-  const [row] = await tx<Locked[]>`select id, number, status, version, order_id, return_id, customer_id, total::float8 as total, financial_year from sales_invoices where id = ${id} for update`;
+  type Locked = { id: number; number: string | null; status: string; version: number; order_id: number | null; return_id: number | null; customer_id: number | null; customer_name: string; total: number; financial_year: string | null };
+  const [row] = await tx<Locked[]>`select id, number, status, version, order_id, return_id, customer_id, customer_name, total::float8 as total, financial_year from sales_invoices where id = ${id} for update`;
   if (!row) throw new HTTPException(404, { message: 'That bill does not exist.' });
   if (version !== undefined && row.version !== version) {
     const [last] = await tx`select by from invoice_events where invoice_id = ${id} order by id desc limit 1`;
