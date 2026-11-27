@@ -49,6 +49,11 @@ export const formatFeetRoundedUp = (mm: number) => `${Math.ceil(mm / 304.8 - 1e-
 /** "39 3/16″ × 78 3/16″" */
 export const formatInchSize = (widthMm: number, heightMm: number) => `${formatInches(widthMm)} × ${formatInches(heightMm)}`;
 
+/** A size with L (length) and H (height) marked, so a printed plan can't be read the wrong way round: "L 1200 × H 2400 mm". */
+export const formatSizeLH = (lengthMm: number, heightMm: number) => `L ${lengthMm} × H ${heightMm} mm`;
+/** The same in inches: "L 47 1/4″ × H 94 1/2″". */
+export const formatInchSizeLH = (lengthMm: number, heightMm: number) => `L ${formatInches(lengthMm)} × H ${formatInches(heightMm)}`;
+
 /**
  * A 10-digit mobile number as it's typed: digits only, shown 5 + 5 ("98220 12345"). A pasted +91 or leading 0
  * is dropped, and anything past 10 digits is ignored.
