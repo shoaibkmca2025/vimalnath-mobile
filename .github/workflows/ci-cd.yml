@@ -55,7 +55,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: admin/package-lock.json
+          cache-dependency-path: |
+            admin/package-lock.json
+            server/package-lock.json
+      # Some admin tests prove the admin works money out exactly as the server does, so they load server code too.
+      - run: npm ci
+        working-directory: server
       - run: npm ci
       - run: npm test
       # Type-checks too (tsc -b).
