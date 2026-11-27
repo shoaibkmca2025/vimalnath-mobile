@@ -1,0 +1,16 @@
+# HTTPS for both addresses; Caddy gets and renews the certificates itself.
+{$ADMIN_HOST} {
+	encode zstd gzip
+	# The API directly, so it sees the visitor's address and that they came over https.
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+	handle {
+		reverse_proxy admin:80
+	}
+}
+
+{$APP_HOST} {
+	encode zstd gzip
+	reverse_proxy app:80
+}

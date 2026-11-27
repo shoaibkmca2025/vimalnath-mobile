@@ -1,0 +1,74 @@
+# Everything on one VPS: the database, the API, the admin, the app's web version, and Caddy for HTTPS.
+# On the VPS, from /opt/vimalnath:  docker compose -f deploy/vps/compose.yml --env-file .env up -d --build
+# .env (made on the VPS, never copied off it) holds ADMIN_HOST, APP_HOST and POSTGRES_PASSWORD.
+name: vimalnath
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vimalnath
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: vimalnath
+    # No ports: only the API reaches it, inside Docker's network.
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready -U vimalnath -d vimalnath
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ../../server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://vimalnath:${POSTGRES_PASSWORD}@db:5432/vimalnath
+      ADMIN_ORIGIN: https://${ADMIN_HOST:?set ADMIN_HOST in .env}
+      # Caddy is the only way in, and it sets X-Forwarded-For and X-Forwarded-Proto itself.
+      TRUST_PROXY: 'true'
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: wget -qO- http://127.0.0.1:3000/v1/health
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  admin:
+    build:
+      context: ../..
+      dockerfile: admin/Dockerfile
+    restart: unless-stopped
+
+  app:
+    build:
+      context: ../..
+      args:
+        EXPO_PUBLIC_SHOP_URL: https://${ADMIN_HOST}
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      ADMIN_HOST: ${ADMIN_HOST}
+      APP_HOST: ${APP_HOST:?set APP_HOST in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - admin
+      - app
+
+volumes:
+  db:
+  caddy_data:
+  caddy_config:
