@@ -117,6 +117,19 @@ create table scheduled_runs (
 );
 insert into scheduled_runs (name) values ('payment_reminders'), ('retention');
 
+-- The Owner's switches for automatic reminders. Customer reminders start off: turned on by default, the first run would
+-- message every customer with an old unpaid bill at once.
+create table notification_settings (
+  id boolean primary key default true check (id),
+  payment_reminders boolean not null default false,
+  -- A reminder this many days before the due day, then every so many days while it's overdue.
+  remind_days_before integer not null default 2 check (remind_days_before between 0 and 30),
+  overdue_every_days integer not null default 7 check (overdue_every_days between 1 and 90),
+  updated_by text,
+  updated_at timestamptz
+);
+insert into notification_settings default values;
+
 -- Templates for every event: who it's for (customers in the app, staff in the admin) and its category.
 alter table notification_templates drop constraint notification_templates_channel_check;
 alter table notification_templates add constraint notification_templates_channel_check check (channel in ('push', 'email', 'inbox'));
