@@ -122,8 +122,10 @@ export type Order = {
   customerSeenAt?: string;
   /** The inventory team's note (stock, transport, LR number). Seen by all staff, never by the customer. */
   inventoryNote?: { text: string; at: string; by: string };
-  /** The App Users entry whose phone sent it. */
-  appUser?: { id: number; label: string };
+  /** The App Users entry whose phone sent it: the person, their shop and its details as they are now. */
+  appUser?: { id: number; label: string; name?: string; business?: string; phone?: string; gstin?: string; address?: string };
+  /** Where it goes, copied when it was placed (checkout); orders from apps before checkout have the address in the notes. */
+  delivery?: OrderDelivery;
   /** The customer that app user belongs to (Module 7); customers group orders by this, not by the typed name. */
   customerRecord?: { id: number; name: string };
   /** Payments (Owners and Sales only; the inventory team's copy leaves these three out). Missing means credit. */
@@ -167,6 +169,25 @@ export type StockItem = {
   updatedAt: string;
   /** Its option was renamed or removed in the product editor. */
   orphan: boolean;
+};
+
+/** An order's delivery details as chosen at checkout: the shop's or a saved address, or one for this order only. */
+export type OrderDelivery = {
+  addressType: 'saved' | 'temporary' | 'site';
+  addressId?: number | null;
+  receiverName: string;
+  contact: string;
+  alternateContact?: string;
+  siteName?: string;
+  addressLine: string;
+  area?: string;
+  landmark?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  /** The whole address on one line. */
+  line: string;
+  instructions?: string;
 };
 
 /** One change to an item's quantity, newest first. */

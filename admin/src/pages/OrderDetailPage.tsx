@@ -37,7 +37,7 @@ import { accounts, creditDaysOf } from '@/data/payments';
 import { inOrders } from '@/data/requests';
 import { handlesMoney, movesOrders, readSession } from '@/data/session';
 import { useData } from '@/data/useData';
-import type { GstSettings, Order, OrderStatus, SalesInvoice } from '@/data/types';
+import type { GstSettings, Order, OrderDelivery, OrderStatus, SalesInvoice } from '@/data/types';
 import { api } from '@/lib/api';
 import { formatDate, formatDateTime, formatINR, formatNumber, initials, plural } from '@/lib/format';
 
@@ -314,6 +314,8 @@ export default function OrderDetailPage() {
             )}
           </Card>
 
+          {order.delivery && <DeliveryCard delivery={order.delivery} />}
+
           <Card aria-labelledby="notes-title">
             <CardHeader id="notes-title" title={fromAdmin ? 'Delivery notes' : 'Customer’s notes'} description={fromAdmin ? 'Sent to the customer with the request.' : 'Typed in the app when the order was placed.'} />
             <p className="card__body" style={{ display: 'flex', gap: 8 }}>
@@ -453,6 +455,30 @@ export default function OrderDetailPage() {
                     </dd>
                   </>
                 )}
+                {order.appUser?.business && (
+                  <>
+                    <dt>Shop</dt>
+                    <dd>{order.appUser.business}</dd>
+                  </>
+                )}
+                {order.appUser?.phone && (
+                  <>
+                    <dt>Registered mobile</dt>
+                    <dd className="num">{order.appUser.phone}</dd>
+                  </>
+                )}
+                {order.appUser?.gstin && (
+                  <>
+                    <dt>GSTIN</dt>
+                    <dd className="num">{order.appUser.gstin}</dd>
+                  </>
+                )}
+                {order.appUser?.address && (
+                  <>
+                    <dt>Shop address</dt>
+                    <dd>{order.appUser.address}</dd>
+                  </>
+                )}
                 <dt>Orders</dt>
                 <dd className="num">{formatNumber(customer.orders)}</dd>
                 <dt>Ordered (MRP)</dt>
@@ -550,5 +576,53 @@ function CreditWarning({ order }: { order: Order }) {
         {order.customer} owes {formatINR(owed)}, over their credit limit of {formatINR(limit.value)}. <Link to={`/customers/${id}`}>See their payments</Link> before sending more on credit.
       </span>
     </p>
+  );
+}
+
+const ADDRESS_TYPE: Record<OrderDelivery['addressType'], { label: string; tone: 'info' | 'warning' | 'neutral' }> = {
+  saved: { label: 'Saved address', tone: 'neutral' },
+  temporary: { label: 'This order only', tone: 'warning' },
+  site: { label: 'Site', tone: 'info' },
+};
+
+/** Where the order goes, as the customer chose at checkout: copied then, so later profile changes don't move it. */
+function DeliveryCard({ delivery }: { delivery: OrderDelivery }) {
+  const type = ADDRESS_TYPE[delivery.addressType] ?? ADDRESS_TYPE.temporary;
+  return (
+    <Card aria-labelledby="delivery-title">
+      <CardHeader id="delivery-title" title="Delivery" description="As chosen at checkout." action={<Badge tone={type.tone}>{type.label}</Badge>} />
+      <div className="card__body stack">
+        <div>
+          <span style={{ display: 'block', fontWeight: 600 }}>{delivery.receiverName || 'Receiver not given'}</span>
+          {delivery.siteName && <span className="cell-sub" style={{ display: 'block' }}>Site: {delivery.siteName}</span>}
+          <span style={{ display: 'block', marginTop: 4 }}>{delivery.line}</span>
+        </div>
+        <dl className="kv kv--compact">
+          <dt>Contact</dt>
+          <dd className="num">{delivery.contact ? <a href={`tel:${delivery.contact}`}>{delivery.contact}</a> : '—'}</dd>
+          {delivery.alternateContact && (
+            <>
+              <dt>Alternate</dt>
+              <dd className="num">
+                <a href={`tel:${delivery.alternateContact}`}>{delivery.alternateContact}</a>
+              </dd>
+            </>
+          )}
+          {delivery.instructions && (
+            <>
+              <dt>Instructions</dt>
+              <dd>{delivery.instructions}</dd>
+            </>
+          )}
+        </dl>
+        {delivery.contact && (
+          <div className="row-wrap no-print">
+            <a className="btn btn--secondary btn--sm" href={`tel:${delivery.contact}`}>
+              <PhoneIcon size={15} weight="bold" aria-hidden /> Call Receiver
+            </a>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
