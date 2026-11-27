@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { GSTIN, computeInvoice, financialYear, gstSettings, indiaDay, invoiceNumber, r2, saveDraft } from './gst.ts';
 import { adminOrders } from './orders.ts';
+import { accountsOfCustomer, notifyCustomer, notifyStaff } from './notify.ts';
 import { only, type Env, type Role } from './staff.ts';
 import { GST_RATES, move, stockItems, type Bucket } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
@@ -567,6 +568,47 @@ const event = (tx: TransactionSql, id: number, kind: string, by: string, details
 async function setStatus(tx: TransactionSql, id: number, from: string, to: string, by: string, note = '') {
   await tx`update sales_returns set status = ${to}, version = version + 1, updated_at = now() where id = ${id}`;
   await event(tx, id, 'status', by, { from, to, note });
+  await tellAboutReturn(tx, id, to, by, note);
+}
+
+/** Who a return concerns and how to describe it: the buyer's app accounts (its order's, or its counter bill buyer's). */
+async function returnParty(tx: TransactionSql, id: number) {
+  const [ret] = await tx`
+    select r.id, r.number, r.kind, r.order_id, r.customer_id, r.customer_name, r.return_value, o.device_id, o.client_order_id, o.source,
+      (select count(*)::int from sales_return_items i where i.return_id = r.id) as items
+    from sales_returns r left join orders o on o.id = r.order_id where r.id = ${id}`;
+  const accounts = ret!.order_id !== null ? (ret!.device_id ? [ret!.device_id as number] : []) : await accountsOfCustomer(tx, ret!.customer_id);
+  const data: Record<string, string> = ret!.order_id === null ? {} : ret!.client_order_id && ret!.source !== 'admin' ? { orderId: ret!.client_order_id } : { shopOrderId: String(ret!.order_id) };
+  return {
+    ret: ret!,
+    accounts,
+    values: { kind: ret!.kind === 'replacement' ? 'Replacement' : 'Return', number: ret!.number, customer: ret!.customer_name, items: `${ret!.items} item${ret!.items === 1 ? '' : 's'}`, total: rupees(ret!.return_value) },
+    customerLink: { entityType: 'return', entityId: id, data },
+    staffLink: { entityType: 'return', entityId: id, data: { to: `/returns/${id}` } },
+  };
+}
+
+/**
+ * A return's news: recorded (the office, and the customer), approved or refused, and complete (refunded, replaced or
+ * closed, once). Its customer hears in the app; the Owner and Sales in the admin, except whoever did it.
+ */
+async function tellAboutReturn(tx: TransactionSql, id: number, to: string, by: string, note = '') {
+  const party = await returnParty(tx, id);
+  const tellCustomer = async (event: string, extra: Record<string, string> = {}, key = `${event}:${id}`) => {
+    for (const account of party.accounts) await notifyCustomer(tx, account, event, { ...party.values, ...extra }, party.customerLink, key);
+  };
+  const tellStaff = (event: string, extra: Record<string, string> = {}, key = `${event}:${id}`) =>
+    notifyStaff(tx, event, { ...party.values, by, ...extra }, party.staffLink, { roles: ['sales'], except: { name: by } }, key);
+  if (to === 'pending') {
+    await tellCustomer('return_recorded');
+    await tellStaff('return_requested');
+  } else if (to === 'approved' || to === 'rejected') {
+    await tellCustomer(to === 'approved' ? 'return_approved' : 'return_rejected', { reason: note });
+    await tellStaff('return_decided', { decision: to === 'approved' ? 'approved' : 'refused' }, `return_decided:${id}:${to}`);
+  } else if (to === 'refunded' || to === 'replaced' || to === 'closed') {
+    await tellCustomer('return_completed', {}, `return_completed:${id}`);
+    await tellStaff('return_finished', {}, `return_finished:${id}`);
+  }
 }
 const bump = (tx: TransactionSql, id: number) => tx`update sales_returns set version = version + 1, updated_at = now() where id = ${id}`;
 
@@ -633,6 +675,12 @@ async function issueCreditNote(tx: TransactionSql, id: number, by: string) {
       created_by: by,
     })}`;
   await event(tx, id, 'credit_note', by, { note: `Credit note ${number} for ${rupees(total)}` });
+  // The buyer's app, and the Owner and Accountant.
+  const party = await returnParty(tx, id);
+  const [original] = await tx`select number from sales_invoices where id = ${ret!.invoice_id}`;
+  const noteValues = { ...party.values, number, total: rupees(total), invoice: original?.number ?? '' };
+  for (const account of party.accounts) await notifyCustomer(tx, account, 'credit_note', noteValues, party.customerLink, `credit_note:${number}`);
+  await notifyStaff(tx, 'credit_note_issued', noteValues, party.staffLink, { roles: ['accountant'], except: { name: by } }, `credit_note:${number}`);
   // A counter bill shows it in its own history too.
   const [bill] = await tx`select order_id from sales_invoices where id = ${ret!.invoice_id}`;
   if (bill && bill.order_id === null)
@@ -830,7 +878,11 @@ export function returnRoutes(sql: Sql) {
       need(await returnSettings(tx), staff.role, 'create');
       const saved = await saveReturn(tx, input, staff);
       await event(tx, saved.id, 'created', staff.name, { to: 'pending' });
-      if (saved.status === 'approved') await event(tx, saved.id, 'status', staff.name, { from: 'pending', to: 'approved', note: 'Approved as it was recorded.' });
+      await tellAboutReturn(tx, saved.id, 'pending', staff.name);
+      if (saved.status === 'approved') {
+        await event(tx, saved.id, 'status', staff.name, { from: 'pending', to: 'approved', note: 'Approved as it was recorded.' });
+        await tellAboutReturn(tx, saved.id, 'approved', staff.name);
+      }
       return saved.id;
     });
     return c.json(await answer(id), 201);
