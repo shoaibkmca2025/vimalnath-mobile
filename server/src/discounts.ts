@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
+import { notifyStaff } from './notify.ts';
 import { only, type Env, type Role } from './staff.ts';
 import { jsonBody, parse } from './validate.ts';
 
@@ -226,6 +227,17 @@ export async function assessDiscounts(tx: TransactionSql, lines: (Priced & { des
             after: tx.json({ discountPct: line.discountPct, discountAmount: line.discountAmount, effectivePct: measured.effectivePct, value: measured.value } as never) as never,
             by: context.actor!.name,
           })}`;
+        // Whoever can approve hears at once: Owners and discount admins (not the person asking).
+        const approvers = await tx`select id from staff_users where active and (role = 'owner' or discount_level = 'admin') and name <> ${context.actor!.name}`;
+        const [bill] = await tx`select customer_name from sales_invoices where id = ${context.invoiceId}`;
+        await notifyStaff(
+          tx,
+          'discount_request',
+          { by: context.actor!.name, pct: measured.effectivePct, item: line.description, customer: bill?.customer_name ?? '' },
+          { entityType: 'approval', entityId: row!.id as number, data: { to: '/billing/approvals' } },
+          { roles: [], staffIds: approvers.map((approver) => approver.id as number) },
+          `discount_request:${row!.id}`,
+        );
         base.status = 'pending';
         base.approvalId = row!.id as number;
         used.add(row!.id as number);
@@ -473,6 +485,16 @@ export function discountRoutes(sql: Sql) {
         by: actor.name,
       });
       await tx`insert into invoice_events ${tx({ invoice_id: approval.invoice_id, kind: 'edited', note: `Discount on ${approval.description} ${status} by ${actor.name}${reason ? `: ${reason}` : ''}`, by: actor.name })}`;
+      // The person who asked hears the answer.
+      const askers = await tx`select id from staff_users where active and name = ${approval.requested_by}`;
+      await notifyStaff(
+        tx,
+        'discount_decided',
+        { decision: approve ? 'approved' : 'refused', by: actor.name, pct: approval.effective, item: approval.description, reason },
+        { entityType: 'invoice', entityId: approval.invoice_id as number, data: { to: `/billing/${approval.invoice_id}` } },
+        { roles: [], staffIds: askers.map((asker) => asker.id as number) },
+        `discount_decided:${id}`,
+      );
     });
     return c.json({ id: String(id), status: approve ? 'approved' : 'rejected' });
   });
