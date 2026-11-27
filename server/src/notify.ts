@@ -320,7 +320,7 @@ export async function paymentReminders(sql: Sql, today = indiaDay()) {
     }
     if (!settings!.payment_reminders) continue;
     const link: Link = { entityType: 'order', entityId: row.id, data: row.source === 'admin' ? { shopOrderId: String(row.id) } : { orderId: row.client_order_id } };
-    await remind(row.account, 'order', row, link);
+    await remind(row.account, 'order', row as unknown as Parameters<typeof remind>[2], link);
   }
   for (const row of bills) {
     if (daysBetween(today, row.due) < 0) {
@@ -328,7 +328,7 @@ export async function paymentReminders(sql: Sql, today = indiaDay()) {
       overdueAmount += Number(row.remaining);
     }
     if (!settings!.payment_reminders) continue;
-    for (const account of await accountsOfCustomer(sql, row.customer_id)) await remind(account, 'bill', row, { entityType: 'invoice', entityId: row.id });
+    for (const account of await accountsOfCustomer(sql, row.customer_id)) await remind(account, 'bill', row as unknown as Parameters<typeof remind>[2], { entityType: 'invoice', entityId: row.id });
   }
   if (overdueCount)
     await notifyStaff(

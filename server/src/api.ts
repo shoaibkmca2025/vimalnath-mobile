@@ -13,7 +13,7 @@ import { feedbackAdminRoutes } from './feedback.ts';
 import { gstRoutes } from './gst.ts';
 import { contentRoutes } from './content.ts';
 import { mediaAdminRoutes, mediaRoutes } from './media.ts';
-import { notificationRoutes } from './notifications.ts';
+import { inboxRoutes, notificationRoutes } from './notifications.ts';
 import { orderAdminRoutes } from './orders.ts';
 import { purchaseRoutes, supplierRoutes } from './purchases.ts';
 import { returnRoutes } from './returns.ts';
@@ -41,7 +41,9 @@ export function buildApi(sql: Sql, config: ReturnType<typeof loadConfig>) {
   admin.route('/', contentRoutes(sql));
   admin.route('/', versionRoutes(sql));
   admin.route('/', activityRoutes(sql));
-  admin.route('/notifications', notificationRoutes(sql, { email: Boolean(config.SMTP_URL) }));
+  admin.route('/notifications', notificationRoutes(sql, { email: Boolean(config.SMTP_URL), fcm: Boolean(config.FCM_SERVICE_ACCOUNT) }));
+  // Every staff member's own notification center.
+  admin.route('/inbox', inboxRoutes(sql));
   admin.route('/media', mediaAdminRoutes(sql));
   admin.route('/orders', orderAdminRoutes(sql));
   admin.route('/customers', customerRoutes(sql));

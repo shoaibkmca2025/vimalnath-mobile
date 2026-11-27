@@ -143,7 +143,7 @@ export async function queueOrderEvent(tx: TransactionSql, orderId: number, event
   if (!order) return;
   const values = { number: order.number, customer: order.customer, total: money(order.bill), items: `${order.items} item${order.items === 1 ? '' : 's'}` };
   const key = `${event}:${order.id}:${order.times}`;
-  const link = orderLink(order);
+  const link = orderLink(order as unknown as Parameters<typeof orderLink>[0]);
   if (event === 'placed') {
     const [template] = await tx`select title, body from notification_templates where event = 'placed'`;
     const recipients = await tx`select email from staff_alert_recipients order by email`;

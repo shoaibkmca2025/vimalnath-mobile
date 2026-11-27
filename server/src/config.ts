@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { readServiceAccount } from './fcm.ts';
+
 const Env = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
@@ -11,6 +13,19 @@ const Env = z.object({
   // Module 10: staff emails need an SMTP login, e.g. smtps://user:password@smtp.gmail.com. Without it they're logged as not set up.
   SMTP_URL: z.string().regex(/^smtps?:\/\//, 'must start with smtp:// or smtps://').optional(),
   MAIL_FROM: z.string().max(200).optional(),
+  // Android push: the Firebase project's service account key (Project settings → Service accounts → Generate new private
+  // key), as the JSON or base64 of it. Only on the server; the app never sees it.
+  FCM_SERVICE_ACCOUNT: z
+    .string()
+    .refine((text) => {
+      try {
+        readServiceAccount(text);
+        return true;
+      } catch {
+        return false;
+      }
+    }, 'must be the Firebase service account key JSON (or base64 of it)')
+    .optional(),
   // Only if enhanced push security is switched on in the Expo dashboard.
   EXPO_ACCESS_TOKEN: z.string().max(200).optional(),
 });
