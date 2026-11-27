@@ -60,6 +60,7 @@ import { PageMetaContext, type PageMeta } from '@/components/pageMeta';
 import { NotificationBell } from '@/components/NotificationBell';
 import { ThemeSwitch } from '@/components/ThemeSwitch';
 import { useApprovalCount } from '@/data/approvalCount';
+import { useInboxCount } from '@/data/inbox';
 import { creditDaysOf, isOverdue } from '@/data/payments';
 import { useNewFeedback } from '@/data/feedback';
 import { useReturnCounts } from '@/data/returnCounts';
@@ -117,6 +118,8 @@ export function AppShell() {
   const money = handlesMoney(session?.role);
   const seesReturns = session?.role === 'owner' || session?.role === 'sales' || inventoryOnly || accountant;
   const returnCounts = useReturnCounts(seesReturns);
+  // This person's unread notifications: the bell's red count.
+  const inboxUnread = useInboxCount(Boolean(session));
   const returnsGroup = {
     title: 'Returns & Replacements',
     items: [
@@ -151,7 +154,7 @@ export function AppShell() {
   const groups: { title: string; items: NavItem[] }[] = inventoryOnly
     ? [
         { title: 'Inventory', items: [{ ...inventoryItem, label: 'Orders to Pack' }, stockItem, { to: '/returns/list', label: 'Returned Goods', icon: ArrowUUpLeftIcon, count: returnCounts.receive + returnCounts.inspect, alert: true, alertLabel: 'goods to receive or check' }] },
-        { title: 'System', items: [{ to: '/settings', label: 'Settings', icon: GearSixIcon }] },
+        { title: 'System', items: [{ to: '/inbox', label: 'Notification Center', icon: BellIcon, count: inboxUnread, alert: true, alertLabel: 'unread' }, { to: '/settings', label: 'Settings', icon: GearSixIcon }] },
       ]
     : [
     { title: 'Overview', items: [{ to: '/', label: 'Dashboard', icon: SquaresFourIcon, end: true }] },
@@ -240,6 +243,7 @@ export function AppShell() {
     {
       title: 'System',
       items: [
+        { to: '/inbox', label: 'Notification Center', icon: BellIcon, count: inboxUnread, alert: true, alertLabel: 'unread' },
         { to: '/activity', label: 'Activity', icon: ClockCounterClockwiseIcon },
         ...(session?.role === 'owner'
           ? [
@@ -298,11 +302,11 @@ export function AppShell() {
 
   const under = (pages: string[]) => pages.some((page) => location.pathname === page || location.pathname.startsWith(`${page}/`));
   const allowed = inventoryOnly
-    ? ['/inventory', '/stock', '/settings', '/returns/list', '/returns/'].some((path) => location.pathname.startsWith(path)) && !['/returns/settings', '/returns/reports', '/returns/refunds', '/returns/new'].some((path) => location.pathname.startsWith(path))
+    ? ['/inventory', '/stock', '/settings', '/inbox', '/returns/list', '/returns/'].some((path) => location.pathname.startsWith(path)) && !['/returns/settings', '/returns/reports', '/returns/refunds', '/returns/new'].some((path) => location.pathname.startsWith(path))
     : accountant
       ? // The Accountant's pages; anything else typed in or linked to goes to the dashboard.
         location.pathname === '/' ||
-        (under(['/orders', '/customers', '/payments', '/purchases', '/suppliers', '/supplier-returns', '/expenses', '/reports', '/gst', '/returns', '/billing', '/activity', '/settings']) &&
+        (under(['/orders', '/customers', '/payments', '/purchases', '/suppliers', '/supplier-returns', '/expenses', '/reports', '/gst', '/returns', '/billing', '/inbox', '/activity', '/settings']) &&
           !under(['/gst/settings', '/returns/settings', '/returns/new', '/billing/new', '/billing/settings']) &&
           !/^\/billing\/(quotations\/)?[^/]+\/edit$/.test(location.pathname))
       : // The books are the Owner's and the Accountant's; bills, the Owner's and Sales'.
@@ -408,7 +412,7 @@ export function AppShell() {
               </ol>
             </nav>
             <ThemeSwitch />
-            <NotificationBell orders={bellOrders} linkTo={(order) => (inventoryOnly ? (order.status === 'confirmed' ? '/inventory' : `/inventory?stage=${order.status}`) : `/orders/${order.id}`)} requestUpdates={inventoryOnly ? 0 : requestUpdates} />
+            <NotificationBell orders={bellOrders} linkTo={(order) => (inventoryOnly ? (order.status === 'confirmed' ? '/inventory' : `/inventory?stage=${order.status}`) : `/orders/${order.id}`)} requestUpdates={inventoryOnly ? 0 : requestUpdates} unread={inboxUnread} />
             <button type="button" className="search-trigger" onClick={() => setSearchOpen(true)} aria-label="Search" aria-keyshortcuts="Control+K Meta+K">
               <MagnifyingGlassIcon size={16} aria-hidden />
               <span className="search-trigger__text">Search</span>
