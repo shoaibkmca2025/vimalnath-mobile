@@ -1,0 +1,164 @@
+/* ---------- Notification Center ---------- */
+
+/* The bell's panel: Notifications and Not delivered side by side. */
+.bell-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: var(--space-2);
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--fill);
+}
+
+.bell-tab {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.bell-tab[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.bell-tab:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.bell-panel__count--plain {
+  background: var(--neutral-soft);
+  color: var(--text);
+}
+
+.bell-panel__item.is-unread .bell-panel__label {
+  font-weight: 700;
+}
+
+.bell-panel__item:not(.is-unread) .bell-panel__label {
+  font-weight: 500;
+}
+
+.bell-panel__dot--read {
+  background: transparent;
+}
+
+.bell-panel__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  border-top: 1px solid var(--border);
+}
+
+/* The page: the list, and each person's choices beside it. */
+.inbox-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .inbox-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.inbox-choices {
+  position: sticky;
+  top: calc(var(--topbar-height) + var(--space-5));
+}
+
+.inbox-row {
+  align-items: flex-start;
+}
+
+.inbox-row.is-unread {
+  background: color-mix(in srgb, var(--danger) 4%, transparent);
+}
+
+.inbox-row__main {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inbox-row__main:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.inbox-row:not(.is-unread) .list-row__title {
+  font-weight: 500;
+}
+
+.inbox-row__body {
+  color: var(--text);
+}
+
+/* The red dot on everything not read yet. */
+.inbox-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  vertical-align: middle;
+}
+
+.inbox-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--tint-soft);
+  color: var(--tint);
+}
+
+.inbox-icon--payments {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.inbox-icon--inventory,
+.inbox-icon--returns {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.inbox-icon--system {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.inbox-icon--customers,
+.inbox-icon--announcements {
+  background: var(--neutral-soft);
+  color: var(--text);
+}
