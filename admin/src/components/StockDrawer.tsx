@@ -399,6 +399,14 @@ export function StockDrawer({ row, open, onClose }: { row: StockRow | null; open
                             </Link>
                           </>
                         )}
+                        {step.invoiceId && (
+                          <>
+                            {' '}
+                            <Link to={`/billing/${step.invoiceId}`} className="num">
+                              {step.invoiceNumber ?? 'bill'}
+                            </Link>
+                          </>
+                        )}
                         {step.supplierReturnId && (
                           <>
                             {' '}

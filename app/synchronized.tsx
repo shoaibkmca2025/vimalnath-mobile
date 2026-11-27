@@ -5,8 +5,8 @@ export default function SynchronizedScreen() {
   const { configurations, cutlistSystems } = useAppContent();
   return (
     <ConfigurationGridScreen
-      // The name staff give the system in the admin, e.g. 16 × 35 Telescopic Sliding System.
-      title={cutlistSystems.find((system) => system.id === 'synchronized')?.name ?? 'Synchronized System'}
+      // The name staff give the system in the admin, e.g. 16 × 35 Telescopic Sliding.
+      title={cutlistSystems.find((system) => system.id === 'synchronized')?.name ?? '16 × 35 Synchronized System'}
       intro="Choose a synchro configuration to see its glass cutting sizes."
       backLabel="Cutlist"
       backRoute="/cutlist"

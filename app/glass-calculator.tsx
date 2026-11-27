@@ -10,12 +10,13 @@ import { FractionButton, FractionSheet } from '@/components/FractionPicker';
 import { InsetGroup, ValueRow } from '@/components/InsetGroup';
 import { Screen } from '@/components/Screen';
 import { SegmentedControl } from '@/components/SegmentedControl';
-import { formatInches, formatInchSize, formatMm, inchesToMm, mmToInchParts } from '@/lib/format';
+import { formatInches, formatInchSize, formatInchSizeLH, formatMm, formatSizeLH, inchesToMm, mmToInchParts } from '@/lib/format';
+import { ExportSiteNameSheet } from '@/components/ExportSiteNameSheet';
 import { computeGlassPlan, getSystemRange, parsePanelCount, type GlassPlanResult } from '@/lib/glass-calculator';
 import { buildGlassPlanHtml } from '@/lib/glass-plan-pdf';
 import { SIZE_UNIT_KEY, UNIT_OPTIONS, type LengthUnit } from '@/lib/length-units';
 import { useAppContent } from '@/lib/content-sync';
-import { pdfFileName, savePdf, sharePdf } from '@/lib/pdf-export';
+import { pdfNamed, savePdf, sharePdf } from '@/lib/pdf-export';
 import { rememberPdf } from '@/lib/saved-pdfs';
 import { useAppUI } from '@/providers/AppUIProvider';
 import { colors, radius, tabularNums, type } from '@/theme';
@@ -134,14 +135,18 @@ export default function GlassCalculatorScreen() {
     setResult(outcome.result);
   };
 
-  const exportPdf = async (mode: 'share' | 'save') => {
+  // Sharing or saving asks first who the plan is for; the PDF is named after them and shows it at the top.
+  const [askName, setAskName] = useState<'share' | 'save' | null>(null);
+  const [lastName, setLastName] = useState('');
+  const exportPdf = async (mode: 'share' | 'save', customer: string) => {
     if (!result) return;
+    setLastName(customer);
     setBusy(mode);
     try {
-      const html = buildGlassPlanHtml({ systemName, result, materialColour: hasColour ? colour : undefined });
-      const fileName = pdfFileName(`${systemName} ${result.openingWidth}x${result.openingHeight}`);
+      const html = buildGlassPlanHtml({ systemName, customer, result, materialColour: hasColour ? colour : undefined });
+      const fileName = pdfNamed(customer);
       // Kept for Saved PDFs (top bar), whichever way it's sent.
-      void rememberPdf({ source: 'cutlist', title: systemName, detail: `Opening ${result.openingWidth} × ${result.openingHeight} mm`, fileName, html });
+      void rememberPdf({ source: 'cutlist', title: `${customer} · ${systemName}`, detail: `Opening ${formatSizeLH(result.openingWidth, result.openingHeight)}`, fileName, html });
       if (mode === 'share') {
         await sharePdf(html, fileName, 'Share glass cutting plan');
       } else {
@@ -154,6 +159,7 @@ export default function GlassCalculatorScreen() {
       showToast(`Couldn’t create the PDF: ${reason}`);
     } finally {
       setBusy(null);
+      setAskName(null);
     }
   };
 
@@ -168,7 +174,7 @@ export default function GlassCalculatorScreen() {
 
       <InsetGroup
         header={unit === 'mm' ? 'Opening size in mm' : 'Opening size in inches'}
-        footer={ready ? (unit === 'mm' ? `= ${formatInchSize(widthMm, heightMm)}` : `= ${formatMm(widthMm)} × ${formatMm(heightMm)}`) : undefined}
+        footer={ready ? (unit === 'mm' ? `= ${formatInchSizeLH(widthMm, heightMm)}` : `= L ${formatMm(widthMm)} × H ${formatMm(heightMm)}`) : undefined}
         style={sizeError ? styles.groupWithError : undefined}
       >
         {unit === 'mm' ? (
@@ -224,15 +230,15 @@ export default function GlassCalculatorScreen() {
           )}
           <SizeCard
             title="Cutting size"
-            value={`${result.cuttingWidth} × ${result.cuttingHeight} mm`}
-            inches={formatInchSize(result.cuttingWidth, result.cuttingHeight)}
+            value={formatSizeLH(result.cuttingWidth, result.cuttingHeight)}
+            inches={formatInchSizeLH(result.cuttingWidth, result.cuttingHeight)}
             detail="Per panel"
             background={colors.redFill}
           />
           <SizeCard
             title="Glass size"
-            value={`${result.glassWidth} × ${result.glassHeight} mm`}
-            inches={formatInchSize(result.glassWidth, result.glassHeight)}
+            value={formatSizeLH(result.glassWidth, result.glassHeight)}
+            inches={formatInchSizeLH(result.glassWidth, result.glassHeight)}
             detail={`Qty: ${result.glassQuantity}`}
             background={colors.tintFill}
           />
@@ -279,7 +285,7 @@ export default function GlassCalculatorScreen() {
               accessibilityHint="Send the cutting plan by WhatsApp, email and more"
               loading={busy === 'share'}
               disabled={busy !== null && busy !== 'share'}
-              onPress={() => exportPdf('share')}
+              onPress={() => setAskName('share')}
               style={styles.exportButton}
             />
             <Button
@@ -289,12 +295,25 @@ export default function GlassCalculatorScreen() {
               accessibilityHint="Save the cutting plan to this phone"
               loading={busy === 'save'}
               disabled={busy !== null && busy !== 'save'}
-              onPress={() => exportPdf('save')}
+              onPress={() => setAskName('save')}
               style={styles.exportButton}
             />
           </View>
         </View>
       )}
+
+      <ExportSiteNameSheet
+        visible={askName !== null}
+        busy={busy !== null}
+        onClose={() => setAskName(null)}
+        onSubmit={(name) => askName && void exportPdf(askName, name)}
+        required
+        initial={lastName}
+        fieldLabel="Customer or site name"
+        placeholder="e.g. Sundaram Residence, Block A"
+        actionLabel={askName === 'save' ? 'Save PDF' : 'Share PDF'}
+        body="Printed at the top of the cutting plan, and the PDF is named after it."
+      />
 
       <FractionSheet
         visible={fractionFor !== null}

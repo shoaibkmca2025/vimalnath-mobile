@@ -49,8 +49,44 @@ export type SyncStatus = {
   unread: number;
 };
 /** One row of the Notifications screen. A tap opens the order it is about, if any. */
-export type AppNotification = { id: string; event: string; title: string; body: string; data: { orderId?: string; shopOrderId?: string }; createdAt: string; read: boolean };
-type Profile = { name: string; business: string; phone: string; email: string; city: string };
+export type NotificationCategory = 'orders' | 'payments' | 'inventory' | 'billing' | 'returns' | 'customers' | 'announcements' | 'system';
+export type AppNotification = {
+  id: string;
+  event: string;
+  category: NotificationCategory;
+  title: string;
+  body: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  data: { orderId?: string; shopOrderId?: string };
+  createdAt: string;
+  read: boolean;
+};
+export type NotificationPage = { notifications: AppNotification[]; next: string | null; unread: number };
+export type NotificationQuery = { filter?: 'all' | 'unread' | 'read'; category?: NotificationCategory; q?: string; before?: string };
+/** On or off per category, and how the phone alerts: what Settings → Notifications changes. */
+export type NotificationPreferences = Record<'orders_enabled' | 'payments_enabled' | 'billing_enabled' | 'returns_enabled' | 'announcements_enabled' | 'sound_enabled' | 'vibration_enabled', boolean>;
+/** The person and their shop: its name (business), GSTIN and address. The shop's fields are empty for older accounts. */
+export type Profile = { name: string; business: string; phone: string; email: string; city: string; gstin?: string; addressLine?: string; area?: string; landmark?: string; state?: string; pincode?: string };
+export type AddressType = 'shop' | 'home' | 'site' | 'other';
+/** One entry in the address book. */
+export type SavedAddress = {
+  id: number;
+  type: AddressType;
+  label: string;
+  receiverName: string;
+  contactNumber: string;
+  alternateContact: string;
+  siteName: string;
+  addressLine: string;
+  area: string;
+  landmark: string;
+  city: string;
+  state: string;
+  pincode: string;
+  isDefault: boolean;
+};
+export type AddressInput = Omit<SavedAddress, 'id' | 'isDefault'> & { isDefault?: boolean };
 type Activity = { type: 'price_view' | 'catalogue_view'; productId?: string; productName?: string; optionIndex?: number; optionLabel?: string; price?: number };
 type QueueEvent = { eventId: string; path: 'orders' | 'profile' | 'activity'; body: Record<string, unknown> };
 type Outbox = { deviceId: string; customerId?: string; baseUrl?: string; events: QueueEvent[] };
@@ -415,16 +451,93 @@ export async function sendFeedback(feedback: Feedback): Promise<void> {
 }
 
 /** The Notifications screen's list, newest first (up to 100). */
-export async function fetchNotifications(): Promise<AppNotification[]> {
+async function linked() {
   await initializeAdminSync();
   if (!connection.enabled) throw new Error('Log in first.');
-  return (await request<{ notifications: AppNotification[] }>({ ...connection }, 'notifications')).notifications;
+  return { ...connection };
 }
 
-/** Seen: clears the bell here and on the shop's side. */
-export async function markNotificationsRead(): Promise<void> {
-  await request({ ...connection }, 'notifications/read', {});
-  publish({ unread: 0 });
+/** A page of the Notification Center, newest first; the unread count comes with it and updates the bell and the icon. */
+export async function fetchNotifications(query: NotificationQuery = {}): Promise<NotificationPage> {
+  // Built by hand: React Native's URLSearchParams is incomplete.
+  const params = Object.entries(query)
+    .filter((entry): entry is [string, string] => Boolean(entry[1]))
+    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+    .join('&');
+  const page = await request<Partial<NotificationPage>>(await linked(), `notifications${params ? `?${params}` : ''}`);
+  // A shop server from before the Notification Center sends the whole list, without kinds or a count.
+  const notifications = (page.notifications ?? []).map((item) => ({ ...item, category: item.category ?? (item.event === 'broadcast' ? 'announcements' : 'orders') }));
+  const unread = page.unread ?? notifications.filter((item) => !item.read).length;
+  publish({ unread });
+  return { notifications, next: page.next ?? null, unread };
+}
+
+/** Read: one or some (ids), or all of them (no ids). The count is the server's, so every phone agrees. */
+export async function markNotificationsRead(ids?: string[]): Promise<number> {
+  // Everything read is the same request on a shop server from before the Notification Center (it has no read-all).
+  const answer = await request<{ unread?: number }>(await linked(), 'notifications/read', ids ? { ids: ids.map(Number) } : {});
+  const unread = answer.unread ?? 0;
+  publish({ unread });
+  return unread;
+}
+
+export async function deleteNotifications(ids: string[]): Promise<number> {
+  const { unread } = await request<{ unread: number }>(await linked(), 'notifications/delete', { ids: ids.map(Number) });
+  publish({ unread });
+  return unread;
+}
+
+/** The unread count from the server: after a push arrives, and when the app comes back. Never a count kept here. */
+export async function refreshUnread(): Promise<void> {
+  if (!connection.enabled) return;
+  const { unread } = await request<{ unread: number }>({ ...connection }, 'notifications/unread');
+  publish({ unread });
+}
+
+// ---------- The account and its address book ----------
+
+/** The account's profile and address book from the shop; the profile is kept on this phone for the screens that use it. */
+export async function fetchAccount(): Promise<{ profile: Profile; addresses: SavedAddress[] }> {
+  const account = await request<{ profile: Profile; addresses: SavedAddress[] }>(await linked(), 'profile');
+  await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(account.profile));
+  return account;
+}
+
+/** The profile as this phone last saw it. */
+export async function savedProfile(): Promise<Profile | null> {
+  try {
+    const raw = await AsyncStorage.getItem(PROFILE_KEY);
+    return raw ? (JSON.parse(raw) as Profile) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Saves the profile here and queues it for the shop (it goes when the phone is online). */
+export async function saveProfile(profile: Profile) {
+  await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  await enqueueAdminProfile(profile);
+}
+
+/** Adds an address (no id) or changes one; the shop checks it and answers with the whole book. */
+export async function saveAddress(input: AddressInput, id?: number): Promise<{ id: number; addresses: SavedAddress[] }> {
+  return request(await linked(), id ? `addresses/${id}` : 'addresses', input as unknown as Record<string, unknown>);
+}
+
+export async function deleteAddress(id: number): Promise<SavedAddress[]> {
+  return (await request<{ addresses: SavedAddress[] }>(await linked(), `addresses/${id}/delete`, {})).addresses;
+}
+
+export async function makeDefaultAddress(id: number): Promise<SavedAddress[]> {
+  return (await request<{ addresses: SavedAddress[] }>(await linked(), `addresses/${id}/default`, {})).addresses;
+}
+
+export async function fetchNotificationPreferences(): Promise<NotificationPreferences> {
+  return request<NotificationPreferences>(await linked(), 'notifications/preferences');
+}
+
+export async function saveNotificationPreferences(changes: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
+  return request<NotificationPreferences>(await linked(), 'notifications/preferences', changes);
 }
 
 export function useUnreadNotifications() {

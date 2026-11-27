@@ -1,6 +1,6 @@
 import { CheckCircleIcon, CopyIcon, PercentIcon, PrinterIcon, ReceiptIcon, TrashIcon, WarningCircleIcon, XCircleIcon } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, Navigate, useNavigate, useParams } from 'react-router';
 
 import { Badge } from '@/components/Badge';
 import { Button, ButtonLink } from '@/components/Button';
@@ -12,12 +12,12 @@ import { InvoiceDocument, Pair } from '@/components/InvoiceDocument';
 import { SelectField, TextAreaField, TextField } from '@/components/Field';
 import { PageHeader } from '@/components/PageHeader';
 import { useToast } from '@/components/useToast';
-import { INVOICE_STATUS, computeInvoice, invoiceAmount, invoiceTaxRows } from '@/data/gst';
+import { INVOICE_STATUS, computeInvoice, invoiceAmount, invoiceTaxRows, printUnit } from '@/data/gst';
 import { GSTIN, GST_STATES, STATES, codeOfState, stateOfGstin } from '@/data/india';
 import { localDay } from '@/data/payments';
 import { formatMoney, parseMoney, r2 } from '@/data/purchases';
-import { GST_RATES, UNITS } from '@/data/stock';
-import type { GstSettings, InvoiceDetails, SalesInvoice, StockUnit } from '@/data/types';
+import { GST_RATES } from '@/data/stock';
+import type { GstSettings, InvoiceDetails, SalesInvoice } from '@/data/types';
 import { useData } from '@/data/useData';
 import { useGst } from '@/hooks/useGst';
 import { api } from '@/lib/api';
@@ -48,7 +48,7 @@ const DETAIL_KEYS = [
 ] as const satisfies readonly (keyof InvoiceDetails)[];
 type Details = Record<(typeof DETAIL_KEYS)[number], string>;
 
-type Line = { productId: string; option: string; description: string; detail: string; hsn: string; qty: string; unit: StockUnit; rate: string; discountPct: string; gstRate: string };
+type Line = { productId: string; option: string; description: string; detail: string; hsn: string; qty: string; unit: string; rate: string; discountPct: string; gstRate: string };
 type Draft = { invoiceDate: string; customerName: string; customerGstin: string; billingAddress: string; placeOfSupply: string; notes: string; details: Details; lines: Line[] };
 
 const detailsOf = (details: InvoiceDetails | undefined) => Object.fromEntries(DETAIL_KEYS.map((key) => [key, details?.[key] ?? ''])) as Details;
@@ -121,6 +121,8 @@ export default function InvoicePage() {
         </Card>
       </>
     );
+  // Counter bills have their own page: payments, discounts and stock.
+  if (invoice.source === 'counter') return <Navigate to={`/billing/${invoice.id}`} replace />;
   return invoice.status === 'draft' ? <DraftEditor key={invoice.id} invoice={invoice} settings={data.settings} onSaved={keepInvoices} /> : <PostedInvoice invoice={invoice} settings={data.settings} onSaved={keepInvoices} />;
 }
 
@@ -335,10 +337,10 @@ function DraftEditor({ invoice, settings, onSaved }: { invoice: SalesInvoice; se
                       <input className="input" aria-label={`HSN of line ${index + 1}`} inputMode="numeric" value={line.hsn} onChange={(event) => setLine(index, { hsn: event.target.value })} placeholder="76042100" style={{ width: 104 }} maxLength={8} />
                     </td>
                     <td className="num" style={{ whiteSpace: 'nowrap', paddingTop: 14 }}>
-                      {line.qty} {UNITS[line.unit]}
+                      {line.qty} {printUnit(line.unit)}
                     </td>
                     <td>
-                      <input className="input" aria-label={`Rate of line ${index + 1}, per ${UNITS[line.unit]}, before GST`} inputMode="decimal" value={line.rate} onChange={(event) => setLine(index, { rate: event.target.value })} style={{ width: 110 }} />
+                      <input className="input" aria-label={`Rate of line ${index + 1}, per ${printUnit(line.unit)}, before GST`} inputMode="decimal" value={line.rate} onChange={(event) => setLine(index, { rate: event.target.value })} style={{ width: 110 }} />
                     </td>
                     <td>
                       <input className="input" aria-label={`Discount of line ${index + 1}, in percent`} inputMode="decimal" value={line.discountPct} onChange={(event) => setLine(index, { discountPct: event.target.value })} style={{ width: 72 }} />

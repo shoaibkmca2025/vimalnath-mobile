@@ -10,6 +10,21 @@ const PDF_MIME = 'application/pdf';
 // A4 at 72 PPI.
 const A4 = { width: 595, height: 842 };
 
+/**
+ * A PDF named as the person typed it, e.g. a customer or site name ("Sundaram Residence.pdf"): spaces and any
+ * script (Marathi, Hindi) kept, only the characters a file name can't hold taken out.
+ */
+export function pdfNamed(name: string): string {
+  const base = name
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\.+/, '')
+    .slice(0, 80)
+    .trim();
+  return `${base || 'Vimalnath'}.pdf`;
+}
+
 /** "1+0 Sliding System" → "1+0-Sliding-System". Keeps the file name readable in WhatsApp and file managers. */
 export function pdfFileName(title: string): string {
   const base = title

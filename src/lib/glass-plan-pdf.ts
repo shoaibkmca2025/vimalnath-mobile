@@ -1,17 +1,19 @@
-import { formatInchSize } from '@/lib/format';
+import { formatInchSizeLH, formatSizeLH } from '@/lib/format';
 import { escapeHtml } from '@/lib/pdf-html';
 
 import type { GlassPlanResult } from './glass-calculator';
 
 export type GlassPlanPdfInput = {
   systemName: string;
+  /** Who it's for: the customer or site name asked for before the PDF is made, printed at the top. */
+  customer?: string;
   result: GlassPlanResult;
   /** The profile colour the user picked, printed at the top of the material list. */
   materialColour?: string;
 };
 
 /** Builds the printable HTML for a glass cutting plan — handed to expo-print to render as a PDF. */
-export function buildGlassPlanHtml({ systemName, result, materialColour }: GlassPlanPdfInput): string {
+export function buildGlassPlanHtml({ systemName, customer, result, materialColour }: GlassPlanPdfInput): string {
   const generatedOn = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 
   return `
@@ -47,6 +49,9 @@ export function buildGlassPlanHtml({ systemName, result, materialColour }: Glass
           .footer { margin-top: 10px; padding-top: 10px; border-top: 1px solid #e1e8f7; font-size: 10px; color: #93a1bd; }
           .notice { margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; background: #e6eeff; color: #0f3fb8; font-size: 13px; font-weight: 600; }
           .warning { margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; background: #fdecee; color: #a30010; font-size: 13px; font-weight: 600; }
+          .customer { margin-top: 6px; font-size: 16px; font-weight: 600; color: #0b1f4d; }
+          .legend { margin-bottom: 12px; font-size: 12px; color: #5a6b8c; }
+          .legend b { color: #0b1f4d; }
         </style>
       </head>
       <body>
@@ -54,13 +59,16 @@ export function buildGlassPlanHtml({ systemName, result, materialColour }: Glass
           <div>
             <div class="brand">Vimalnath Sales Corporation</div>
             <div class="title">${escapeHtml(systemName)}</div>
+            ${customer ? `<div class="customer">Customer / Site: ${escapeHtml(customer)}</div>` : ''}
           </div>
           <div class="meta">
             <div><b>Generated</b> ${escapeHtml(generatedOn)}</div>
-            <div><b>Opening</b> ${result.openingWidth} × ${result.openingHeight} mm</div>
-            <div>${escapeHtml(formatInchSize(result.openingWidth, result.openingHeight))}</div>
+            <div><b>Opening</b> ${formatSizeLH(result.openingWidth, result.openingHeight)}</div>
+            <div>${escapeHtml(formatInchSizeLH(result.openingWidth, result.openingHeight))}</div>
           </div>
         </div>
+
+        <div class="legend"><b>L</b> = Length · <b>H</b> = Height</div>
 
         ${result.notice ? `<div class="notice">${escapeHtml(result.notice)}</div>` : ''}
         ${result.warning ? `<div class="warning">${escapeHtml(result.warning)}</div>` : ''}
@@ -68,15 +76,15 @@ export function buildGlassPlanHtml({ systemName, result, materialColour }: Glass
         <div class="sizes">
         <section class="cutting">
           <h2>Cutting Size</h2>
-          <div class="value">${result.cuttingWidth} × ${result.cuttingHeight} mm</div>
-          <div class="inches">${escapeHtml(formatInchSize(result.cuttingWidth, result.cuttingHeight))}</div>
+          <div class="value">${formatSizeLH(result.cuttingWidth, result.cuttingHeight)}</div>
+          <div class="inches">${escapeHtml(formatInchSizeLH(result.cuttingWidth, result.cuttingHeight))}</div>
           <div class="note">Per panel</div>
         </section>
 
         <section class="glass">
           <h2>Glass Size</h2>
-          <div class="value">${result.glassWidth} × ${result.glassHeight} mm</div>
-          <div class="inches">${escapeHtml(formatInchSize(result.glassWidth, result.glassHeight))}</div>
+          <div class="value">${formatSizeLH(result.glassWidth, result.glassHeight)}</div>
+          <div class="inches">${escapeHtml(formatInchSizeLH(result.glassWidth, result.glassHeight))}</div>
           <div class="note">Qty ${result.glassQuantity}</div>
         </section>
         </div>

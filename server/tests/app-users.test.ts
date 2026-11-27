@@ -172,13 +172,14 @@ test('register: one account per mobile number, however it is typed; the token op
   assert.deepEqual(await reason(await send('/v1/app/register', 'POST', { name: ' ', phone: '9000000001', password: 'long enough' })), [400, 'Enter your name.']);
 });
 
-test('login: the right password gives a new token and signs the old one out; 5 wrong tries lock it; unknown numbers get the same answer', { skip }, async () => {
+test('login: the right password gives this phone its own token, and the account’s other phones stay signed in; 5 wrong tries lock it; unknown numbers get the same answer', { skip }, async () => {
   const { id, phone, mobile } = await customer();
   const res = await logIn(`0${mobile}`, PHONE_PASSWORD);
   assert.equal(res.status, 200);
   const { token, customerId, profile } = (await res.json()) as { token: string; customerId: string; profile: { name: string; phone: string } };
   assert.deepEqual([customerId, profile.name, profile.phone], [String(id), 'Ravi Glass Works', mobile]);
-  assert.equal((await phone('/orders')).status, 401);
+  // Several phones per account: the first phone is still signed in.
+  assert.equal((await phone('/orders')).status, 200);
   assert.equal((await phone('/orders', undefined, token)).status, 200);
 
   const wrong = 'Wrong mobile number or password. After 5 wrong tries, login is locked for 15 minutes.';
@@ -187,12 +188,18 @@ test('login: the right password gives a new token and signs the old one out; 5 w
   assert.deepEqual(await reason(await logIn(mobile, PHONE_PASSWORD)), [401, wrong]);
 });
 
-test('logout: the token stops working and the phone stops getting order updates; logging in again works', { skip }, async () => {
+test('logout: this phone’s token stops working and it stops getting notifications; the account’s other phone carries on', { skip }, async () => {
   const { id, phone, mobile } = await customer();
+  const fcm = `fcm-${id}:${'A'.repeat(140)}`;
   assert.equal((await phone('/push-token', { token: 'ExponentPushToken[logout]' })).status, 200);
+  // A second phone on the same account, with its own FCM token.
+  const { token: second } = (await (await logIn(mobile, PHONE_PASSWORD)).json()) as { token: string };
+  assert.equal((await phone('/push-token', { token: fcm }, second)).status, 200);
+  assert.deepEqual((await sql`select kind from device_tokens where account_id = ${id} order by kind`).map((row) => row.kind), ['expo', 'fcm']);
   assert.equal((await phone('/logout', {})).status, 200);
   assert.deepEqual(await reason(await phone('/orders')), [401, 'You were logged out. Log in again.']);
-  assert.equal((await sql`select push_token from app_devices where id = ${id}`)[0]!.push_token, null);
+  assert.deepEqual((await sql`select token from device_tokens where account_id = ${id}`).map((row) => row.token), [fcm]);
+  assert.equal((await phone('/orders', undefined, second)).status, 200);
   assert.equal((await logIn(mobile, PHONE_PASSWORD)).status, 200);
 });
 

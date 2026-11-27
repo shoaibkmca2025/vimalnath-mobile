@@ -111,7 +111,7 @@ const ONE_PLUS_ZERO: SystemFormula = {
         { label: 'Connector', value: '4 nos' },
         { label: 'Middle Vertical', value: 'According to design' },
         { label: 'Georgian Bar', value: 'According to design' },
-        { label: 'Damru Connector', value: 'According to design' },
+        { label: 'Middle Connector', value: 'According to design' },
       ],
     },
   ],
@@ -262,7 +262,7 @@ function vimalnathSystem(spec: SystemSpec): SystemFormula {
             { label: 'Connector', value: `${spec.connectors} nos` },
             { label: 'Middle', value: 'According to design' },
             { label: 'Georgian Bar', value: 'According to design' },
-            { label: 'Damru Connector', value: 'According to design' },
+            { label: 'Middle Connector', value: 'According to design' },
           ];
         },
       },
@@ -584,7 +584,7 @@ export function computeGlassPlan(
   const { range } = formula;
   if (width < range.minWidth || width > range.maxWidth || height < range.minHeight || height > range.maxHeight) {
     return {
-      error: `Width must be ${range.minWidth}–${range.maxWidth} mm and height ${range.minHeight}–${range.maxHeight} mm for this system.`,
+      error: `Length must be ${range.minWidth}–${range.maxWidth} mm and height ${range.minHeight}–${range.maxHeight} mm for this system.`,
     };
   }
 
@@ -616,7 +616,7 @@ export function computeGlassPlan(
       notice: formula.notice?.(cuttingWidth),
       warning:
         cuttingWidth > MAX_PANEL_WIDTH_MM
-          ? `Panel width ${cuttingWidth} mm is over the ${MAX_PANEL_WIDTH_MM} mm printed for this system. Check with Vimalnath before ordering.`
+          ? `Panel length (L) ${cuttingWidth} mm is over the ${MAX_PANEL_WIDTH_MM} mm printed for this system. Check with Vimalnath before ordering.`
           : undefined,
     },
   };

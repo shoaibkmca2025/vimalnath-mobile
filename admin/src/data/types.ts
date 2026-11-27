@@ -122,8 +122,10 @@ export type Order = {
   customerSeenAt?: string;
   /** The inventory team's note (stock, transport, LR number). Seen by all staff, never by the customer. */
   inventoryNote?: { text: string; at: string; by: string };
-  /** The App Users entry whose phone sent it. */
-  appUser?: { id: number; label: string };
+  /** The App Users entry whose phone sent it: the person, their shop and its details as they are now. */
+  appUser?: { id: number; label: string; name?: string; business?: string; phone?: string; gstin?: string; address?: string };
+  /** Where it goes, copied when it was placed (checkout); orders from apps before checkout have the address in the notes. */
+  delivery?: OrderDelivery;
   /** The customer that app user belongs to (Module 7); customers group orders by this, not by the typed name. */
   customerRecord?: { id: number; name: string };
   /** Payments (Owners and Sales only; the inventory team's copy leaves these three out). Missing means credit. */
@@ -169,6 +171,25 @@ export type StockItem = {
   orphan: boolean;
 };
 
+/** An order's delivery details as chosen at checkout: the shop's or a saved address, or one for this order only. */
+export type OrderDelivery = {
+  addressType: 'saved' | 'temporary' | 'site';
+  addressId?: number | null;
+  receiverName: string;
+  contact: string;
+  alternateContact?: string;
+  siteName?: string;
+  addressLine: string;
+  area?: string;
+  landmark?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  /** The whole address on one line. */
+  line: string;
+  instructions?: string;
+};
+
 /** One change to an item's quantity, newest first. */
 export type StockMove = {
   id: string;
@@ -191,7 +212,9 @@ export type StockMove = {
     | 'replacement_reversed'
     | 'written_off'
     | 'supplier_return'
-    | 'supplier_return_reversed';
+    | 'supplier_return_reversed'
+    | 'billed'
+    | 'bill_reversed';
   /** Which stock it moved; missing for what can be sold. */
   bucket?: StockBucket;
   returnId?: string | null;
@@ -204,6 +227,9 @@ export type StockMove = {
   orderNumber?: string | null;
   purchaseId?: string | null;
   purchaseNumber?: string | null;
+  /** A counter bill's goods going out, or coming back when it's corrected or cancelled. */
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
   by: string;
   at: string;
 };
@@ -320,26 +346,64 @@ export type InvoiceItem = {
   description: string;
   /** The smaller line under it, e.g. its name or profile series. */
   detail: string;
+  /** Product code or SKU, on counter bills. */
+  sku?: string;
   hsn: string;
   qty: number;
-  unit: StockUnit;
-  /** Per unit, before GST. */
+  /** A stock unit, PAIR, or one of the shop's own units (measurement_units). */
+  unit: StockUnit | (string & {});
+  /** Per unit, before GST (with GST when the bill's prices include it). */
   rate: number;
   discountPct: number;
-  /** qty × rate less the discount: the line's value before GST. */
+  /** A fixed ₹ off the line, after its %. */
+  discountAmount?: number;
+  /** charge: transport or another charge, taxed like a line. */
+  lineType?: 'goods' | 'charge';
+  /** qty × rate less the line's discounts: its value before GST. */
   amount: number;
+  /** Its share of the bill discount; taxable is amount less it. */
+  billDiscount?: number;
   gstRate: number;
   taxable: number;
   cgst: number;
   sgst: number;
   igst: number;
+  /** The discount rule the line was billed under, as it stood then (category-wise discounts). */
+  categoryId?: string;
+  categoryLabel?: string;
+  discountSource?: 'product' | 'category' | 'default';
+  ruleType?: 'percentage' | 'amount' | 'both';
+  ruleMin?: number;
+  ruleMax?: number;
+  /** Rupees off before GST: the line's own discounts and its share of the bill discount. */
+  discountValue?: number;
+  effectivePct?: number;
+  discountStatus?: 'ok' | 'pending' | 'approved' | 'rejected';
+  discountApprovalId?: string;
 };
 
 /** A GST tax invoice made from an order. Drafts have no number; posted ones are cancelled, never deleted. */
 export type SalesInvoice = {
   id: string;
-  orderId: string;
-  orderNumber: string;
+  /** Missing for a counter bill, made without an order. */
+  orderId?: string;
+  orderNumber?: string;
+  source?: 'order' | 'counter' | 'replacement';
+  customerPhone?: string;
+  dueDate?: string;
+  pricesIncludeGst?: boolean;
+  billDiscount?: number;
+  billDiscountPct?: number;
+  allowNegativeStock?: boolean;
+  quotationId?: string;
+  quotationNumber?: string;
+  duplicateOf?: string;
+  version?: number;
+  reopenedBy?: string;
+  reopenedAt?: string;
+  reopenReason?: string;
+  /** Paid so far: through the order for an order's invoice, on the bill for a counter bill. Missing for a replacement's. */
+  paid?: number;
   number?: string;
   financialYear?: string;
   invoiceDate: string;
@@ -548,9 +612,11 @@ export type SalesReturn = {
   id: string;
   number: string;
   kind: ReturnKind;
-  orderId: string;
+  /** Missing for a return from a counter bill; orderNumber is then the bill's number. */
+  orderId?: string;
   orderNumber: string;
-  /** The order's posted tax invoice, when there was one. */
+  fromBill?: boolean;
+  /** The order's posted tax invoice, when there was one (the bill itself, for a counter bill's return). */
   invoiceId?: string;
   invoiceNumber?: string;
   invoiceDate?: string;
@@ -647,7 +713,8 @@ export type ReturnSource = {
     eligible: boolean;
   }[];
 };
-export type ReturnableOrder = { id: string; number: string; customer: string; phone?: string; placedAt: string; bill: number; invoiceNumber?: string | null; deliveredAt?: string | null };
+/** A delivered order, or a finalized counter bill (kind 'bill', its id the invoice's), to start a return from. */
+export type ReturnableOrder = { kind?: 'order' | 'bill'; id: string; number: string; customer: string; phone?: string; placedAt: string; bill: number; invoiceNumber?: string | null; deliveredAt?: string | null };
 
 /** A GST credit note against a posted tax invoice, for goods returned. */
 export type CreditNote = {
@@ -741,3 +808,194 @@ export type SupplierReturnSource = {
 
 /** The shop as a return receipt prints it (GET /returns/shop). */
 export type ShopDetails = { legalName: string; tradeName: string; gstin: string; address: string; pincode: string; phone: string; email: string; jurisdiction: string };
+
+// ---------- Custom billing ----------
+
+/** A unit a bill line can be in: the stock units, PAIR and the shop's own. `print` is what bills print. */
+export type MeasurementUnit = { code: string; label: string; print: string; builtIn: boolean };
+
+export type BillPaymentMethod = 'cash' | 'upi' | 'bank' | 'cheque' | 'card';
+/** Money received against a counter bill. Voided ones stay on record. */
+export type BillPayment = {
+  id: string;
+  amount: number;
+  method: BillPaymentMethod;
+  paidOn: string;
+  reference?: string;
+  note?: string;
+  by: string;
+  at: string;
+  voidedBy?: string;
+  voidedAt?: string;
+  voidReason?: string;
+};
+export type BillEvent = {
+  id: string;
+  kind: 'created' | 'edited' | 'finalized' | 'reopened' | 'payment' | 'payment_voided' | 'cancelled' | 'duplicated' | 'converted' | 'credit_note';
+  note?: string;
+  before?: { date: string; customer: string; total: number; discount: number; lines: { item: string; qty: number; unit: string; rate: number; gst: number }[] } | null;
+  after?: BillEvent['before'];
+  by: string;
+  at: string;
+};
+export type BillDetail = {
+  invoice: SalesInvoice;
+  payments: BillPayment[];
+  events: BillEvent[];
+  moves: { id: string; productId: string; option: string; change: number; balance: number; kind: StockMove['kind']; by: string; at: string }[];
+};
+
+/** How bills look and behave (Invoice Settings), with the shop's details they print. */
+export type BillingSettings = {
+  legalName: string;
+  tradeName: string;
+  gstin: string;
+  address: string;
+  pincode: string;
+  phone: string;
+  email: string;
+  registrationType: 'regular' | 'composition';
+  invoicePrefix: string;
+  bankName: string;
+  bankAccount: string;
+  bankBranchIfsc: string;
+  terms: string;
+  declaration: string;
+  jurisdiction: string;
+  heading: string;
+  footer: string;
+  logo: string | null;
+  signature: string | null;
+  themeColor: string;
+  paperSize: 'A4' | 'A5' | 'thermal';
+  template: 'classic' | 'modern' | 'compact';
+  dueDays: number;
+  pricesIncludeGst: boolean;
+  allowNegativeStock: boolean;
+  quotationDays: number;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+};
+export type BillingSetup = { settings: BillingSettings; units: MeasurementUnit[]; financialYear: string; lastInvoiceNumber: number };
+
+/** A customer to bill, as the billing search finds them. */
+export type BillCustomer = { id: number; name: string; legalName: string; gstin: string; billingAddress: string; state: string; pincode: string; phone: string };
+
+export type QuotationStatus = 'draft' | 'sent' | 'accepted' | 'converted' | 'expired' | 'cancelled';
+export type Quotation = {
+  id: string;
+  number: string;
+  quoteDate: string;
+  validUntil?: string;
+  status: QuotationStatus;
+  customerId?: number;
+  customerName: string;
+  customerPhone?: string;
+  customerGstin?: string;
+  billingAddress?: string;
+  placeOfSupply: string;
+  posCode: string;
+  interstate: boolean;
+  pricesIncludeGst: boolean;
+  billDiscount: number;
+  billDiscountPct?: number;
+  taxable: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  roundOff: number;
+  total: number;
+  notes?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  version: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  items: InvoiceItem[];
+};
+
+// ---------- Category-wise discounts ----------
+
+export type DiscountRule = {
+  id: number;
+  scope: 'default' | 'category' | 'product';
+  categoryId: string | null;
+  productId: string | null;
+  option: string;
+  label: string;
+  enabled: boolean;
+  type: 'percentage' | 'amount' | 'both';
+  minPct: number;
+  maxPct: number;
+  defaultPct: number;
+  minAmount: number;
+  maxAmount: number | null;
+  defaultAmount: number;
+  staffMaxPct: number | null;
+  staffMaxAmount: number | null;
+  requiresApproval: boolean;
+  startsOn: string | null;
+  endsOn: string | null;
+  note: string;
+  updatedBy: string | null;
+  updatedAt: string;
+};
+export type DiscountLevel = 'owner' | 'admin' | 'manager' | 'staff';
+export type DiscountSetup = { rules: DiscountRule[]; categories: { id: string; label: string }[]; productRules: boolean; me: { name: string; level: DiscountLevel; limitPct: number | null } };
+export type DiscountApproval = {
+  id: string;
+  invoiceId: string;
+  invoiceNumber?: string;
+  invoiceStatus: SalesInvoice['status'];
+  customerName: string;
+  productId: string;
+  option: string;
+  description: string;
+  categoryId?: string;
+  categoryLabel?: string;
+  discountPct: number;
+  discountAmount: number;
+  effectivePct: number;
+  qty: number;
+  rate: number;
+  ruleMin: number;
+  ruleMax: number;
+  authority: number;
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn';
+  requestedBy: string;
+  requestedAt: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  reason?: string;
+};
+export type DiscountReport = {
+  from: string;
+  to: string;
+  lines: {
+    day: string;
+    invoiceId: string;
+    number: string;
+    customer: string;
+    productId: string;
+    option: string;
+    description: string;
+    detail: string;
+    categoryId: string | null;
+    categoryLabel: string;
+    qty: number;
+    base: number;
+    discount: number;
+    effectivePct: number;
+    discountPct: number;
+    discountAmount: number;
+    billDiscount: number;
+    source: DiscountRule['scope'] | null;
+    ruleMin: number | null;
+    ruleMax: number | null;
+    by: string;
+    status: 'ok' | 'pending' | 'approved' | 'rejected';
+  }[];
+  decisions: { id: string; number?: string; description: string; effectivePct: number; status: DiscountApproval['status']; requestedBy: string; requestedAt: string; decidedBy?: string; decidedAt?: string; reason?: string }[];
+  changes: { id: string; kind: string; subject: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null; reason?: string; by: string; at: string }[];
+};

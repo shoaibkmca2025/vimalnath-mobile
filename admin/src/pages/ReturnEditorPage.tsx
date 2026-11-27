@@ -63,7 +63,10 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
   const toast = useToast();
   const { db } = useData();
   const [params, setParams] = useSearchParams();
-  const orderId = existing?.orderId ?? params.get('orderId');
+  // From an order, or from a bill made at the counter (no order): one of the two.
+  const orderId = existing ? (existing.orderId ?? null) : params.get('orderId');
+  const billId = existing ? (existing.orderId ? null : (existing.invoiceId ?? null)) : orderId ? null : params.get('invoiceId');
+  const sourceKey = orderId ? `order-${orderId}` : billId ? `bill-${billId}` : null;
   const [draft, setDraft] = useState<Draft>(() => {
     if (!existing) return blank(params.get('kind') === 'replacement' && allowReplacements ? 'replacement' : 'refund');
     return {
@@ -90,25 +93,27 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
       notes: existing.notes ?? '',
     };
   });
-  const [source, setSource] = useState<{ orderId: string; data: ReturnSource } | null>(null);
+  const [source, setSource] = useState<{ key: string; data: ReturnSource } | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<ApiError | null>(null);
 
   useEffect(() => {
-    if (!orderId) return;
+    if (!sourceKey) return;
     let active = true;
-    api<ReturnSource>(`/returns/orders/${orderId}${existing ? `?returnId=${existing.id}` : ''}`).then(
-      (data) => active && setSource({ orderId, data }),
-      (problem: unknown) => active && setSourceError(problem instanceof Error ? problem.message : 'Couldn’t load the order.'),
+    const path = orderId ? `/returns/orders/${orderId}` : `/returns/bills/${billId}`;
+    api<ReturnSource>(`${path}${existing ? `?returnId=${existing.id}` : ''}`).then(
+      (data) => active && setSource({ key: sourceKey, data }),
+      (problem: unknown) => active && setSourceError(problem instanceof Error ? problem.message : orderId ? 'Couldn’t load the order.' : 'Couldn’t load the bill.'),
     );
     return () => {
       active = false;
     };
-  }, [orderId, existing]);
+  }, [sourceKey, orderId, billId, existing]);
 
-  const data = source && source.orderId === orderId ? source.data : null;
+  const data = source && source.key === sourceKey ? source.data : null;
+  const fromBill = Boolean(billId);
   const invoiced = Boolean(data?.invoice);
   const rows = useMemo(() => stockRows(db.products, db.stock), [db.products, db.stock]);
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }));
@@ -192,7 +197,8 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
     }
     const body = {
       kind: draft.kind,
-      orderId: Number(orderId),
+      orderId: orderId ? Number(orderId) : null,
+      invoiceId: billId ? Number(billId) : null,
       returnDate: draft.returnDate,
       reason: draft.reason,
       reasonNote: draft.reasonNote.trim(),
@@ -248,13 +254,15 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
       <PageHeader
         title={title}
         crumbs={[{ label: draft.kind === 'replacement' ? 'Product Replacements' : 'Customer Returns', to: draft.kind === 'replacement' ? '/returns/replacements' : '/returns/list' }]}
-        description="From a delivered order. Only what was sold, less what has come back already, can be returned; prices and GST come from the bill."
+        description="From a delivered order or a finalized counter bill. Only what was sold, less what has come back already, can be returned; prices and GST come from the bill."
       />
-      {!orderId ? (
-        <OrderFinder onPick={(order) => setParams({ ...(draft.kind === 'replacement' ? { kind: 'replacement' } : {}), orderId: order.id }, { replace: true })} />
+      {!sourceKey ? (
+        <OrderFinder
+          onPick={(order) => setParams({ ...(draft.kind === 'replacement' ? { kind: 'replacement' } : {}), ...(order.kind === 'bill' ? { invoiceId: order.id } : { orderId: order.id }) }, { replace: true })}
+        />
       ) : !data ? (
         <Card>
-          <EmptyState icon={ArrowUUpLeftIcon} title={sourceError ? 'Couldn’t load the order' : 'Loading the order…'}>
+          <EmptyState icon={ArrowUUpLeftIcon} title={sourceError ? (fromBill ? 'Couldn’t load the bill' : 'Couldn’t load the order') : fromBill ? 'Loading the bill…' : 'Loading the order…'}>
             {sourceError}
           </EmptyState>
         </Card>
@@ -267,8 +275,12 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
                 id="order-title"
                 title={`${data.order.number} · ${data.order.customer}`}
                 description={[
-                  data.order.deliveredAt ? `Delivered ${dayLabel(localDay(new Date(data.order.deliveredAt)))}` : 'Delivered',
-                  data.invoice ? `Tax invoice ${data.invoice.number}: prices before GST, GST given back as billed` : 'No tax invoice here: prices as billed',
+                  fromBill
+                    ? `Counter bill${data.order.deliveredAt ? ` finalized ${dayLabel(localDay(new Date(data.order.deliveredAt)))}` : ''}`
+                    : data.order.deliveredAt
+                      ? `Delivered ${dayLabel(localDay(new Date(data.order.deliveredAt)))}`
+                      : 'Delivered',
+                  data.invoice ? `${fromBill ? 'Its' : 'Tax invoice'} ${fromBill ? 'tax invoice' : data.invoice.number}: prices before GST, GST given back as billed` : 'No tax invoice here: prices as billed',
                   data.order.lastDay ? `Return period ends ${dayLabel(data.order.lastDay)}` : null,
                 ]
                   .filter(Boolean)
@@ -276,7 +288,7 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
                 action={
                   !existing && (
                     <Button size="sm" variant="plain" onClick={() => setParams(draft.kind === 'replacement' ? { kind: 'replacement' } : {}, { replace: true })}>
-                      Change Order
+                      {fromBill ? 'Change Bill' : 'Change Order'}
                     </Button>
                   )
                 }
@@ -595,7 +607,7 @@ function Editor({ existing, allowReplacements, mayCreate }: { existing?: SalesRe
   );
 }
 
-/** Finds a delivered order to return from: by its number, its tax invoice's number, the customer, or their phone. */
+/** Finds a delivered order or a finalized counter bill to return from: by its number, its tax invoice's number, the customer, or their phone. */
 function OrderFinder({ onPick }: { onPick: (order: ReturnableOrder) => void }) {
   const [query, setQuery] = useState('');
   const [found, setFound] = useState<{ query: string; orders: ReturnableOrder[] } | null>(null);
@@ -619,14 +631,14 @@ function OrderFinder({ onPick }: { onPick: (order: ReturnableOrder) => void }) {
   const orders = found?.orders ?? [];
   return (
     <Card aria-labelledby="find-title">
-      <CardHeader id="find-title" title="Which order is it from?" description="Delivered orders only. Search by order or tax invoice number, the customer’s name or phone." />
+      <CardHeader id="find-title" title="Which order or bill is it from?" description="Delivered orders and finalized counter bills. Search by order or invoice number, the customer’s name or phone." />
       <div className="card__body stack">
         <div className="search" role="search">
           <MagnifyingGlassIcon size={16} aria-hidden />
           <input
             type="search"
             className="input"
-            aria-label="Search delivered orders"
+            aria-label="Search delivered orders and bills"
             placeholder="e.g. VSC-0059, VSC-26-27-412, Sadguru, 98220…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -641,26 +653,26 @@ function OrderFinder({ onPick }: { onPick: (order: ReturnableOrder) => void }) {
           </p>
         )}
         {found && !orders.length ? (
-          <p className="muted">{needle ? `No delivered order matches “${needle}”.` : 'No delivered orders yet.'}</p>
+          <p className="muted">{needle ? `No delivered order or bill matches “${needle}”.` : 'No delivered orders or bills yet.'}</p>
         ) : (
           <ul className="item-picker__list" aria-label={needle ? 'Matching orders' : 'Recent delivered orders'} style={{ position: 'static' }}>
             {orders.map((order) => (
-              <li key={order.id}>
+              <li key={`${order.kind ?? 'order'}-${order.id}`}>
                 <button type="button" className="item-picker__option" onClick={() => onPick(order)}>
                   <span style={{ minWidth: 0 }}>
                     <span className="cell-title" style={{ display: 'block' }}>
                       {order.customer}
                     </span>
                     <span className="cell-sub num">
-                      {order.number}
-                      {order.invoiceNumber ? ` · ${order.invoiceNumber}` : ''}
+                      {order.kind === 'bill' ? `Counter bill ${order.number}` : order.number}
+                      {order.invoiceNumber && order.kind !== 'bill' ? ` · ${order.invoiceNumber}` : ''}
                       {order.phone ? ` · ${order.phone}` : ''}
                     </span>
                   </span>
                   <span className="cell-sub num" style={{ flexShrink: 0, textAlign: 'right' }}>
                     {formatINR(order.bill)}
                     <br />
-                    {order.deliveredAt ? `Delivered ${dayLabel(localDay(new Date(order.deliveredAt)))}` : ''}
+                    {order.deliveredAt ? `${order.kind === 'bill' ? 'Billed' : 'Delivered'} ${dayLabel(localDay(new Date(order.deliveredAt)))}` : ''}
                   </span>
                 </button>
               </li>
@@ -668,7 +680,7 @@ function OrderFinder({ onPick }: { onPick: (order: ReturnableOrder) => void }) {
           </ul>
         )}
         <p className="field__hint" style={{ margin: 0 }}>
-          Can’t find it? Only delivered orders can have returns. <Link to="/orders">Open Orders</Link>.
+          Can’t find it? Only delivered orders and finalized bills can have returns. <Link to="/orders">Open Orders</Link> or <Link to="/billing">Billing</Link>.
         </p>
       </div>
     </Card>

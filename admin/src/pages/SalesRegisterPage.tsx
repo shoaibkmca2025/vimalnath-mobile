@@ -46,7 +46,7 @@ export default function SalesRegisterPage() {
   const notes = (data?.creditNotes ?? []).filter((note) => inRange(note.noteDate, period) && (!needleOf(query) || [note.number, note.customerName, note.customerGstin ?? '', note.invoiceNumber, note.returnNumber].some((text) => text.toLowerCase().includes(needleOf(query)))));
   const toInvoice = db.orders.filter((order) => ['confirmed', 'packed', 'dispatched', 'delivered'].includes(order.status) && !invoiced.has(order.id));
   const needle = query.trim().toLowerCase();
-  const matches = (invoice: SalesInvoice) => !needle || [invoice.number ?? '', invoice.customerName, invoice.customerGstin ?? '', invoice.orderNumber, invoice.placeOfSupply ?? ''].some((text) => text.toLowerCase().includes(needle));
+  const matches = (invoice: SalesInvoice) => !needle || [invoice.number ?? '', invoice.customerName, invoice.customerGstin ?? '', invoice.orderNumber ?? '', invoice.placeOfSupply ?? ''].some((text) => text.toLowerCase().includes(needle));
   const rows = invoices.filter((invoice) => invoice.status === show && (show === 'draft' || inRange(invoice.invoiceDate, period)) && matches(invoice));
   const counts = {
     posted: invoices.filter((invoice) => invoice.status === 'posted' && inRange(invoice.invoiceDate, period)).length,

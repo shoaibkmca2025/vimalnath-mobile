@@ -67,7 +67,7 @@ function Receipt({ ret, shop, settings }: Loaded) {
   const share = () => {
     const lines = [
       `${name}: ${title.toLowerCase().replace(/^./, (char) => char.toUpperCase())} ${ret.number}`,
-      `Date: ${invoiceDay(ret.returnDate)} · Order ${ret.orderNumber}${ret.invoiceNumber ? ` · Invoice ${ret.invoiceNumber}` : ''}`,
+      `Date: ${invoiceDay(ret.returnDate)} · ${ret.orderId ? `Order ${ret.orderNumber}${ret.invoiceNumber ? ` · Invoice ${ret.invoiceNumber}` : ''}` : `Bill ${ret.orderNumber}`}`,
       ...ret.items.map((item) => `• ${formatNumber(item.qty)} ${PRINT_UNIT[item.unit]} ${item.description}: ${formatINR(item.amount)}`),
       ...(ret.replacementItems ?? []).map((item) => `↺ ${formatNumber(item.qty)} ${PRINT_UNIT[item.unit]} ${item.name}: ${formatINR(item.amount)}`),
       note ? `Credit note ${note.number}: ${formatINR(note.total)}` : '',
@@ -170,11 +170,11 @@ function Receipt({ ret, shop, settings }: Loaded) {
                     [
                       note ? ['Credit Note No.', note.number] : ['Return No.', ret.number],
                       ['Dated', invoiceDay(note ? note.date : ret.returnDate)],
-                      note ? ['Return No.', ret.number] : ['Order No.', ret.orderNumber],
+                      note ? ['Return No.', ret.number] : [ret.orderId ? 'Order No.' : 'Bill No.', ret.orderNumber],
                       ['Return Date', invoiceDay(ret.returnDate)],
                       ['Original Invoice No.', ret.invoiceNumber ?? '—'],
                       ['Invoice Date', ret.invoiceDate ? invoiceDay(ret.invoiceDate) : '—'],
-                      ['Order No.', ret.orderNumber],
+                      ret.orderId ? ['Order No.', ret.orderNumber] : ['Sold', 'At the counter'],
                       ['Status', RETURN_STATUS[ret.status].label],
                     ] as [string, string][]
                   ).map(([label, value], index) => (

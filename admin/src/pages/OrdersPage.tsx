@@ -142,7 +142,13 @@ export default function OrdersPage() {
       cell: (order) => (
         <>
           {order.customer}
-          <div className="cell-sub">{order.phone ?? 'No phone given'}</div>
+          <div className="cell-sub">{[order.appUser?.business && order.appUser.business !== order.customer ? order.appUser.business : null, order.phone ?? order.appUser?.phone ?? 'No phone given'].filter(Boolean).join(' · ')}</div>
+          {order.delivery && (
+            <div className="cell-sub">
+              To {order.delivery.siteName || order.delivery.receiverName}, {order.delivery.city}
+              {order.delivery.addressType !== 'saved' ? (order.delivery.addressType === 'site' ? ' · site' : ' · this order only') : ''}
+            </div>
+          )}
         </>
       ),
     },

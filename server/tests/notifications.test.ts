@@ -8,7 +8,7 @@ import { createApp } from '../src/app.ts';
 import { appRoutes, appUserAdminRoutes } from '../src/app-users.ts';
 import { importSeed } from '../src/import-data.ts';
 import { migrate } from '../src/migrate.ts';
-import { DeviceGone, notificationRoutes, realSenders, sendQueued, type Message } from '../src/notifications.ts';
+import { DeviceGone, inboxRoutes, notificationRoutes, realSenders, sendQueued, type Message } from '../src/notifications.ts';
 import { orderAdminRoutes } from '../src/orders.ts';
 import { adminRoutes, issuePasswordLink } from '../src/staff.ts';
 import { seed } from './seed-fixture.ts';
@@ -30,6 +30,7 @@ testDatabase('notifications', async (client) => {
   admin.route('/app-users', appUserAdminRoutes(sql));
   admin.route('/orders', orderAdminRoutes(sql));
   admin.route('/notifications', notificationRoutes(sql, { email: false }));
+  admin.route('/inbox', inboxRoutes(sql));
   app.route('/v1/admin', admin);
   app.route('/v1/app', appRoutes(sql));
 });
@@ -77,18 +78,23 @@ test('staff moving an order on queues a push for a phone that takes notification
   const owner = await staff('owner');
   const order = await phoneWithOrder(owner, TOKEN);
   assert.equal((await send('/v1/admin/orders/status', 'POST', { ids: [order.id], status: 'confirmed' }, owner)).status, 200);
-  const [push] = await queued(order.id);
+  const pushes = await queued(order.id);
+  assert.deepEqual(pushes.map((row) => row.event), ['received', 'confirmed']);
+  const push = pushes[1]!;
+  const { notificationId, ...data } = push.data as Record<string, string>;
   assert.deepEqual(
-    { channel: push!.channel, recipient: push!.recipient, title: push!.title, body: push!.body, data: push!.data },
-    { channel: 'push', recipient: TOKEN, title: `Order ${order.number} confirmed`, body: `Vimalnath has confirmed your order ${order.number}.`, data: { orderId: order.phoneOrderId } },
+    { channel: push.channel, recipient: push.recipient, title: push.title, body: push.body, data },
+    { channel: 'push', recipient: TOKEN, title: `Order ${order.number} confirmed`, body: `Vimalnath has confirmed your order ${order.number}.`, data: { orderId: order.phoneOrderId, category: 'orders', channel: 'orders-alert', private: '' } },
   );
-  // Packing is the warehouse's step, not news for the customer.
+  assert.match(notificationId!, /^\d+$/);
+  // Packing is the warehouse's step, not news for the customer. The same confirmation again tells nobody twice.
   await send('/v1/admin/orders/status', 'POST', { ids: [order.id], status: 'packed' }, owner);
-  assert.equal((await queued(order.id)).length, 1);
-  // A phone without a push address (the web app) keeps it for its Notifications screen, and nothing is sent.
+  assert.equal((await queued(order.id)).length, 2);
+  // A phone without a push address (the web app) has it on its Notifications screen, and nothing is sent.
   const quiet = await phoneWithOrder(owner);
   await send('/v1/admin/orders/status', 'POST', { ids: [quiet.id], status: 'dispatched' }, owner);
-  assert.deepEqual((await queued(quiet.id)).map((row) => [row.channel, row.recipient, row.status]), [['push', '', 'skipped']]);
+  assert.equal((await queued(quiet.id)).length, 0);
+  assert.deepEqual((await sql`select n.event from notifications n join orders o on o.device_id = n.account_id where o.id = ${quiet.id} order by n.id`).map((row) => row.event), ['received', 'dispatched']);
 });
 
 test('the app’s Notifications screen: this account’s updates and the shop’s messages, newest first; opening it clears the bell', { skip }, async () => {
@@ -98,26 +104,32 @@ test('the app’s Notifications screen: this account’s updates and the shop’
   const bell = async (auth: Record<string, string>) => ((await (await send('/v1/app/orders', 'GET', undefined, auth)).json()) as { unread: number }).unread;
   type Item = { event: string; title: string; data: Record<string, string>; read: boolean };
   const inbox = async (auth: Record<string, string>) => ((await (await send('/v1/app/notifications', 'GET', undefined, auth)).json()) as { notifications: Item[] }).notifications;
-  assert.equal(await bell(mine.auth), 0);
+  assert.equal(await bell(mine.auth), 1);
 
   await send('/v1/admin/orders/status', 'POST', { ids: [mine.id], status: 'confirmed' }, owner);
   await send('/v1/admin/orders/status', 'POST', { ids: [mine.id], status: 'dispatched' }, owner);
   const broadcast = await send('/v1/admin/notifications/broadcast', 'POST', { title: 'Closed on Sunday', body: 'For Diwali.' }, owner);
   assert.equal(((await broadcast.json()) as { users: number }).users > 0, true);
-  assert.equal(await bell(mine.auth), 3);
+  assert.equal(await bell(mine.auth), 4);
   const items = await inbox(mine.auth);
   assert.deepEqual(
     items.map((item) => [item.event, item.title, item.read]),
-    [['broadcast', 'Closed on Sunday', false], ['dispatched', `Order ${mine.number} dispatched`, false], ['confirmed', `Order ${mine.number} confirmed`, false]],
+    [
+      ['broadcast', 'Closed on Sunday', false],
+      ['dispatched', `Order ${mine.number} dispatched`, false],
+      ['confirmed', `Order ${mine.number} confirmed`, false],
+      ['received', `Order ${mine.number} received`, false],
+    ],
   );
   assert.deepEqual(items[1]!.data, { orderId: mine.phoneOrderId });
-  // Only this account's orders: the other customer sees the shop's message, not this order.
-  assert.deepEqual((await inbox(theirs.auth)).map((item) => item.event), ['broadcast']);
+  // Only this account's orders: the other customer sees the shop's message and their own order, not this one.
+  assert.deepEqual((await inbox(theirs.auth)).map((item) => item.event), ['broadcast', 'received']);
 
+  // What the app before the Notification Center sends (no body): everything read.
   assert.equal((await send('/v1/app/notifications/read', 'POST', {}, mine.auth)).status, 200);
   assert.equal(await bell(mine.auth), 0);
-  assert.deepEqual((await inbox(mine.auth)).map((item) => item.read), [true, true, true]);
-  assert.equal(await bell(theirs.auth), 1);
+  assert.deepEqual((await inbox(mine.auth)).map((item) => item.read), [true, true, true, true]);
+  assert.equal(await bell(theirs.auth), 2);
   assert.equal((await send('/v1/app/notifications', 'GET', undefined, { Authorization: 'Bearer nope' })).status, 401);
 });
 
@@ -172,7 +184,13 @@ test('web push: the web app registers its browser; messages are signed by the sh
     decipher.setAuthTag(sealed.subarray(-16));
     const plain = Buffer.concat([decipher.update(sealed.subarray(0, -16)), decipher.final()]);
     assert.equal(plain.at(-1), 2);
-    assert.deepEqual(JSON.parse(plain.subarray(0, -1).toString()), { title: `Order ${order.number} confirmed`, body: `Vimalnath has confirmed your order ${order.number}.`, data: { orderId: order.phoneOrderId }, badge: 1 });
+    const payload = JSON.parse(plain.subarray(0, -1).toString());
+    assert.deepEqual({ ...payload, data: { ...payload.data, notificationId: 'n' } }, {
+      title: `Order ${order.number} confirmed`,
+      body: `Vimalnath has confirmed your order ${order.number}.`,
+      data: { orderId: order.phoneOrderId, notificationId: 'n', category: 'orders', channel: 'orders-alert', private: '' },
+      badge: 2,
+    });
     assert.equal((await sql`select status from notification_log where order_id = ${order.id} and channel = 'push'`)[0]!.status, 'sent');
 
     // The customer turned notifications off: the push service says the address is gone, and the server forgets it.
@@ -180,7 +198,7 @@ test('web push: the web app registers its browser; messages are signed by the sh
     await send('/v1/admin/orders/status', 'POST', { ids: [order.id], status: 'dispatched' }, owner);
     await sendQueued(sql, realSenders({ ADMIN_ORIGIN: ORIGIN }, sql));
     assert.equal(posted.length, 2);
-    assert.equal((await sql`select count(*)::int as n from app_devices where push_token like ${`%${endpoint}%`}`)[0]!.n, 0);
+    assert.equal((await sql`select count(*)::int as n from device_tokens where token like ${`%${endpoint}%`}`)[0]!.n, 0);
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -207,7 +225,7 @@ test('sending: delivered once; a failure is tried three times; email without SMT
   assert.match((await statusOf(mail!)).error, /Not set up: add SMTP_URL/);
   assert.equal((await statusOf(mail!)).status, 'skipped');
   assert.equal((await statusOf(gone!)).status, 'failed');
-  assert.equal((await sql`select push_token from app_devices where push_token = 'ExponentPushToken[gone]'`).length, 0);
+  assert.equal((await sql`select token from device_tokens where token = 'ExponentPushToken[gone]'`).length, 0);
 
   await sendQueued(sql, { push });
   await sendQueued(sql, { push });
@@ -219,15 +237,17 @@ test('sending: delivered once; a failure is tried three times; email without SMT
 test('the Owner edits wording and recipients and broadcasts; others can’t; bad input is refused', { skip }, async () => {
   const owner = await staff('owner');
   assert.equal((await send('/v1/admin/notifications', 'GET', undefined, await staff('sales'))).status, 403);
-  const page = (await (await send('/v1/admin/notifications', 'GET', undefined, owner)).json()) as { setup: { email: boolean }; templates: { event: string; title: string; body: string }[] };
-  assert.deepEqual(page.setup, { email: false });
-  assert.deepEqual(page.templates.map((template) => template.event), ['placed', 'confirmed', 'dispatched', 'delivered', 'cancelled']);
+  const page = (await (await send('/v1/admin/notifications', 'GET', undefined, owner)).json()) as { setup: { email: boolean; fcm: boolean }; templates: { event: string; audience: string; category: string; title: string; body: string }[] };
+  assert.deepEqual(page.setup, { email: false, fcm: false });
+  assert.deepEqual(page.templates.slice(0, 5).map((template) => template.event), ['placed', 'confirmed', 'dispatched', 'delivered', 'cancelled']);
+  assert.ok(page.templates.length > 30);
+  assert.deepEqual(page.templates.find((template) => template.event === 'low_stock')!.audience, 'staff');
 
   const edited = page.templates.map((template) => (template.event === 'dispatched' ? { ...template, title: '{number} is on the way', body: 'Track it with us on WhatsApp.' } : template));
   assert.equal((await send('/v1/admin/notifications/templates', 'PUT', { templates: edited }, owner)).status, 204);
   const order = await phoneWithOrder(owner, 'ExponentPushToken[words]');
   await send('/v1/admin/orders/status', 'POST', { ids: [order.id], status: 'dispatched' }, owner);
-  assert.equal((await queued(order.id))[0]!.title, `${order.number} is on the way`);
+  assert.equal((await queued(order.id)).find((row) => row.event === 'dispatched')!.title, `${order.number} is on the way`);
 
   assert.equal((await send('/v1/admin/notifications/templates', 'PUT', { templates: [{ event: 'placed', title: ' ', body: 'x' }] }, owner)).status, 400);
   assert.equal((await send('/v1/admin/notifications/recipients', 'PUT', { emails: ['not an email'] }, owner)).status, 400);
@@ -235,8 +255,8 @@ test('the Owner edits wording and recipients and broadcasts; others can’t; bad
 
   // A phone the shop turned off gets nothing, even though it once gave an address.
   await phoneWithOrder(owner, 'ExponentPushToken[blocked]');
-  await sql`update app_devices set blocked = true where push_token = 'ExponentPushToken[blocked]'`;
-  const devices = Number((await sql`select count(*) from app_devices where push_token is not null and not blocked`)[0]!.count);
+  await sql`update app_devices set blocked = true where id = (select account_id from device_tokens where token = 'ExponentPushToken[blocked]')`;
+  const devices = Number((await sql`select count(*) from device_tokens t join app_devices d on d.id = t.account_id where not d.blocked`)[0]!.count);
   const users = Number((await sql`select count(*) from app_devices where not blocked`)[0]!.count);
   const broadcast = (await (await send('/v1/admin/notifications/broadcast', 'POST', { title: 'New price list', body: 'The Feb 2027 prices are in the app.' }, owner)).json()) as { queued: number; users: number };
   assert.equal(broadcast.queued, devices);

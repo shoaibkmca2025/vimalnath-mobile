@@ -106,8 +106,8 @@ export default function FormulasPage() {
                   <span className="formula__expr">sliding + fixed</span>
                 </li>
                 <li>
-                  <span className="formula__name">Cutting width</span>
-                  <span className="formula__expr">(opening width + 16 mm × sliding panels) ÷ panels</span>
+                  <span className="formula__name">Cutting length (L)</span>
+                  <span className="formula__expr">(opening length + 16 mm × sliding panels) ÷ panels</span>
                 </li>
                 <li>
                   <span className="formula__name">Cutting height</span>
@@ -115,7 +115,7 @@ export default function FormulasPage() {
                 </li>
                 <li>
                   <span className="formula__name">Glass size</span>
-                  <span className="formula__expr">cutting width − 21 mm × cutting height − 21 mm</span>
+                  <span className="formula__expr">L: cutting length − 21 mm × H: cutting height − 21 mm</span>
                 </li>
                 <li>
                   <span className="formula__name">Glass quantity</span>
@@ -123,7 +123,7 @@ export default function FormulasPage() {
                 </li>
                 <li>
                   <span className="formula__name">Allowed opening</span>
-                  <span className="formula__expr">width from 600 mm × panels; height 1,800 – 2,998 mm</span>
+                  <span className="formula__expr">length from 600 mm × panels; height 1,800 – 2,998 mm</span>
                 </li>
                 <li>
                   <span className="formula__name">Warning</span>
@@ -136,11 +136,11 @@ export default function FormulasPage() {
                   <dt>Vertical</dt>
                   <dd>2 nos — 2.5 m up to a 2,489 mm cutting height, 3 m above</dd>
                   <dt>Horizontal</dt>
-                  <dd>1+0 and 1+1: one 2.5 m bar per panel. Others: a top and bottom piece per panel at the cutting width, cut from 2.5 m and 3 m bars</dd>
+                  <dd>1+0 and 1+1: one 2.5 m bar per panel. Others: a top and bottom piece per panel at the cutting length, cut from 2.5 m and 3 m bars</dd>
                   <dt>Top track</dt>
                   <dd>
-                    1+0 and 1+1: one 2.5 m track per panel. 2+1, 3+1, 4+1: one per panel at the opening width. 2+0, 3+0, 4+0: one per panel at the opening + one cutting
-                    width + 200 mm, so the panels can slide clear. Lengths round up to whole feet
+                    1+0 and 1+1: one 2.5 m track per panel. 2+1, 3+1, 4+1: one per panel at the opening length. 2+0, 3+0, 4+0: one per panel at the opening + one cutting
+                    length + 200 mm, so the panels can slide clear. Lengths round up to whole feet
                   </dd>
                   <dt>Track cap</dt>
                   <dd>2 nos (2.5 m)</dd>
@@ -165,7 +165,7 @@ export default function FormulasPage() {
         </div>
 
         <Card className="table-card" aria-labelledby="configs-title">
-          <CardHeader id="configs-title" title="Every configuration" description="Worked examples use the middle of the allowed width and a 2,400 mm height." />
+          <CardHeader id="configs-title" title="Every configuration" description="Worked examples use the middle of the allowed length and a 2,400 mm height. L = length, H = height." />
           <div className="table-scroll">
             <table className="table">
               <caption className="visually-hidden">Glass formula for every configuration in the app</caption>
@@ -199,12 +199,12 @@ export default function FormulasPage() {
                         {STATUS[row.status].label}
                       </Badge>
                     </td>
-                    <td className="num">{row.range ? `${formatNumber(row.range.minWidth)}–${formatNumber(row.range.maxWidth)} × ${formatNumber(row.range.minHeight)}–${formatNumber(row.range.maxHeight)}` : 'Any size'}</td>
+                    <td className="num">{row.range ? `L ${formatNumber(row.range.minWidth)}–${formatNumber(row.range.maxWidth)} × H ${formatNumber(row.range.minHeight)}–${formatNumber(row.range.maxHeight)}` : 'Any size'}</td>
                     <td className="num">
-                      {formatNumber(row.size.width)} × {formatNumber(row.size.height)}
+                      L {formatNumber(row.size.width)} × H {formatNumber(row.size.height)}
                     </td>
-                    <td className="num">{row.example ? `${row.example.cuttingWidth} × ${row.example.cuttingHeight}` : '—'}</td>
-                    <td className="num">{row.example ? `${row.example.glassWidth} × ${row.example.glassHeight}` : '—'}</td>
+                    <td className="num">{row.example ? `L ${row.example.cuttingWidth} × H ${row.example.cuttingHeight}` : '—'}</td>
+                    <td className="num">{row.example ? `L ${row.example.glassWidth} × H ${row.example.glassHeight}` : '—'}</td>
                     <td className="is-num">{row.example?.glassQuantity ?? '—'}</td>
                     <td>
                       <Button size="sm" variant="plain" onClick={() => setParams({ config: row.name }, { replace: true })} aria-label={`Try ${row.name}`}>
@@ -248,7 +248,8 @@ function Tester({ row, names, onPick }: { row: Row; names: string[]; onPick: (na
   const ready = w > 0 && h > 0;
   const outcome = ready ? computeGlassPlan(row.name, Math.round(w), Math.round(h), row.panels) : null;
   const result: GlassPlanResult | null = outcome && 'result' in outcome ? outcome.result : null;
-  const widthLabel = /synchro|folding/i.test(row.name) ? 'Width' : 'Length';
+  // The shop calls the opening's width its length, in every system (as the app's calculator does).
+  const widthLabel = 'Length';
 
   return (
     <Card aria-labelledby="tester-title">
@@ -261,7 +262,7 @@ function Tester({ row, names, onPick }: { row: Row; names: string[]; onPick: (na
         </div>
         {row.range && (
           <p className="field__hint">
-            Allowed: {formatNumber(row.range.minWidth)}–{formatNumber(row.range.maxWidth)} × {formatNumber(row.range.minHeight)}–{formatNumber(row.range.maxHeight)} mm
+            Allowed: L {formatNumber(row.range.minWidth)}–{formatNumber(row.range.maxWidth)} × H {formatNumber(row.range.minHeight)}–{formatNumber(row.range.maxHeight)} mm
           </p>
         )}
         <div aria-live="polite" className="stack">
@@ -282,14 +283,14 @@ function Tester({ row, names, onPick }: { row: Row; names: string[]; onPick: (na
                 <div className="size-card size-card--cutting">
                   <p className="size-card__title">Cutting size</p>
                   <p className="size-card__value num">
-                    {result.cuttingWidth} × {result.cuttingHeight} mm
+                    L {result.cuttingWidth} × H {result.cuttingHeight} mm
                   </p>
                   <p className="size-card__detail">{formatInchSize(result.cuttingWidth, result.cuttingHeight)} · per panel</p>
                 </div>
                 <div className="size-card size-card--glass">
                   <p className="size-card__title">Glass size</p>
                   <p className="size-card__value num">
-                    {result.glassWidth} × {result.glassHeight} mm
+                    L {result.glassWidth} × H {result.glassHeight} mm
                   </p>
                   <p className="size-card__detail">
                     {formatInchSize(result.glassWidth, result.glassHeight)} · Qty: {result.glassQuantity}
@@ -310,7 +311,7 @@ function Tester({ row, names, onPick }: { row: Row; names: string[]; onPick: (na
                   ))}
                 </dl>
               </div>
-              <p className="field__hint">Opening {mm(result.openingWidth)} × {mm(result.openingHeight)}.</p>
+              <p className="field__hint">Opening L {mm(result.openingWidth)} × H {mm(result.openingHeight)}.</p>
             </>
           )}
         </div>

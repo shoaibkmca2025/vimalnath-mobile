@@ -86,27 +86,47 @@ const sumOf = (values: number[]) => r2(values.reduce((total, value) => total + v
  * rate each, and shared over the lines; the invoice is rounded to the rupee. VSC-26-27-412: ₹24,270.50 at 18% →
  * CGST ₹2,184.35 + SGST ₹2,184.35, less ₹0.20 → ₹28,639.
  */
-export function computeInvoice<T extends { qty: number; rate: number; discountPct: number; gstRate: number }>(items: T[], interstate: boolean) {
-  const lines = items.map((item) => ({ ...item, amount: r2(item.qty * item.rate * (1 - item.discountPct / 100)), cgst: 0, sgst: 0, igst: 0 }));
+export type Priced = { qty: number; rate: number; discountPct: number; gstRate: number; discountAmount?: number; lineType?: 'goods' | 'charge' };
+export type PriceOptions = { inclusive?: boolean; billDiscount?: number };
+/**
+ * Counter bills add (as server/src/gst.ts does): a fixed ₹ off a line after its %, rates typed GST included, a bill
+ * discount before GST shared over the goods lines by value, and charges taxed like a line but never discounted.
+ */
+export function computeInvoice<T extends Priced>(items: T[], interstate: boolean, options: PriceOptions = {}) {
+  const lines = items.map((item) => {
+    const gross = Math.max(0, r2(r2(item.qty * item.rate * (1 - item.discountPct / 100)) - (item.discountAmount ?? 0)));
+    const amount = options.inclusive ? r2(gross / (1 + item.gstRate / 100)) : gross;
+    return { ...item, amount, billDiscount: 0, taxable: amount, cgst: 0, sgst: 0, igst: 0 };
+  });
+  const goods = lines.filter((line) => line.lineType !== 'charge');
+  const base = sumOf(goods.map((line) => line.amount));
+  const billDiscount = Math.min(r2(options.billDiscount ?? 0), base);
+  let unshared = billDiscount;
+  goods.forEach((line, index) => {
+    const share = index === goods.length - 1 ? unshared : r2(base ? (billDiscount * line.amount) / base : 0);
+    line.billDiscount = share;
+    line.taxable = r2(line.amount - share);
+    unshared = r2(unshared - share);
+  });
   const heads: Heads = zero();
   for (const rate of [...new Set(lines.map((line) => line.gstRate))]) {
     const group = lines.filter((line) => line.gstRate === rate);
-    const taxable = sumOf(group.map((line) => line.amount));
+    const taxable = sumOf(group.map((line) => line.taxable));
     const parts: [keyof Heads, number][] = interstate ? [['igst', r2((taxable * rate) / 100)]] : [['cgst', r2((taxable * rate) / 200)], ['sgst', r2((taxable * rate) / 200)]];
     for (const [head, total] of parts) {
       heads[head] = r2(heads[head] + total);
       let left = total;
       group.forEach((line, index) => {
-        const share = index === group.length - 1 ? left : r2(taxable ? (total * line.amount) / taxable : 0);
+        const share = index === group.length - 1 ? left : r2(taxable ? (total * line.taxable) / taxable : 0);
         line[head] = share;
         left = r2(left - share);
       });
     }
   }
-  const taxable = sumOf(lines.map((line) => line.amount));
+  const taxable = sumOf(lines.map((line) => line.taxable));
   const exact = r2(taxable + totalOf(heads));
   const roundOff = r2(Math.round(exact) - exact);
-  return { lines: lines.map((line) => ({ ...line, taxable: line.amount })), taxable, ...heads, roundOff, total: r2(exact + roundOff) };
+  return { lines, taxable, billDiscount, ...heads, roundOff, total: r2(exact + roundOff) };
 }
 
 /** Units as the shop's invoices print them: pieces are NOS. */
@@ -124,6 +144,12 @@ export const PRINT_UNIT: Record<StockUnit, string> = {
   sheet: 'SHEET',
   length: 'LENGTH',
 };
+
+/** The shop's own units, as Invoice Settings print them; set once the billing settings load. */
+const customPrint = new Map<string, string>([['pair', 'PAIR']]);
+export const setUnitPrints = (units: { code: string; print: string }[]) => units.forEach((unit) => customPrint.set(unit.code, unit.print));
+/** A bill line's unit as the bill prints it: NOS for pieces, the shop's own name for its units. */
+export const printUnit = (unit: string) => PRINT_UNIT[unit as StockUnit] ?? customPrint.get(unit) ?? unit.toUpperCase();
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 /** 2026-11-05 → 5-Nov-26, as the invoice prints dates. */

@@ -14,6 +14,12 @@ type Props = {
   body?: string;
   placeholder?: string;
   fieldLabel?: string;
+  /** Without a name the button stays off. */
+  required?: boolean;
+  /** What the field starts with, e.g. the last name typed. */
+  initial?: string;
+  /** The button's words, e.g. "Share" or "Save". */
+  actionLabel?: string;
 };
 
 export function ExportSiteNameSheet({
@@ -24,19 +30,23 @@ export function ExportSiteNameSheet({
   body = 'The site name is printed at the top of the bar cutting plan.',
   placeholder = 'e.g. Sundaram Residence, Block A',
   fieldLabel = 'Site name',
+  required = false,
+  initial = '',
+  actionLabel = 'Create',
 }: Props) {
-  const [siteName, setSiteName] = useState('');
+  const [siteName, setSiteName] = useState(initial);
 
   useEffect(() => {
-    if (visible) setSiteName('');
-  }, [visible]);
+    if (visible) setSiteName(initial);
+  }, [visible, initial]);
 
+  const missing = required && !siteName.trim();
   const submit = () => {
-    if (!busy) onSubmit(siteName.trim());
+    if (!busy && !missing) onSubmit(siteName.trim());
   };
 
   return (
-    <Sheet visible={visible} title="Create PDF" onClose={onClose} busy={busy} action={{ label: 'Create', onPress: submit, loading: busy }}>
+    <Sheet visible={visible} title="Create PDF" onClose={onClose} busy={busy} action={{ label: actionLabel, onPress: submit, loading: busy, disabled: missing }}>
       <View style={styles.body}>
         <TextField
           label={fieldLabel}

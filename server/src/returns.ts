@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { GSTIN, computeInvoice, financialYear, gstSettings, indiaDay, invoiceNumber, r2, saveDraft } from './gst.ts';
 import { adminOrders } from './orders.ts';
+import { accountsOfCustomer, notifyCustomer, notifyStaff } from './notify.ts';
 import { only, type Env, type Role } from './staff.ts';
 import { GST_RATES, move, stockItems, type Bucket } from './stock.ts';
 import { jsonBody, parse } from './validate.ts';
@@ -160,30 +161,7 @@ async function orderForReturn(tx: Sql | TransactionSql, orderId: number, exclude
     from sales_invoices where order_id = ${orderId} and status = 'posted' and return_id is null`;
   let lines: SoldLine[];
   if (invoice) {
-    const rows = await tx`
-      select l.position, l.product_id, l.option_label, l.description, l.detail, l.hsn, l.unit, l.qty::float8 as qty, l.gst_rate::float8 as gst_rate,
-        l.taxable::float8 as taxable, l.cgst::float8 as cgst, l.sgst::float8 as sgst, l.igst::float8 as igst, p.category_id
-      from sales_invoice_items l left join products p on p.id = l.product_id where l.invoice_id = ${invoice.id} order by l.position`;
-    lines = rows.map((row) => ({
-      source: 'invoice',
-      position: row.position,
-      productId: row.product_id,
-      option: row.option_label,
-      description: row.description,
-      name: row.detail,
-      hsn: row.hsn,
-      unit: row.unit,
-      qty: row.qty,
-      rate: round4(row.taxable / row.qty),
-      gstRate: row.gst_rate,
-      taxable: row.taxable,
-      cgst: row.cgst,
-      sgst: row.sgst,
-      igst: row.igst,
-      categoryId: row.category_id,
-      returned: 0,
-      returnable: 0,
-    }));
+    lines = await invoiceLines(tx, invoice.id);
   } else {
     // Not invoiced here: each line at the price billed, its MRP scaled by the bill (a discount on the bill shares out).
     const share = order.total > 0 ? order.bill / order.total : 1;
@@ -219,10 +197,44 @@ async function orderForReturn(tx: Sql | TransactionSql, orderId: number, exclude
       } satisfies SoldLine;
     });
   }
-  // What other returns already take, by item: shared over the order's lines for that item in turn.
+  await markReturned(tx, lines, { orderId }, excludeReturnId);
+  return { order, invoice: invoice ?? null, lines };
+}
+
+/** A posted invoice's goods lines as they were sold (charges never come back): before GST after every discount. */
+async function invoiceLines(tx: Sql | TransactionSql, invoiceId: number): Promise<SoldLine[]> {
+  const rows = await tx`
+    select l.position, l.product_id, l.option_label, l.description, l.detail, l.hsn, l.unit, l.qty::float8 as qty, l.gst_rate::float8 as gst_rate,
+      l.taxable::float8 as taxable, l.cgst::float8 as cgst, l.sgst::float8 as sgst, l.igst::float8 as igst, p.category_id
+    from sales_invoice_items l left join products p on p.id = l.product_id
+    where l.invoice_id = ${invoiceId} and l.line_type = 'goods' order by l.position`;
+  return rows.map((row) => ({
+    source: 'invoice',
+    position: row.position,
+    productId: row.product_id,
+    option: row.option_label,
+    description: row.description,
+    name: row.detail,
+    hsn: row.hsn,
+    unit: row.unit,
+    qty: row.qty,
+    rate: round4(row.taxable / row.qty),
+    gstRate: row.gst_rate,
+    taxable: row.taxable,
+    cgst: row.cgst,
+    sgst: row.sgst,
+    igst: row.igst,
+    categoryId: row.category_id,
+    returned: 0,
+    returnable: 0,
+  }));
+}
+
+/** What other returns from the same order or bill already take, by item: shared over its lines for that item in turn. */
+async function markReturned(tx: Sql | TransactionSql, lines: SoldLine[], from: { orderId: number } | { invoiceId: number }, excludeReturnId: number) {
   const taken = await tx`
     select i.product_id, i.option_label, sum(i.qty)::float8 as qty from sales_return_items i join sales_returns r on r.id = i.return_id
-    where r.order_id = ${orderId} and r.status not in ('rejected', 'cancelled') and r.id <> ${excludeReturnId} group by 1, 2`;
+    where ${'orderId' in from ? tx`r.order_id = ${from.orderId}` : tx`r.invoice_id = ${from.invoiceId} and r.order_id is null`} and r.status not in ('rejected', 'cancelled') and r.id <> ${excludeReturnId} group by 1, 2`;
   const left = new Map(taken.map((row) => [key(row.product_id, row.option_label), row.qty as number]));
   for (const line of lines) {
     const id = key(line.productId, line.option);
@@ -231,8 +243,40 @@ async function orderForReturn(tx: Sql | TransactionSql, orderId: number, exclude
     line.returned = round3(returned);
     line.returnable = round3(line.qty - returned);
   }
-  return { order, invoice: invoice ?? null, lines };
 }
+
+/**
+ * A bill made at the counter (no order) as a return starts from it: finalized, its goods lines with what can still come
+ * back, and its buyer. Shaped like an order's, so the rest of a return works the same.
+ */
+async function billForReturn(tx: Sql | TransactionSql, invoiceId: number, excludeReturnId = 0) {
+  const [invoice] = await tx`
+    select id, number, status, order_id, return_id, invoice_date, interstate, customer_name, customer_gstin, billing_address, place_of_supply, details,
+      customer_phone, total::float8 as total, posted_at, coalesce((select merged_into from customers where id = customer_id), customer_id) as customer_id
+    from sales_invoices where id = ${invoiceId}`;
+  if (!invoice) throw new HTTPException(404, { message: 'That bill does not exist.', cause: { field: 'invoiceId' } });
+  if (invoice.order_id !== null || invoice.return_id !== null) throw new HTTPException(400, { message: 'This invoice belongs to an order: start the return from the order.', cause: { field: 'invoiceId' } });
+  if (invoice.status !== 'posted') throw new HTTPException(400, { message: `${invoice.number ?? 'This bill'} isn’t finalized, so nothing can come back from it.`, cause: { field: 'invoiceId' } });
+  const lines = await invoiceLines(tx, invoice.id);
+  await markReturned(tx, lines, { invoiceId: invoice.id }, excludeReturnId);
+  const order = {
+    id: null as number | null,
+    number: invoice.number as string,
+    status: 'delivered',
+    customer: invoice.customer_name as string,
+    phone: invoice.customer_phone as string,
+    total: invoice.total as number,
+    bill: Math.round(invoice.total),
+    customer_id: invoice.customer_id as number | null,
+    delivered_at: invoice.posted_at as Date | null,
+    source: 'bill' as const,
+  };
+  return { order, invoice, lines };
+}
+
+/** Where a return's goods were sold: an order, or a counter bill. */
+const sourceForReturn = (tx: Sql | TransactionSql, input: { orderId: number | null; invoiceId: number | null }, excludeReturnId = 0) =>
+  input.orderId !== null ? orderForReturn(tx, input.orderId, excludeReturnId) : billForReturn(tx, input.invoiceId!, excludeReturnId);
 
 // ---------- Saving a return ----------
 
@@ -255,7 +299,9 @@ const ReplacementItem = z.object({
 const ReturnInput = z
   .object({
     kind: z.enum(['refund', 'replacement'], 'Choose a refund or a replacement.'),
-    orderId: Id,
+    // From an order, or from a bill made at the counter (its invoice).
+    orderId: Id.nullable().default(null),
+    invoiceId: Id.nullable().default(null),
     returnDate: Day('return date'),
     reason: z.enum(RETURN_REASONS, 'Choose the reason.'),
     reasonNote: Text(500).default(''),
@@ -266,6 +312,7 @@ const ReturnInput = z
     attachments: z.array(z.string().regex(MEDIA, 'Upload photos or PDFs.')).max(20, 'Attach up to 20 files.').default([]),
     notes: Text(2000).default(''),
   })
+  .refine((input) => (input.orderId === null) !== (input.invoiceId === null), { message: 'Choose the order or bill the goods come back from.', path: ['orderId'] })
   .refine((input) => input.kind === 'refund' || input.replacementItems.length > 0, { message: 'Add the goods given in exchange.', path: ['replacementItems'] })
   .refine((input) => input.reason !== 'other' || input.reasonNote, { message: 'Say what the reason is.', path: ['reasonNote'] })
   .refine((input) => !input.charges || input.chargesNote, { message: 'Say what the charges are for.', path: ['chargesNote'] });
@@ -375,7 +422,7 @@ async function valueReplacements(tx: TransactionSql, items: ReturnInput['replace
 async function saveReturn(tx: TransactionSql, input: ReturnInput, staff: { name: string; role: Role }, id?: number) {
   const settings = await returnSettings(tx);
   if (input.kind === 'replacement' && !settings.allowReplacements) throw new HTTPException(400, { message: 'Replacements are turned off under Return Settings.', cause: { field: 'kind' } });
-  const { order, invoice, lines } = await orderForReturn(tx, input.orderId, id ?? 0);
+  const { order, invoice, lines } = await sourceForReturn(tx, input, id ?? 0);
   if (order.status !== 'delivered') throw new HTTPException(400, { message: `${order.number} isn’t delivered, so nothing can come back from it yet.`, cause: { field: 'orderId' } });
   const returned = valueReturned(lines, input.items);
   const replacement = await valueReplacements(tx, input.replacementItems, Boolean(invoice), Boolean(invoice?.interstate));
@@ -430,7 +477,8 @@ async function saveReturn(tx: TransactionSql, input: ReturnInput, staff: { name:
 export const salesReturns = (sql: Sql | TransactionSql, where = sql`true`) =>
   sql`
     select json_strip_nulls(json_build_object(
-      'id', r.id::text, 'number', r.number, 'kind', r.kind, 'orderId', r.order_id::text, 'orderNumber', o.number,
+      'id', r.id::text, 'number', r.number, 'kind', r.kind, 'orderId', r.order_id::text, 'orderNumber', coalesce(o.number, inv.number),
+      'fromBill', r.order_id is null,
       'invoiceId', r.invoice_id::text, 'invoiceNumber', inv.number, 'invoiceDate', inv.invoice_date, 'interstate', inv.interstate,
       'customerGstin', nullif(inv.customer_gstin, ''), 'billingAddress', nullif(inv.billing_address, ''), 'placeOfSupply', nullif(inv.place_of_supply, ''), 'posCode', nullif(inv.pos_code, ''),
       'customerId', r.customer_id, 'customerName', r.customer_name, 'customerPhone', nullif(r.customer_phone, ''),
@@ -461,7 +509,7 @@ export const salesReturns = (sql: Sql | TransactionSql, where = sql`true`) =>
       'replacementInvoice', (select json_build_object('id', ri.id::text, 'number', ri.number, 'status', ri.status, 'total', ri.total::float8)
         from sales_invoices ri where ri.return_id = r.id order by (ri.status <> 'cancelled') desc, ri.id desc limit 1)
     )) as "return"
-    from sales_returns r join orders o on o.id = r.order_id left join sales_invoices inv on inv.id = r.invoice_id
+    from sales_returns r left join orders o on o.id = r.order_id left join sales_invoices inv on inv.id = r.invoice_id
     where ${where}
     order by r.return_date desc, r.id desc`.then((rows) => rows.map((row) => row.return));
 
@@ -520,6 +568,47 @@ const event = (tx: TransactionSql, id: number, kind: string, by: string, details
 async function setStatus(tx: TransactionSql, id: number, from: string, to: string, by: string, note = '') {
   await tx`update sales_returns set status = ${to}, version = version + 1, updated_at = now() where id = ${id}`;
   await event(tx, id, 'status', by, { from, to, note });
+  await tellAboutReturn(tx, id, to, by, note);
+}
+
+/** Who a return concerns and how to describe it: the buyer's app accounts (its order's, or its counter bill buyer's). */
+async function returnParty(tx: TransactionSql, id: number) {
+  const [ret] = await tx`
+    select r.id, r.number, r.kind, r.order_id, r.customer_id, r.customer_name, r.return_value, o.device_id, o.client_order_id, o.source,
+      (select count(*)::int from sales_return_items i where i.return_id = r.id) as items
+    from sales_returns r left join orders o on o.id = r.order_id where r.id = ${id}`;
+  const accounts = ret!.order_id !== null ? (ret!.device_id ? [ret!.device_id as number] : []) : await accountsOfCustomer(tx, ret!.customer_id);
+  const data: Record<string, string> = ret!.order_id === null ? {} : ret!.client_order_id && ret!.source !== 'admin' ? { orderId: ret!.client_order_id } : { shopOrderId: String(ret!.order_id) };
+  return {
+    ret: ret!,
+    accounts,
+    values: { kind: ret!.kind === 'replacement' ? 'Replacement' : 'Return', number: ret!.number, customer: ret!.customer_name, items: `${ret!.items} item${ret!.items === 1 ? '' : 's'}`, total: rupees(ret!.return_value) },
+    customerLink: { entityType: 'return', entityId: id, data },
+    staffLink: { entityType: 'return', entityId: id, data: { to: `/returns/${id}` } },
+  };
+}
+
+/**
+ * A return's news: recorded (the office, and the customer), approved or refused, and complete (refunded, replaced or
+ * closed, once). Its customer hears in the app; the Owner and Sales in the admin, except whoever did it.
+ */
+async function tellAboutReturn(tx: TransactionSql, id: number, to: string, by: string, note = '') {
+  const party = await returnParty(tx, id);
+  const tellCustomer = async (event: string, extra: Record<string, string> = {}, key = `${event}:${id}`) => {
+    for (const account of party.accounts) await notifyCustomer(tx, account, event, { ...party.values, ...extra }, party.customerLink, key);
+  };
+  const tellStaff = (event: string, extra: Record<string, string> = {}, key = `${event}:${id}`) =>
+    notifyStaff(tx, event, { ...party.values, by, ...extra }, party.staffLink, { roles: ['sales'], except: { name: by } }, key);
+  if (to === 'pending') {
+    await tellCustomer('return_recorded');
+    await tellStaff('return_requested');
+  } else if (to === 'approved' || to === 'rejected') {
+    await tellCustomer(to === 'approved' ? 'return_approved' : 'return_rejected', { reason: note });
+    await tellStaff('return_decided', { decision: to === 'approved' ? 'approved' : 'refused' }, `return_decided:${id}:${to}`);
+  } else if (to === 'refunded' || to === 'replaced' || to === 'closed') {
+    await tellCustomer('return_completed', {}, `return_completed:${id}`);
+    await tellStaff('return_finished', {}, `return_finished:${id}`);
+  }
 }
 const bump = (tx: TransactionSql, id: number) => tx`update sales_returns set version = version + 1, updated_at = now() where id = ${id}`;
 
@@ -586,6 +675,16 @@ async function issueCreditNote(tx: TransactionSql, id: number, by: string) {
       created_by: by,
     })}`;
   await event(tx, id, 'credit_note', by, { note: `Credit note ${number} for ${rupees(total)}` });
+  // The buyer's app, and the Owner and Accountant.
+  const party = await returnParty(tx, id);
+  const [original] = await tx`select number from sales_invoices where id = ${ret!.invoice_id}`;
+  const noteValues = { ...party.values, number, total: rupees(total), invoice: original?.number ?? '' };
+  for (const account of party.accounts) await notifyCustomer(tx, account, 'credit_note', noteValues, party.customerLink, `credit_note:${number}`);
+  await notifyStaff(tx, 'credit_note_issued', noteValues, party.staffLink, { roles: ['accountant'], except: { name: by } }, `credit_note:${number}`);
+  // A counter bill shows it in its own history too.
+  const [bill] = await tx`select order_id from sales_invoices where id = ${ret!.invoice_id}`;
+  if (bill && bill.order_id === null)
+    await tx`insert into invoice_events ${tx({ invoice_id: ret!.invoice_id, kind: 'credit_note', note: `Credit note ${number} for ${rupees(total)} (return ${ret!.number})`, by })}`;
   return number;
 }
 
@@ -669,22 +768,45 @@ export function returnRoutes(sql: Sql) {
   // shortcut: every return at once, which the admin filters itself; page it on the server past a few thousand.
   routes.get('/', async (c) => c.json(await salesReturns(sql)));
 
-  // Delivered orders matching an order or invoice number, a customer's name or phone, for starting a return.
+  // Delivered orders and finalized counter bills matching an order or invoice number, a customer's name or phone, for
+  // starting a return.
   routes.get('/orders', async (c) => {
     const query = (c.req.query('q') ?? '').trim();
     const like = `%${query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
     return c.json(
       await sql`
-        select o.id::text as id, o.number, o.customer, coalesce(nullif(o.phone, ''), d.phone) as phone, o.placed_at as "placedAt",
-          coalesce(o.bill_amount, o.total) as bill, i.number as "invoiceNumber",
-          (select max(e.at) from order_events e where e.order_id = o.id and e.status = 'delivered') as "deliveredAt"
-        from orders o join app_devices d on d.id = o.device_id
-          left join sales_invoices i on i.order_id = o.id and i.status = 'posted' and i.return_id is null
-          left join customers cu on cu.id = d.customer_id
-        where o.status = 'delivered' and (${query}::text = '' or o.number ilike ${like} or i.number ilike ${like} or o.customer ilike ${like}
-          or cu.name ilike ${like} or o.phone ilike ${like} or d.phone ilike ${like} or cu.id::text = ${query})
-        order by o.placed_at desc limit 25`,
+        select * from (
+          select 'order' as kind, o.id::text as id, o.number, o.customer, coalesce(nullif(o.phone, ''), d.phone) as phone, o.placed_at as "placedAt",
+            coalesce(o.bill_amount, o.total)::float8 as bill, i.number as "invoiceNumber",
+            (select max(e.at) from order_events e where e.order_id = o.id and e.status = 'delivered') as "deliveredAt"
+          from orders o join app_devices d on d.id = o.device_id
+            left join sales_invoices i on i.order_id = o.id and i.status = 'posted' and i.return_id is null
+            left join customers cu on cu.id = d.customer_id
+          where o.status = 'delivered' and (${query}::text = '' or o.number ilike ${like} or i.number ilike ${like} or o.customer ilike ${like}
+            or cu.name ilike ${like} or o.phone ilike ${like} or d.phone ilike ${like} or cu.id::text = ${query})
+          union all
+          select 'bill', b.id::text, b.number, b.customer_name, nullif(b.customer_phone, ''), b.posted_at, round(b.total)::float8, b.number, b.posted_at
+          from sales_invoices b
+          where b.status = 'posted' and b.order_id is null and b.return_id is null
+            and (${query}::text = '' or b.number ilike ${like} or b.customer_name ilike ${like} or b.customer_phone ilike ${like} or b.customer_gstin ilike ${like})
+        ) found
+        order by "placedAt" desc nulls last limit 25`,
     );
+  });
+
+  // One counter bill's goods with what can still come back, for the return form: shaped as an order's.
+  routes.get('/bills/:invoiceId', async (c) => {
+    const invoiceId = parse(Id, c.req.param('invoiceId'));
+    const exclude = c.req.query('returnId') ? parse(Id, c.req.query('returnId')) : 0;
+    const settings = await returnSettings(sql);
+    const { order, invoice, lines } = await billForReturn(sql, invoiceId, exclude);
+    const lastDay =
+      settings.eligibilityDays > 0 && order.delivered_at ? isoDay(new Date(new Date(order.delivered_at).getTime() + 5.5 * 3_600_000 + settings.eligibilityDays * DAY)) : null;
+    return c.json({
+      order: { id: String(invoice.id), number: order.number, status: order.status, customer: order.customer, phone: order.phone || undefined, customerId: order.customer_id ?? undefined, bill: order.bill, deliveredAt: order.delivered_at ?? undefined, lastDay, source: 'bill' },
+      invoice: { id: String(invoice.id), number: invoice.number, date: invoice.invoice_date, interstate: invoice.interstate },
+      lines: lines.map(({ categoryId, ...line }) => ({ ...line, eligible: !settings.eligibleCategories.length || (categoryId !== null && settings.eligibleCategories.includes(categoryId)) })),
+    });
   });
 
   // One order's lines with what can still come back, for the return form.
@@ -756,7 +878,11 @@ export function returnRoutes(sql: Sql) {
       need(await returnSettings(tx), staff.role, 'create');
       const saved = await saveReturn(tx, input, staff);
       await event(tx, saved.id, 'created', staff.name, { to: 'pending' });
-      if (saved.status === 'approved') await event(tx, saved.id, 'status', staff.name, { from: 'pending', to: 'approved', note: 'Approved as it was recorded.' });
+      await tellAboutReturn(tx, saved.id, 'pending', staff.name);
+      if (saved.status === 'approved') {
+        await event(tx, saved.id, 'status', staff.name, { from: 'pending', to: 'approved', note: 'Approved as it was recorded.' });
+        await tellAboutReturn(tx, saved.id, 'approved', staff.name);
+      }
       return saved.id;
     });
     return c.json(await answer(id), 201);
@@ -771,7 +897,8 @@ export function returnRoutes(sql: Sql) {
       need(await returnSettings(tx), staff.role, 'create');
       const ret = await lockReturn(tx, id, input.version);
       if (!['pending', 'under_review'].includes(ret.status)) throw new HTTPException(409, { message: `${ret.number} is ${LABEL[ret.status]}, so its goods can’t change. Cancel it and record a new return.` });
-      if (ret.order_id !== input.orderId) throw new HTTPException(400, { message: 'A return stays with its order.', cause: { field: 'orderId' } });
+      if (ret.order_id !== input.orderId || (input.invoiceId !== null && ret.invoice_id !== input.invoiceId))
+        throw new HTTPException(400, { message: 'A return stays with its order or bill.', cause: { field: 'orderId' } });
       await saveReturn(tx, input, staff, id);
       await event(tx, id, 'edited', staff.name);
     });
