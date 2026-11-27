@@ -1,5 +1,7 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -40,6 +42,15 @@ export default function SettingsScreen() {
         <View style={styles.unitRow}>
           <SegmentedControl options={UNIT_OPTIONS} value={unit} onChange={changeUnit} accessibilityLabel="Default size unit" />
         </View>
+      </InsetGroup>
+
+      <InsetGroup header="Notifications">
+        <Pressable onPress={() => router.push('/notification-settings')} accessibilityRole="button" style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+          <Ionicons name="notifications" size={20} color={colors.red} />
+          <Text style={styles.linkLabel}>Notifications</Text>
+          <Text style={styles.rowDetail}>Orders, payments, news</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.tertiaryLabel} />
+        </Pressable>
       </InsetGroup>
 
       <AccountSettings />
@@ -95,6 +106,7 @@ const styles = StyleSheet.create({
   row: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16 },
   rowPressed: { backgroundColor: colors.fill },
   rowLabel: { ...type.body, flex: 1, color: colors.red },
+  linkLabel: { ...type.body, flex: 1 },
   rowDetail: { ...type.body, color: colors.secondaryLabel },
   version: { ...type.footnote, color: colors.secondaryLabel, textAlign: 'center' },
 });

@@ -78,6 +78,7 @@ export default function RootLayout() {
                 <Stack.Screen name="glass-calculator" />
                 <Stack.Screen name="cart" />
                 <Stack.Screen name="notifications" />
+                <Stack.Screen name="notification-settings" />
                 <Stack.Screen name="product/[id]" />
                 <Stack.Screen name="order/[id]" />
                 <Stack.Screen name="shop-order/[id]" />
