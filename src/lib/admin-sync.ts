@@ -66,7 +66,27 @@ export type NotificationPage = { notifications: AppNotification[]; next: string 
 export type NotificationQuery = { filter?: 'all' | 'unread' | 'read'; category?: NotificationCategory; q?: string; before?: string };
 /** On or off per category, and how the phone alerts: what Settings → Notifications changes. */
 export type NotificationPreferences = Record<'orders_enabled' | 'payments_enabled' | 'billing_enabled' | 'returns_enabled' | 'announcements_enabled' | 'sound_enabled' | 'vibration_enabled', boolean>;
-type Profile = { name: string; business: string; phone: string; email: string; city: string };
+/** The person and their shop: its name (business), GSTIN and address. The shop's fields are empty for older accounts. */
+export type Profile = { name: string; business: string; phone: string; email: string; city: string; gstin?: string; addressLine?: string; area?: string; landmark?: string; state?: string; pincode?: string };
+export type AddressType = 'shop' | 'home' | 'site' | 'other';
+/** One entry in the address book. */
+export type SavedAddress = {
+  id: number;
+  type: AddressType;
+  label: string;
+  receiverName: string;
+  contactNumber: string;
+  alternateContact: string;
+  siteName: string;
+  addressLine: string;
+  area: string;
+  landmark: string;
+  city: string;
+  state: string;
+  pincode: string;
+  isDefault: boolean;
+};
+export type AddressInput = Omit<SavedAddress, 'id' | 'isDefault'> & { isDefault?: boolean };
 type Activity = { type: 'price_view' | 'catalogue_view'; productId?: string; productName?: string; optionIndex?: number; optionLabel?: string; price?: number };
 type QueueEvent = { eventId: string; path: 'orders' | 'profile' | 'activity'; body: Record<string, unknown> };
 type Outbox = { deviceId: string; customerId?: string; baseUrl?: string; events: QueueEvent[] };
@@ -472,6 +492,44 @@ export async function refreshUnread(): Promise<void> {
   if (!connection.enabled) return;
   const { unread } = await request<{ unread: number }>({ ...connection }, 'notifications/unread');
   publish({ unread });
+}
+
+// ---------- The account and its address book ----------
+
+/** The account's profile and address book from the shop; the profile is kept on this phone for the screens that use it. */
+export async function fetchAccount(): Promise<{ profile: Profile; addresses: SavedAddress[] }> {
+  const account = await request<{ profile: Profile; addresses: SavedAddress[] }>(await linked(), 'profile');
+  await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(account.profile));
+  return account;
+}
+
+/** The profile as this phone last saw it. */
+export async function savedProfile(): Promise<Profile | null> {
+  try {
+    const raw = await AsyncStorage.getItem(PROFILE_KEY);
+    return raw ? (JSON.parse(raw) as Profile) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Saves the profile here and queues it for the shop (it goes when the phone is online). */
+export async function saveProfile(profile: Profile) {
+  await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  await enqueueAdminProfile(profile);
+}
+
+/** Adds an address (no id) or changes one; the shop checks it and answers with the whole book. */
+export async function saveAddress(input: AddressInput, id?: number): Promise<{ id: number; addresses: SavedAddress[] }> {
+  return request(await linked(), id ? `addresses/${id}` : 'addresses', input as unknown as Record<string, unknown>);
+}
+
+export async function deleteAddress(id: number): Promise<SavedAddress[]> {
+  return (await request<{ addresses: SavedAddress[] }>(await linked(), `addresses/${id}/delete`, {})).addresses;
+}
+
+export async function makeDefaultAddress(id: number): Promise<SavedAddress[]> {
+  return (await request<{ addresses: SavedAddress[] }>(await linked(), `addresses/${id}/default`, {})).addresses;
 }
 
 export async function fetchNotificationPreferences(): Promise<NotificationPreferences> {

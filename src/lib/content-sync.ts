@@ -46,9 +46,12 @@ export type ShopSettings = {
 };
 /** Items the shop has counted as out or low, by product and option ('' for a product without options). */
 export type StockStates = Record<string, Record<string, 'out' | 'low'>>;
+/** Each item's GST rate (%), by product and option, for the GST shown at checkout. */
+export type GstRates = Record<string, Record<string, number>>;
 export type AppContent = {
   products: ShopProduct[];
   stock: StockStates;
+  gstRates: GstRates;
   categories: ShopCategory[];
   catalogPages: Record<string, ImageSourcePropType>;
   catalogues: Catalogue[];
@@ -66,6 +69,8 @@ type Path = string | null;
 type ServerContent = {
   /** Missing from a shop server older than stock tracking. */
   stock?: StockStates;
+  /** Missing from a shop server older than checkout. */
+  gstRates?: GstRates;
   products: { id: string; code: string; name: string; category: string; section: string; image: Path; catalogPage: { source: CatalogSource; page: number }; options: ProductOption[]; specs: { label: string; value: string }[]; featured: boolean }[];
   categories: { id: string; label: string; image: Path; fit: 'cover' | 'contain' }[];
   catalogPages: Record<string, string>;
@@ -85,6 +90,7 @@ const KEY = 'vimalnath:content:v1';
 const BUILT_IN: AppContent = {
   products: shopProducts,
   stock: {},
+  gstRates: {},
   categories: shopCategories,
   catalogPages,
   catalogues,
@@ -140,6 +146,7 @@ function fromServer(content: ServerContent, baseUrl: string): AppContent {
   return {
     products,
     stock: content.stock ?? {},
+    gstRates: content.gstRates ?? {},
     categories: content.categories.map(({ id, label, image: path, fit }) => ({
       id: id as ShopCategoryId,
       label,

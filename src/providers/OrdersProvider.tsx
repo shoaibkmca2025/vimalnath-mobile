@@ -31,9 +31,32 @@ export type Order = {
   lines: OrderLine[];
   /** Sum of the priced lines only. */
   total: number;
+  /** Where it goes, copied at checkout: later changes to the profile or saved addresses leave it as it was. */
+  delivery?: Delivery;
 };
 
-export type OrderDetails = { customer: string; phone?: string; notes?: string };
+/** The delivery address chosen at checkout: a saved one (maybe changed for this order), or one typed for it. */
+export type Delivery = {
+  type: 'saved' | 'temporary' | 'site';
+  addressId?: number;
+  receiverName: string;
+  contact: string;
+  alternateContact: string;
+  siteName: string;
+  addressLine: string;
+  area: string;
+  landmark: string;
+  city: string;
+  state: string;
+  pincode: string;
+  instructions: string;
+  /** Also keep it in the address book (as a home, site or other address). */
+  save?: boolean;
+  saveAs?: 'home' | 'site' | 'other';
+  label?: string;
+};
+
+export type OrderDetails = { customer: string; phone?: string; notes?: string; delivery?: Delivery };
 
 type Orders = {
   orders: Order[];
@@ -115,6 +138,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
         customer: details.customer,
         phone: details.phone || undefined,
         notes: details.notes || undefined,
+        delivery: details.delivery,
         status: 'Placed',
         lines,
         total: lines.reduce((sum, line) => sum + (orderLineTotal(line) ?? 0), 0),
