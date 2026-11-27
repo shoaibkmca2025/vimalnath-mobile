@@ -444,14 +444,19 @@ export async function fetchNotifications(query: NotificationQuery = {}): Promise
     .filter((entry): entry is [string, string] => Boolean(entry[1]))
     .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
     .join('&');
-  const page = await request<NotificationPage>(await linked(), `notifications${params ? `?${params}` : ''}`);
-  publish({ unread: page.unread });
-  return page;
+  const page = await request<Partial<NotificationPage>>(await linked(), `notifications${params ? `?${params}` : ''}`);
+  // A shop server from before the Notification Center sends the whole list, without kinds or a count.
+  const notifications = (page.notifications ?? []).map((item) => ({ ...item, category: item.category ?? (item.event === 'broadcast' ? 'announcements' : 'orders') }));
+  const unread = page.unread ?? notifications.filter((item) => !item.read).length;
+  publish({ unread });
+  return { notifications, next: page.next ?? null, unread };
 }
 
 /** Read: one or some (ids), or all of them (no ids). The count is the server's, so every phone agrees. */
 export async function markNotificationsRead(ids?: string[]): Promise<number> {
-  const { unread } = await request<{ unread: number }>(await linked(), ids ? 'notifications/read' : 'notifications/read-all', ids ? { ids: ids.map(Number) } : {});
+  // Everything read is the same request on a shop server from before the Notification Center (it has no read-all).
+  const answer = await request<{ unread?: number }>(await linked(), 'notifications/read', ids ? { ids: ids.map(Number) } : {});
+  const unread = answer.unread ?? 0;
   publish({ unread });
   return unread;
 }
