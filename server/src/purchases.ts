@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
-import { notifyStaff, rupees } from './notify.ts';
+import { notifyStaff } from './notify.ts';
 import { only, type Env } from './staff.ts';
 import { isInterstate, r2 } from './gst.ts';
 import { GST_RATES, UNITS, move, stockItems } from './stock.ts';
