@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
+import { notifyStaff, rupees } from './notify.ts';
 import { only, type Env } from './staff.ts';
 import { isInterstate, r2 } from './gst.ts';
 import { GST_RATES, UNITS, move, stockItems } from './stock.ts';
@@ -273,6 +274,9 @@ async function receive(tx: TransactionSql, id: number, by: string) {
     await move(tx, item, Math.round(item.qty * 1000) / 1000, { kind: 'purchase', purchaseId: id, reason: bill.number, by });
   }
   await tx`update purchases set status = 'received', received_by = ${by}, received_at = now(), updated_at = now() where id = ${id}`;
+  // New stock in: the inventory team and the Accountant hear (except whoever received it).
+  const [made] = await tx`select p.total::float8 as total, s.name as supplier from purchases p join suppliers s on s.id = p.supplier_id where p.id = ${id}`;
+  await notifyStaff(tx, 'purchase_received', { number: bill.number, supplier: made?.supplier ?? '', total: rupees(made?.total ?? 0), by }, { entityType: 'purchase', entityId: id, data: { to: `/purchases/${id}` } }, { roles: ['inventory', 'accountant'], except: { name: by } }, `purchase_received:${id}`);
   return [...items.values()];
 }
 

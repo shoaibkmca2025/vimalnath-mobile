@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
+import { notifyStaff } from './notify.ts';
 import { only, type Env } from './staff.ts';
 import { jsonBody } from './validate.ts';
 
@@ -106,10 +107,34 @@ export async function move(tx: TransactionSql, item: { productId: string; option
   const column = tx(COLUMN[bucket]);
   const [row] = await tx`
     update stock_items set ${column} = ${column} + ${change}, updated_at = now()
-    where product_id = ${item.productId} and option_label = ${item.option} returning ${column}::float8 as balance`;
+    where product_id = ${item.productId} and option_label = ${item.option} returning ${column}::float8 as balance, min_stock::float8 as min, unit`;
   if (!row) return null;
-  await tx`insert into stock_moves ${tx({ product_id: item.productId, option_label: item.option, change, balance: row.balance, kind: record.kind, reason: record.reason ?? '', note: record.note ?? '', order_id: record.orderId ?? null, purchase_id: record.purchaseId ?? null, return_id: record.returnId ?? null, supplier_return_id: record.supplierReturnId ?? null, invoice_id: record.invoiceId ?? null, bucket, by: record.by })}`;
+  const [moved] = await tx`insert into stock_moves ${tx({ product_id: item.productId, option_label: item.option, change, balance: row.balance, kind: record.kind, reason: record.reason ?? '', note: record.note ?? '', order_id: record.orderId ?? null, purchase_id: record.purchaseId ?? null, return_id: record.returnId ?? null, supplier_return_id: record.supplierReturnId ?? null, invoice_id: record.invoiceId ?? null, bucket, by: record.by })} returning id`;
+  await stockAlerts(tx, item, { balance: row.balance as number, min: row.min as number, unit: row.unit as string, change, bucket, kind: record.kind, by: record.by, moveId: moved!.id as number });
   return row.balance as number;
+}
+
+/**
+ * Staff alerts from a change: running out, or dropping to the minimum, as it happens (once per crossing, not on every
+ * sale after it); and a hand count or adjustment, for the Owner. Customers never hear about stock.
+ */
+async function stockAlerts(tx: TransactionSql, item: { productId: string; option: string }, change: { balance: number; min: number; unit: string; change: number; bucket: Bucket; kind: string; by: string; moveId: number }) {
+  if (change.bucket !== 'available') return;
+  const before = change.balance - change.change;
+  const out = change.change < 0 && before > 0 && change.balance <= 0;
+  const low = !out && change.change < 0 && change.min > 0 && before > change.min && change.balance <= change.min;
+  const counted = change.kind === 'count' || change.kind === 'adjust';
+  if (!out && !low && !counted) return;
+  const [product] = await tx`
+    select coalesce(o.code, p.code) as code, coalesce(nullif(p.name, ''), p.section) as name
+    from products p left join product_options o on o.product_id = p.id and o.label = ${item.option} where p.id = ${item.productId}`;
+  const label = `${product?.code ?? item.productId}${item.option ? ` · ${item.option}` : ''}`;
+  const unit = (value: number) => `${round3(value)} ${change.unit}`;
+  const values = { item: label, qty: unit(change.balance), min: unit(change.min), change: `${change.change > 0 ? '+' : ''}${round3(change.change)}`, by: change.by };
+  const link = { entityType: 'stock', entityId: `${item.productId}:${item.option}`, data: { to: '/stock' } };
+  if (out) await notifyStaff(tx, 'out_of_stock', values, link, { roles: ['inventory', 'sales'] }, `out_of_stock:${change.moveId}`);
+  if (low) await notifyStaff(tx, 'low_stock', values, link, { roles: ['inventory'] }, `low_stock:${change.moveId}`);
+  if (counted) await notifyStaff(tx, 'stock_updated', values, link, { roles: [], except: { name: change.by } }, `stock_updated:${change.moveId}`);
 }
 
 /**
