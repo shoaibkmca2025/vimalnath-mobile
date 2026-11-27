@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Sql, TransactionSql } from 'postgres';
 import { z } from 'zod';
 
+import { AppDelivery, deliveryFor } from './addresses.ts';
 import { orderLink, queueOrderEvent } from './notifications.ts';
 import { notifyCustomer, notifyStaff, rupees as inr } from './notify.ts';
 import { storeCredit } from './returns.ts';
@@ -40,6 +41,8 @@ export const AppOrder = z.object({
     )
     .min(1)
     .max(1000),
+  // Where it goes, as chosen at checkout (apps before checkout put the address in the notes instead).
+  delivery: AppDelivery.optional().catch(undefined),
 });
 type AppOrder = z.output<typeof AppOrder>;
 type Option = { label: string; code: string | null; mrp: number };
@@ -115,6 +118,8 @@ export async function placeOrder(sql: Sql, deviceId: number, eventId: string, or
         notes: order.notes,
         total: lines.reduce((sum, line) => sum + (line.mrp ?? 0) * line.qty, 0),
         placed_at: placedAt,
+        // A copy of the delivery address as it was now: editing the profile or address book later leaves it alone.
+        ...(order.delivery ? await deliveryFor(tx, deviceId, order.delivery) : {}),
       })}
       on conflict (device_id, client_event_id) do nothing
       returning id`;
@@ -235,7 +240,9 @@ export const adminOrders = async (sql: Sql | TransactionSql, where = sql`true`, 
         'customerSeenAt', o.customer_seen_at,
         'internalNote', case when o.internal_note is not null then json_build_object('text', o.internal_note, 'at', o.internal_note_at, 'by', o.internal_note_by) end,
         'inventoryNote', case when o.inventory_note is not null then json_build_object('text', o.inventory_note, 'at', o.inventory_note_at, 'by', o.inventory_note_by) end,
-        'appUser', json_build_object('id', d.id, 'label', d.label),
+        'appUser', json_build_object('id', d.id, 'label', d.label, 'name', nullif(d.name, ''), 'business', nullif(d.business, ''), 'phone', nullif(coalesce(nullif(d.phone, ''), d.login), ''),
+          'gstin', nullif(d.gstin, ''), 'address', nullif(concat_ws(', ', nullif(d.address_line, ''), nullif(d.area, ''), nullif(d.city, ''), nullif(concat_ws(' ', nullif(d.state, ''), nullif(d.pincode, '')), '')), '')),
+        'delivery', case when o.delivery is not null then o.delivery || jsonb_build_object('addressType', o.delivery_address_type, 'addressId', o.delivery_address_id) end,
         'customerRecord', case when cu.id is not null then json_build_object('id', cu.id, 'name', cu.name) end
       )) as "order"
       from orders o join app_devices d on d.id = o.device_id left join customers cu on cu.id = d.customer_id
