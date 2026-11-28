@@ -91,6 +91,12 @@ export default function NotificationsScreen() {
       if (ask === asked.current) setError(failure instanceof Error ? failure.message : 'Couldn’t load notifications.');
     }
   }, [filter, category, query]);
+  // Something new arrived while this screen is open: show it now.
+  const seen = useRef(unread);
+  useEffect(() => {
+    if (unread > seen.current) void load();
+    seen.current = unread;
+  }, [unread, load]);
   // Every visit and every change of filter, so something that arrived while the app was open shows straight away.
   useFocusEffect(
     useCallback(() => {

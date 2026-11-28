@@ -8,7 +8,7 @@ import { createApp } from '../src/app.ts';
 import { appRoutes, appUserAdminRoutes } from '../src/app-users.ts';
 import { importSeed } from '../src/import-data.ts';
 import { migrate } from '../src/migrate.ts';
-import { DeviceGone, inboxRoutes, notificationRoutes, realSenders, sendQueued, type Message } from '../src/notifications.ts';
+import { DeviceGone, inboxRoutes, notificationRoutes, realSenders, sendQueued, startNotifier, type Message } from '../src/notifications.ts';
 import { orderAdminRoutes } from '../src/orders.ts';
 import { adminRoutes, issuePasswordLink } from '../src/staff.ts';
 import { seed } from './seed-fixture.ts';
@@ -262,4 +262,27 @@ test('the Owner edits wording and recipients and broadcasts; others can’t; bad
   assert.equal(broadcast.queued, devices);
   assert.equal(broadcast.users, users);
   assert.ok(devices > 0 && users > devices);
+});
+
+test('instant: a queued push goes out within a second, not on the next 10-second round; overlapping rounds never send it twice', { skip }, async () => {
+  const sent: string[] = [];
+  const stop = startNotifier(sql, { push: async (message: Message) => void sent.push(message.title) });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 500)); // The listener connects.
+    const queuedAt = Date.now();
+    await sql`insert into notification_log (event, channel, recipient, title, body) values ('test', 'push', ${TOKEN}, 'instant', 'B')`;
+    while (!sent.includes('instant') && Date.now() - queuedAt < 5000) await new Promise((resolve) => setTimeout(resolve, 50));
+    const took = Date.now() - queuedAt;
+    assert.ok(sent.includes('instant'), 'sent');
+    assert.ok(took < 2000, `sent in ${took} ms`);
+  } finally {
+    stop();
+  }
+
+  // Two rounds at once, with a slow push service: each message still goes out exactly once.
+  const delivered: string[] = [];
+  const slow = { push: async (message: Message) => void (await new Promise((resolve) => setTimeout(resolve, 200)), delivered.push(message.title)) };
+  await sql`insert into notification_log (event, channel, recipient, title, body) values ('test', 'push', ${TOKEN}, 'one', 'B'), ('test', 'push', ${TOKEN}, 'two', 'B')`;
+  await Promise.all([sendQueued(sql, slow), sendQueued(sql, slow), sendQueued(sql, slow)]);
+  assert.deepEqual(delivered.sort(), ['one', 'two']);
 });

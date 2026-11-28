@@ -549,5 +549,12 @@ export function useUnreadNotifications() {
 export function startAdminSync() {
   void syncAdmin();
   const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void syncAdmin(); });
-  return () => subscription.remove();
+  // While the app is on screen the bell catches up within 15 seconds, even on a phone that has notifications off.
+  const timer = setInterval(() => {
+    if (AppState.currentState === 'active') void refreshUnread().catch(() => {});
+  }, 15_000);
+  return () => {
+    subscription.remove();
+    clearInterval(timer);
+  };
 }

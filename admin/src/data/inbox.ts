@@ -26,6 +26,8 @@ export const CATEGORY_LABEL: Record<InboxCategory, string> = {
 
 /** Fired after reading or deleting, so the bell's count catches up at once. */
 export const INBOX_CHANGED = 'vimalnath:inbox-changed';
+/** Fired when the count goes up (a new order, a reply…), so the order lists catch up at once too. */
+export const INBOX_NEW = 'vimalnath:inbox-new';
 const changed = () => window.dispatchEvent(new Event(INBOX_CHANGED));
 
 export const inboxPath = (query: InboxQuery = {}) => {
@@ -48,20 +50,28 @@ export async function deleteFromInbox(ids: string[]) {
   return answer.unread;
 }
 
-/** The bell's count: fetched now, every 30 seconds, when the window comes back, and after a read or delete. */
+/** The bell's count: fetched now, every 5 seconds while the admin is on screen, when it comes back, and after a read or delete. */
 export function useInboxCount(enabled = true) {
   const [unread, setUnread] = useState(0);
   useEffect(() => {
     if (!enabled) return;
     let active = true;
+    let last = -1;
     const load = () => {
+      if (document.visibilityState === 'hidden') return;
       api<{ unread: number }>('/inbox/count').then(
-        (result) => active && setUnread(result.unread),
+        (result) => {
+          if (!active) return;
+          if (last >= 0 && result.unread > last) window.dispatchEvent(new Event(INBOX_NEW));
+          last = result.unread;
+          setUnread(result.unread);
+        },
         () => {},
       );
     };
     load();
-    const timer = setInterval(load, 30_000);
+    // shortcut: asks every 5 seconds (a tiny count query); push it from the server (SSE) if staff grow past a few dozen.
+    const timer = setInterval(load, 5_000);
     window.addEventListener('focus', load);
     window.addEventListener(INBOX_CHANGED, load);
     return () => {

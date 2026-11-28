@@ -156,12 +156,15 @@ export async function queueOrderEvent(tx: TransactionSql, orderId: number, event
   await notifyCustomer(tx, order.device_id, event, values, link, key, order.id);
 }
 
-/** Sends up to `limit` queued messages. Run on a timer; several servers can run it at once without sending twice. */
+/** Sends up to `limit` queued messages, as each is queued and on a timer. Rounds at once (several servers, or a notice arriving mid-round) never send one twice: each round claims its messages. */
 export async function sendQueued(sql: Sql, senders: Senders, limit = 50) {
   // The badge is the person's unread count when it goes out, the number for the app's icon.
   const batch = await sql<Message[]>`
-    update notification_log set attempts = attempts + 1
-    where id in (select id from notification_log where status = 'pending' order by id limit ${limit} for update skip locked)
+    update notification_log set attempts = attempts + 1, claimed_at = now()
+    where id in (
+      select id from notification_log
+      where status = 'pending' and (claimed_at is null or claimed_at < now() - interval '2 minutes')
+      order by id limit ${limit} for update skip locked)
     returning id, channel, recipient, title, body, data, attempts,
       (select count(*)::int from notifications n where n.account_id = notification_log.device_id and not n.is_read and n.deleted_at is null) as badge`;
   for (const message of batch) {
@@ -179,7 +182,7 @@ export async function sendQueued(sql: Sql, senders: Senders, limit = 50) {
     } catch (error) {
       const gone = error instanceof DeviceGone || error instanceof TokenGone;
       const final = gone || message.attempts >= MAX_ATTEMPTS;
-      await sql`update notification_log set status = ${final ? 'failed' : 'pending'}, error = ${(error instanceof Error ? error.message : 'Unknown error').slice(0, 300)} where id = ${message.id}`;
+      await sql`update notification_log set status = ${final ? 'failed' : 'pending'}, claimed_at = null, error = ${(error instanceof Error ? error.message : 'Unknown error').slice(0, 300)} where id = ${message.id}`;
       if (gone) {
         await sql`delete from device_tokens where token = ${message.recipient}`;
         await sql`update app_devices set push_token = null where push_token = ${message.recipient}`;
@@ -227,12 +230,22 @@ export function realSenders(config: { SMTP_URL?: string; MAIL_FROM?: string; EXP
 
 /** Delivers the queue every 10 seconds, and runs the scheduled jobs (reminders, retention) at their own pace. */
 export function startNotifier(sql: Sql, senders: Senders) {
+  const send = () => sendQueued(sql, senders).catch((error: unknown) => console.error('Sending notifications failed:', error));
   const timer = setInterval(() => {
     sendQueued(sql, senders)
       .then(() => runScheduled(sql))
       .catch((error: unknown) => console.error('Sending notifications failed:', error));
   }, 10_000);
-  return () => clearInterval(timer);
+  // Sent the moment they're queued (035_instant_notifications.sql); once more on every (re)connect, for any queued while
+  // the listener was away. The 10-second round stays as the backstop.
+  const listening = sql.listen('notification_queued', () => void send(), () => void send()).catch((error: unknown) => {
+    console.error('Listening for new notifications failed; sending every 10 seconds instead:', error);
+    return null;
+  });
+  return () => {
+    clearInterval(timer);
+    void listening.then((meta) => meta?.unlisten());
+  };
 }
 
 const Template = z.object({ event: z.string(), title: z.string().trim().min(1, 'Enter a title.').max(100, 'Use 100 characters or fewer.'), body: z.string().trim().min(1, 'Enter the message.').max(400, 'Use 400 characters or fewer.') });

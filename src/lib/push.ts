@@ -209,6 +209,7 @@ function startWebPush() {
   // A notification tapped while the app is open: the background script asks it to show that order.
   const onMessage = (event: MessageEvent<{ type?: string; url?: string }>) => {
     if (event.data?.type === 'open' && event.data.url) router.push(event.data.url as Href);
+    if (event.data?.type === 'refresh') void refreshUnread().catch(() => {});
   };
   navigator.serviceWorker.addEventListener('message', onMessage);
   return () => {

@@ -21,7 +21,9 @@ self.addEventListener('push', (event) => {
     renotify: true,
   });
   const badge = typeof message.badge === 'number' && 'setAppBadge' in navigator ? navigator.setAppBadge(message.badge).catch(() => {}) : null;
-  event.waitUntil(Promise.all([shown, badge]));
+  // An open app updates its bell and list now, not when it's next opened.
+  const told = self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => clients.forEach((client) => client.postMessage({ type: 'refresh' })));
+  event.waitUntil(Promise.all([shown, badge, told]));
 });
 
 // A tap opens the order it is about (or the Notifications screen), in the app if it's already open.

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { BootScreen } from '@/components/BootScreen';
 import { useToast } from '@/components/useToast';
 import { api } from '@/lib/api';
+import { INBOX_NEW } from './inbox';
 import { readSession } from './session';
 import { changed, serverRequests, type Calculators, type Catalogue, type Content, type ServerKey } from './server';
 import { mergeStock, seesStock, type Answer } from './stock';
@@ -141,9 +142,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // Every 30 seconds, so a customer confirming an order request shows up quickly.
     const timer = setInterval(refresh, 30_000);
     window.addEventListener('focus', refresh);
+    // A new notification (an order placed, a request answered) usually means the orders changed: catch up now.
+    window.addEventListener(INBOX_NEW, refresh);
     return () => {
       clearInterval(timer);
       window.removeEventListener('focus', refresh);
+      window.removeEventListener(INBOX_NEW, refresh);
     };
   }, [ready, reloadStock]);
 
