@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "446293740462",
+    "project_id": "vimalnath-31af2",
+    "storage_bucket": "vimalnath-31af2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:446293740462:android:0bd3732b8cd5199ba5163f",
+        "android_client_info": {
+          "package_name": "com.vimalnath.sales"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYr4w32C-dywva8Tu55N7NHhLGciwkgfg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

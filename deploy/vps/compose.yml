@@ -24,6 +24,9 @@ services:
   api:
     build: ../../server
     restart: unless-stopped
+    # Optional settings added to .env on the VPS reach the API too: FCM_SERVICE_ACCOUNT (Android push, see set-fcm-key.sh),
+    # SMTP_URL and MAIL_FROM (email). Those set below win.
+    env_file: ../../.env
     environment:
       DATABASE_URL: postgres://vimalnath:${POSTGRES_PASSWORD}@db:5432/vimalnath
       ADMIN_ORIGIN: https://${ADMIN_HOST:?set ADMIN_HOST in .env}
